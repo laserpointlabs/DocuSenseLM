@@ -296,7 +296,7 @@ def main():
             q["document_id"] = document_id
             q["document_filename"] = filename
             all_questions.append(q)
-        
+
         # Limit to 10 questions total across all documents
         if len(all_questions) >= 10:
             all_questions = all_questions[:10]
