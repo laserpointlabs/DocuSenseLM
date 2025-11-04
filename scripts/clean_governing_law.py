@@ -31,17 +31,23 @@ def clean_governing_law(law: str) -> str:
     
     # Format as "State of X" if needed
     if law and len(law) > 3:
-        # Remove "the" prefix if present
-        if law.lower().startswith('the state of '):
-            law = law[4:]  # Remove "the " prefix
-        elif law.lower().startswith('the '):
+        # Remove "the" prefix if present (case-insensitive)
+        law_lower = law.lower()
+        if law_lower.startswith('the state of '):
+            # "the State of Delaware" -> "State of Delaware"
+            law = law[len('the '):]  # Remove "the " prefix
+        elif law_lower.startswith('the ') and 'state' not in law_lower:
             # Just "the Delaware" -> "State of Delaware"
-            law = law[4:]
+            law = law[len('the '):]  # Remove "the " prefix
         
         # Normalize "State of" format
-        if law.lower().startswith('state of '):
+        law_lower = law.lower()
+        if law_lower.startswith('state of '):
             # Extract state name (remove "state of " prefix)
-            state_name = law[10:].strip()
+            state_name = law[len('State of '):].strip()
+            # Handle edge cases like "State of the  Delaware" -> "State of Delaware"
+            state_name = re.sub(r'^\s*the\s+', '', state_name, flags=re.IGNORECASE)
+            state_name = re.sub(r'\s+', ' ', state_name).strip()
             if state_name:
                 return f"State of {state_name}"
         else:
