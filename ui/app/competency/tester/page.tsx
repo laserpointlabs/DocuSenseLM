@@ -54,11 +54,11 @@ export default function TesterPage() {
     setTestingAll(true);
     setAllTestResults(null);
     setTestResult(null);
-    
+
     try {
       const results = await competencyAPI.runAllTests();
       setAllTestResults(results);
-      
+
       // Show summary alert
       const passRate = results.pass_rate?.toFixed(1) || '0';
       alert(`Testing complete!\n\nTotal: ${results.total}\nPassed: ${results.passed}\nFailed: ${results.failed}\nPass Rate: ${passRate}%`);

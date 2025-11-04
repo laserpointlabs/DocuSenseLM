@@ -236,46 +236,46 @@ async def run_all_tests():
         questions = db.query(CompetencyQuestion).filter(
             CompetencyQuestion.is_active == True
         ).all()
-        
+
         if not questions:
             return {
                 "message": "No active questions found",
                 "total": 0,
                 "results": []
             }
-        
+
         results = []
         total_passed = 0
         total_failed = 0
-        
+
         for question in questions:
             try:
                 # Run test for this question
                 filters = None
                 if question.document_id:
                     filters = {"document_id": str(question.document_id)}
-                
+
                 start_time = datetime.now()
                 answer_obj = await answer_service.generate_answer(
                     question=question.question_text,
                     filters=filters
                 )
                 end_time = datetime.now()
-                
+
                 response_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                
+
                 # Check if test passed (has answer and reasonable response time)
                 passed = (
-                    answer_obj.text and 
+                    answer_obj.text and
                     len(answer_obj.text) > 10 and
                     response_time_ms < 30000  # 30 second timeout
                 )
-                
+
                 if passed:
                     total_passed += 1
                 else:
                     total_failed += 1
-                
+
                 # Store test run
                 test_run = TestRun(
                     question_id=str(question.id),
@@ -287,7 +287,7 @@ async def run_all_tests():
                 db.add(test_run)
                 db.commit()
                 db.refresh(test_run)
-                
+
                 results.append({
                     "test_run_id": str(test_run.id),
                     "question_id": str(question.id),
@@ -299,7 +299,7 @@ async def run_all_tests():
                     "response_time_ms": response_time_ms,
                     "run_at": test_run.run_at
                 })
-                
+
             except Exception as e:
                 total_failed += 1
                 results.append({
@@ -308,7 +308,7 @@ async def run_all_tests():
                     "passed": False,
                     "error": str(e)
                 })
-        
+
         return {
             "message": f"Completed testing {len(questions)} questions",
             "total": len(questions),
