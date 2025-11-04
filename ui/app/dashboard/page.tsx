@@ -57,14 +57,14 @@ export default function DashboardPage() {
         try {
           // Extract metadata from the document (already includes DocumentMetadata fields)
           const metadata = (doc as any).metadata || (doc as any).metadata_json || {};
-          
+
           // Handle ISO date strings from API (e.g., "2025-09-05T00:00:00+00:00")
           let effectiveDate = metadata.effective_date;
           if (effectiveDate && typeof effectiveDate === 'string') {
             // Extract just the date part (YYYY-MM-DD)
             effectiveDate = effectiveDate.split('T')[0];
           }
-          
+
           const termMonths = metadata.term_months;
 
           // Calculate expiration date
@@ -430,11 +430,6 @@ export default function DashboardPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {(doc as any).company_name || doc.filename}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {doc.parties && doc.parties.length > 0 && (
-                          <span>{doc.parties.map(p => p.name).join(', ')}</span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
