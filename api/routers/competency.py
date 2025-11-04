@@ -25,6 +25,10 @@ async def create_question(request: CompetencyQuestionCreate):
             db=db,
             question_text=request.question_text,
             category_id=request.category_id,
+            document_id=request.document_id,
+            verification_hint=request.verification_hint,
+            expected_clause=request.expected_clause,
+            expected_page=request.expected_page,
             created_by=None  # TODO: Get from auth
         )
 
@@ -36,6 +40,10 @@ async def create_question(request: CompetencyQuestionCreate):
             "id": str(question.id),
             "question_text": question.question_text,
             "category_id": str(question.category_id) if question.category_id else None,
+            "document_id": str(question.document_id) if question.document_id else None,
+            "verification_hint": question.verification_hint,
+            "expected_clause": question.expected_clause,
+            "expected_page": question.expected_page,
             "created_at": question.created_at
         }
     finally:
@@ -64,6 +72,10 @@ async def list_questions(
                     "id": str(q.id),
                     "question_text": q.question_text,
                     "category_id": str(q.category_id) if q.category_id else None,
+                    "document_id": str(q.document_id) if q.document_id else None,
+                    "verification_hint": q.verification_hint,
+                    "expected_clause": q.expected_clause,
+                    "expected_page": q.expected_page,
                     "created_at": q.created_at,
                     "version": q.version
                 }

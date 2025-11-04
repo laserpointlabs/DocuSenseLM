@@ -99,12 +99,20 @@ class DBService:
         db: Session,
         question_text: str,
         category_id: Optional[str] = None,
+        document_id: Optional[str] = None,
+        verification_hint: Optional[str] = None,
+        expected_clause: Optional[str] = None,
+        expected_page: Optional[int] = None,
         created_by: Optional[str] = None
     ) -> CompetencyQuestion:
         """Create a new competency question"""
         question = CompetencyQuestion(
             question_text=question_text,
             category_id=category_id,
+            document_id=document_id,
+            verification_hint=verification_hint,
+            expected_clause=expected_clause,
+            expected_page=expected_page,
             created_by=created_by
         )
         db.add(question)

@@ -52,6 +52,10 @@ class CompetencyQuestionCreate(BaseModel):
     """Create competency question"""
     question_text: str
     category_id: Optional[str] = None
+    document_id: Optional[str] = None  # Associate with specific document
+    verification_hint: Optional[str] = None  # How to verify the answer
+    expected_clause: Optional[str] = None  # Expected clause title/number
+    expected_page: Optional[int] = None  # Expected page for verification
     expected_clause_id: Optional[str] = None
     expected_answer_text: Optional[str] = None
 

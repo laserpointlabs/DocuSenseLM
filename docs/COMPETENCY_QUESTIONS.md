@@ -122,4 +122,3 @@ Currently, 30 questions are included covering:
 - Tests verify that questions return answers with response times < 10 seconds
 - All tests run against all currently loaded and processed documents
 - The script automatically detects processed documents and warns if none are found
-

@@ -119,6 +119,10 @@ class CompetencyQuestion(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     question_text = Column(Text, nullable=False)
     category_id = Column(UUID(as_uuid=True), ForeignKey("question_categories.id"), nullable=True)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=True)  # Associate with specific document
+    verification_hint = Column(Text, nullable=True)  # Instructions for verifying the answer
+    expected_clause = Column(String(200), nullable=True)  # Expected clause title/number
+    expected_page = Column(Integer, nullable=True)  # Expected page number for verification
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     version = Column(Integer, default=1)
@@ -129,6 +133,7 @@ class CompetencyQuestion(Base):
         Index('idx_questions_category', 'category_id'),
         Index('idx_questions_active', 'is_active'),
         Index('idx_questions_created_at', 'created_at'),
+        Index('idx_questions_document', 'document_id'),
     )
 
 

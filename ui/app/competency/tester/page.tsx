@@ -71,7 +71,12 @@ export default function TesterPage() {
                       : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                   }`}
                 >
-                  <p className="text-sm text-gray-900">{q.question_text}</p>
+                  <p className="text-sm text-gray-900 font-medium">{q.question_text}</p>
+                  {q.document_id && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      📄 Document-specific question
+                    </p>
+                  )}
                 </button>
               ))}
             </div>
@@ -107,12 +112,37 @@ export default function TesterPage() {
                   <ul className="space-y-1">
                     {testResult.citations.map((citation: any, idx: number) => (
                       <li key={idx} className="text-xs text-gray-600">
-                        Doc {citation.doc_id?.substring(0, 8)}...
+                        <a
+                          href={`/documents/${citation.doc_id}`}
+                          className="text-primary-600 hover:text-primary-700"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Doc {citation.doc_id?.substring(0, 8)}...
+                        </a>
                         {citation.clause_number && `, Clause ${citation.clause_number}`}
                         {citation.page_num && `, Page ${citation.page_num}`}
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+              {questions.find(q => q.id === selectedQuestion)?.verification_hint && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200">
+                  <h3 className="text-sm font-medium text-blue-900 mb-1">Verification Hint</h3>
+                  <p className="text-xs text-blue-700">
+                    {questions.find(q => q.id === selectedQuestion)?.verification_hint}
+                  </p>
+                  {questions.find(q => q.id === selectedQuestion)?.document_id && (
+                    <a
+                      href={`/documents/${questions.find(q => q.id === selectedQuestion)?.document_id}`}
+                      className="text-xs text-blue-600 hover:text-blue-700 underline mt-2 inline-block"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View Source Document →
+                    </a>
+                  )}
                 </div>
               )}
             </div>
