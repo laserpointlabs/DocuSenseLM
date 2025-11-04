@@ -1,0 +1,212 @@
+[
+  {
+    "id": "qa_001",
+    "question": "What is the confidentiality period?",
+    "expected_clause_keywords": ["confidentiality", "period", "term", "duration"],
+    "expected_answer_type": "duration",
+    "category": "term"
+  },
+  {
+    "id": "qa_002",
+    "question": "What information is considered confidential?",
+    "expected_clause_keywords": ["confidential", "information", "definition", "scope"],
+    "expected_answer_type": "definition",
+    "category": "confidentiality"
+  },
+  {
+    "id": "qa_003",
+    "question": "What are the exceptions to confidentiality?",
+    "expected_clause_keywords": ["exception", "excluded", "not confidential"],
+    "expected_answer_type": "list",
+    "category": "exceptions"
+  },
+  {
+    "id": "qa_004",
+    "question": "Is this a mutual or unilateral NDA?",
+    "expected_clause_keywords": ["mutual", "unilateral", "both parties"],
+    "expected_answer_type": "boolean",
+    "category": "metadata"
+  },
+  {
+    "id": "qa_005",
+    "question": "What is the survival period after expiration?",
+    "expected_clause_keywords": ["survival", "expiration", "after", "period"],
+    "expected_answer_type": "duration",
+    "category": "survival"
+  },
+  {
+    "id": "qa_006",
+    "question": "What is the governing law?",
+    "expected_clause_keywords": ["governing", "law", "jurisdiction"],
+    "expected_answer_type": "location",
+    "category": "jurisdiction"
+  },
+  {
+    "id": "qa_007",
+    "question": "Who are the parties to this agreement?",
+    "expected_clause_keywords": ["party", "parties", "disclosing", "receiving"],
+    "expected_answer_type": "list",
+    "category": "parties"
+  },
+  {
+    "id": "qa_008",
+    "question": "What are the obligations of the receiving party?",
+    "expected_clause_keywords": ["obligation", "receiving party", "duty"],
+    "expected_answer_type": "list",
+    "category": "obligations"
+  },
+  {
+    "id": "qa_009",
+    "question": "What happens if there is a breach of confidentiality?",
+    "expected_clause_keywords": ["breach", "remedy", "damages", "injunction"],
+    "expected_answer_type": "remedy",
+    "category": "remedies"
+  },
+  {
+    "id": "qa_010",
+    "question": "When does the agreement become effective?",
+    "expected_clause_keywords": ["effective", "date", "execution"],
+    "expected_answer_type": "date",
+    "category": "term"
+  },
+  {
+    "id": "qa_011",
+    "question": "Can confidential information be shared with affiliates?",
+    "expected_clause_keywords": ["affiliate", "subsidiary", "share", "permitted"],
+    "expected_answer_type": "boolean",
+    "category": "disclosure"
+  },
+  {
+    "id": "qa_012",
+    "question": "What is the return or destruction requirement?",
+    "expected_clause_keywords": ["return", "destroy", "destruction", "deliver"],
+    "expected_answer_type": "procedure",
+    "category": "return"
+  },
+  {
+    "id": "qa_013",
+    "question": "Are there any carve-outs for publicly available information?",
+    "expected_clause_keywords": ["carve-out", "public", "available", "exception"],
+    "expected_answer_type": "boolean",
+    "category": "exceptions"
+  },
+  {
+    "id": "qa_014",
+    "question": "What is the term of the agreement in months?",
+    "expected_clause_keywords": ["term", "months", "duration", "period"],
+    "expected_answer_type": "number",
+    "category": "term"
+  },
+  {
+    "id": "qa_015",
+    "question": "What restrictions apply to the use of confidential information?",
+    "expected_clause_keywords": ["use", "restriction", "purpose", "limited"],
+    "expected_answer_type": "list",
+    "category": "obligations"
+  },
+  {
+    "id": "qa_016",
+    "question": "Is information disclosed before the agreement covered?",
+    "expected_clause_keywords": ["prior", "before", "retroactive", "disclosure"],
+    "expected_answer_type": "boolean",
+    "category": "scope"
+  },
+  {
+    "id": "qa_017",
+    "question": "What notification is required if there is a breach?",
+    "expected_clause_keywords": ["notify", "notification", "breach", "immediately"],
+    "expected_answer_type": "procedure",
+    "category": "obligations"
+  },
+  {
+    "id": "qa_018",
+    "question": "Can the agreement be modified or amended?",
+    "expected_clause_keywords": ["modify", "amend", "change", "written"],
+    "expected_answer_type": "boolean",
+    "category": "modification"
+  },
+  {
+    "id": "qa_019",
+    "question": "What happens upon termination of the agreement?",
+    "expected_clause_keywords": ["termination", "end", "survive", "continue"],
+    "expected_answer_type": "procedure",
+    "category": "termination"
+  },
+  {
+    "id": "qa_020",
+    "question": "Are there any indemnification provisions?",
+    "expected_clause_keywords": ["indemnify", "indemnification", "hold harmless"],
+    "expected_answer_type": "boolean",
+    "category": "indemnification"
+  },
+  {
+    "id": "qa_021",
+    "question": "What is the dispute resolution mechanism?",
+    "expected_clause_keywords": ["dispute", "arbitration", "mediation", "court"],
+    "expected_answer_type": "procedure",
+    "category": "dispute_resolution"
+  },
+  {
+    "id": "qa_022",
+    "question": "Can the agreement be assigned to another party?",
+    "expected_clause_keywords": ["assign", "assignment", "transfer", "permitted"],
+    "expected_answer_type": "boolean",
+    "category": "assignment"
+  },
+  {
+    "id": "qa_023",
+    "question": "What are the remedies for breach?",
+    "expected_clause_keywords": ["remedy", "injunction", "damages", "relief"],
+    "expected_answer_type": "list",
+    "category": "remedies"
+  },
+  {
+    "id": "qa_024",
+    "question": "What information must be marked as confidential?",
+    "expected_clause_keywords": ["mark", "label", "identify", "written"],
+    "expected_answer_type": "procedure",
+    "category": "obligations"
+  },
+  {
+    "id": "qa_025",
+    "question": "What is the scope of confidential information?",
+    "expected_clause_keywords": ["scope", "includes", "comprises", "encompasses"],
+    "expected_answer_type": "definition",
+    "category": "confidentiality"
+  },
+  {
+    "id": "qa_026",
+    "question": "Are there exceptions for information required by law?",
+    "expected_clause_keywords": ["law", "required", "compelled", "court order"],
+    "expected_answer_type": "boolean",
+    "category": "exceptions"
+  },
+  {
+    "id": "qa_027",
+    "question": "What is the expiration date?",
+    "expected_clause_keywords": ["expire", "expiration", "end date", "termination"],
+    "expected_answer_type": "date",
+    "category": "term"
+  },
+  {
+    "id": "qa_028",
+    "question": "How long must information be kept confidential after expiration?",
+    "expected_clause_keywords": ["after", "expiration", "continue", "survive"],
+    "expected_answer_type": "duration",
+    "category": "survival"
+  },
+  {
+    "id": "qa_029",
+    "question": "What constitutes a breach of the agreement?",
+    "expected_clause_keywords": ["breach", "violation", "failure", "default"],
+    "expected_answer_type": "definition",
+    "category": "breach"
+  },
+  {
+    "id": "qa_030",
+    "question": "Can confidential information be used for competitive purposes?",
+    "expected_clause_keywords": ["competitive", "use", "purpose", "restriction"],
+    "expected_answer_type": "boolean",
+    "category": "obligations"
+  }
+]
