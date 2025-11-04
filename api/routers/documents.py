@@ -72,21 +72,49 @@ async def list_documents(
 ):
     """
     List documents with pagination
+    Includes full metadata from DocumentMetadata table
     """
     db = get_db_session()
     try:
         documents, total = db_service.list_documents(db, skip=skip, limit=limit)
 
-        doc_responses = [
-            DocumentResponse(
-                id=str(doc.id),
-                filename=doc.filename,
-                upload_date=doc.upload_date,
-                status=doc.status.value if hasattr(doc.status, 'value') else str(doc.status),
-                metadata=doc.metadata_json
+        doc_responses = []
+        for doc in documents:
+            # Get document metadata
+            doc_metadata = db_service.get_document_metadata(db, str(doc.id))
+            
+            # Get parties
+            parties = db_service.get_parties(db, str(doc.id))
+            
+            # Build comprehensive metadata
+            metadata = doc.metadata_json or {}
+            if doc_metadata:
+                metadata.update({
+                    'effective_date': doc_metadata.effective_date.isoformat() if doc_metadata.effective_date else None,
+                    'governing_law': doc_metadata.governing_law,
+                    'is_mutual': doc_metadata.is_mutual,
+                    'term_months': doc_metadata.term_months,
+                    'survival_months': doc_metadata.survival_months,
+                })
+            
+            metadata['parties'] = [
+                {
+                    'name': p.party_name,
+                    'type': p.party_type,
+                    'address': p.address
+                }
+                for p in parties
+            ]
+
+            doc_responses.append(
+                DocumentResponse(
+                    id=str(doc.id),
+                    filename=doc.filename,
+                    upload_date=doc.upload_date,
+                    status=doc.status.value if hasattr(doc.status, 'value') else str(doc.status),
+                    metadata=metadata
+                )
             )
-            for doc in documents
-        ]
 
         return DocumentListResponse(
             documents=doc_responses,

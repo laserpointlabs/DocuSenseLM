@@ -434,7 +434,7 @@ class ClauseExtractor:
                     # Handle spaces in year (e.g., "202 5" -> "2025")
                     date_str = re.sub(r'(\d)\s+(\d)', r'\1\2', date_str)  # Remove spaces between digits
                     date_str = re.sub(r'\s+', ' ', date_str).strip()  # Normalize other spaces
-                
+
                 try:
                     parsed_date = date_parser.parse(date_str)
                     # Validate it's a reasonable date (not too far in past/future)

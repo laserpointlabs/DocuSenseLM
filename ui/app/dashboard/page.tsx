@@ -39,6 +39,8 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const response = await documentAPI.list(0, 1000);
+      // The API now returns full metadata in the list endpoint, so we can use it directly
+      // But we still need to calculate expiration dates
       const docsWithMetadata = await enrichDocumentsWithMetadata(response.documents || []);
       setDocuments(docsWithMetadata);
     } catch (error) {
@@ -49,16 +51,14 @@ export default function DashboardPage() {
   };
 
   const enrichDocumentsWithMetadata = async (docs: Document[]): Promise<DocumentWithMetadata[]> => {
-    const enriched = await Promise.all(
-      docs.map(async (doc) => {
+    // The API now returns full metadata in the list endpoint, so we can use it directly
+    // No need to call get() for each document - just calculate expiration dates
+    const enriched = docs.map((doc) => {
         try {
-          // Get full document details
-          const fullDoc = await documentAPI.get(doc.id);
-
-          // Extract metadata
-          const metadata = fullDoc.metadata_json || {};
-          const effectiveDate = metadata.effective_date || fullDoc.metadata?.effective_date;
-          const termMonths = metadata.term_months || fullDoc.metadata?.term_months;
+          // Extract metadata from the document (already includes DocumentMetadata fields)
+          const metadata = (doc as any).metadata || (doc as any).metadata_json || {};
+          const effectiveDate = metadata.effective_date;
+          const termMonths = metadata.term_months;
 
           // Calculate expiration date
           let expirationDate: string | undefined;
@@ -94,7 +94,7 @@ export default function DashboardPage() {
             ...doc,
             effective_date: effectiveDate,
             expiration_date: expirationDate,
-            governing_law: metadata.governing_law || fullDoc.metadata?.governing_law,
+            governing_law: metadata.governing_law,
             is_mutual: metadata.is_mutual,
             term_months: termMonths,
             survival_months: metadata.survival_months,
@@ -110,8 +110,7 @@ export default function DashboardPage() {
             company_name: extractCompanyName(doc.filename),
           } as DocumentWithMetadata & { company_name: string };
         }
-      })
-    );
+    });
 
     return enriched;
   };
