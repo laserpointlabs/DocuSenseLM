@@ -53,16 +53,26 @@ class ClauseExtractor:
         ]
 
         # Term patterns - enhanced to capture various phrasings
+        # Including "three (3) years", "two (2) years", etc.
         self.term_patterns = [
             r'term\s+of\s+(\d+)\s+(?:months?|years?)',
+            r'term\s+of\s+(?:three|two|four|five)\s+\((\d+)\)\s+years?',  # "three (3) years"
+            r'term\s+of\s+\((\d+)\)\s+years?',  # "(3) years"
             r'period\s+of\s+(\d+)\s+(?:months?|years?)',
+            r'period\s+of\s+(?:three|two|four|five)\s+\((\d+)\)\s+years?',  # "period of three (3) years"
             r'duration\s+of\s+(\d+)\s+(?:months?|years?)',
+            r'duration\s+of\s+(?:three|two|four|five)\s+\((\d+)\)\s+years?',
             r'expires?\s+(?:on|after|in)\s+(\d+)\s+(?:months?|years?)',
+            r'expires?\s+(?:on|after|in)\s+(?:three|two|four|five)\s+\((\d+)\)\s+years?',
             r'(\d+)\s+(?:years?|months?)\s+(?:from|after|following)\s+(?:the\s+)?(?:effective|execution|date)',
+            r'(?:three|two|four|five)\s+\((\d+)\)\s+years?\s+(?:from|after|following)\s+(?:the\s+)?(?:effective|execution|date)',
             r'(?:for|shall\s+continue|continues?)\s+(?:a\s+)?(?:period\s+of\s+)?(\d+)\s+(?:years?|months?)',
+            r'(?:for|shall\s+continue|continues?)\s+(?:a\s+)?(?:period\s+of\s+)?(?:three|two|four|five)\s+\((\d+)\)\s+years?',
             r'(\d+)[-\s]?(?:year|month)\s+(?:term|period|agreement)',
+            r'(?:three|two|four|five)\s+\((\d+)\)[-\s]?(?:year|month)\s+(?:term|period|agreement)',
             # Common patterns: "2 years", "3 years", "24 months", "36 months"
             r'(?:agreement|nda|this\s+agreement)\s+(?:shall\s+continue|is|remains)\s+(?:in\s+effect|effective)\s+(?:for\s+)?(?:a\s+)?(?:period\s+of\s+)?(\d+)\s+(?:years?|months?)',
+            r'(?:agreement|nda|this\s+agreement)\s+(?:shall\s+continue|is|remains)\s+(?:in\s+effect|effective)\s+(?:for\s+)?(?:a\s+)?(?:period\s+of\s+)?(?:three|two|four|five)\s+\((\d+)\)\s+years?',
         ]
 
         # Survival patterns
@@ -411,7 +421,7 @@ class ClauseExtractor:
         # Look for common values (2 years = 24 months, 3 years = 36 months)
         best_match = None
         best_value = None
-        
+
         for pattern in self.term_patterns:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
@@ -423,7 +433,7 @@ class ClauseExtractor:
                         value_months = value * 12
                     else:
                         value_months = value
-                    
+
                     # Prefer common NDA terms (2-5 years, or 12-60 months)
                     # If we find a reasonable value, use it
                     if 12 <= value_months <= 120:  # 1 year to 10 years
@@ -432,16 +442,18 @@ class ClauseExtractor:
                             best_value = value_months
                 except (ValueError, IndexError):
                     continue
-        
+
         # If we found a match, return it
         if best_value is not None:
             return best_value
-        
+
         # Fallback: Look for explicit "2 year" or "3 year" mentions
         # Common NDA terms: "2 years", "3 years", "24 months", "36 months"
+        # Also handle "three (3) years", "two (2) years" format
         explicit_patterns = [
             r'(?:^|\s)(?:two|2)\s+years?',
             r'(?:^|\s)(?:three|3)\s+years?',
+            r'(?:^|\s)(?:three|two|four|five)\s+\((\d+)\)\s+years?',  # "three (3) years"
             r'(?:^|\s)(?:24|thirty[-\s]?four)\s+months?',
             r'(?:^|\s)(?:36|thirty[-\s]?six)\s+months?',
         ]
@@ -450,15 +462,27 @@ class ClauseExtractor:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 match_text = match.group(0).lower()
+                # Check if we have a captured group (for "three (3) years" format)
+                if len(match.groups()) > 0 and match.group(1):
+                    try:
+                        value = int(match.group(1))
+                        return value * 12  # Convert years to months
+                    except ValueError:
+                        pass
+                # Otherwise check text content
                 if 'two' in match_text or '2' in match_text:
                     return 24  # 2 years
                 elif 'three' in match_text or '3' in match_text:
                     return 36  # 3 years
+                elif 'four' in match_text or '4' in match_text:
+                    return 48  # 4 years
+                elif 'five' in match_text or '5' in match_text:
+                    return 60  # 5 years
                 elif '24' in match_text or 'thirty-four' in match_text:
                     return 24
                 elif '36' in match_text or 'thirty-six' in match_text:
                     return 36
-        
+
         return None
 
     def _extract_survival(self, text: str) -> Optional[int]:

@@ -34,7 +34,7 @@ def parse_expiration_from_filename(filename: str) -> tuple[datetime | None, int 
         'nov': 11, 'november': 11,
         'dec': 12, 'december': 12,
     }
-    
+
     # Try to match "expires Sept. 2028" or "expires September 2028"
     match = re.search(r'expires?\s+(\w+\.?\s+\d{4})', filename, re.IGNORECASE)
     if match:
@@ -51,7 +51,7 @@ def parse_expiration_from_filename(filename: str) -> tuple[datetime | None, int 
                     return expiration_date, None  # Term will be calculated from effective_date
             except ValueError:
                 pass
-    
+
     return None, None
 
 
@@ -62,23 +62,23 @@ def recalculate_expirations():
         documents = db.query(Document).filter(
             Document.status == DocumentStatus.PROCESSED
         ).all()
-        
+
         print(f"📋 Processing {len(documents)} documents...")
         print()
-        
+
         updated_count = 0
-        
+
         for doc in documents:
             metadata = db.query(DocumentMetadata).filter(
                 DocumentMetadata.document_id == doc.id
             ).first()
-            
+
             if not metadata:
                 continue
-            
+
             effective_date = metadata.effective_date
             term_months = metadata.term_months
-            
+
             # Try to extract expiration from filename if term_months is missing
             if effective_date and not term_months:
                 expiration_date, _ = parse_expiration_from_filename(doc.filename)
@@ -91,17 +91,17 @@ def recalculate_expirations():
                         updated_count += 1
                         print(f"✅ Updated {doc.filename[:50]:50} | Term: {months_diff} months (calculated from filename)")
                         continue
-            
+
             # If we have effective_date and term_months but want to verify calculation
             if effective_date and term_months:
                 # Verify expiration can be calculated
                 calculated_expiration = effective_date + timedelta(days=term_months * 30.44)
                 print(f"✓ {doc.filename[:50]:50} | Term: {term_months} months | Effective: {effective_date.strftime('%Y-%m-%d')} | Expires: ~{calculated_expiration.strftime('%Y-%m-%d')}")
-        
+
         db.commit()
         print()
         print(f"✅ Updated {updated_count} documents with term_months")
-        
+
     except Exception as e:
         db.rollback()
         print(f"❌ Error: {e}")
@@ -115,11 +115,10 @@ if __name__ == "__main__":
     print("Recalculate Expiration Dates")
     print("=" * 70)
     print()
-    
+
     recalculate_expirations()
-    
+
     print()
     print("=" * 70)
     print("Done!")
     print("=" * 70)
-
