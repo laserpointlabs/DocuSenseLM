@@ -329,24 +329,24 @@ export default function CompetencyPage() {
           <div className="p-8 text-center text-gray-600">No questions created yet.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="w-full divide-y divide-gray-200 table-fixed">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8"></th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Question</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Answer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actual Answer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Response Time</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Question</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Expected Answer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">Actual Answer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Confidence</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Response Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {questions.map((q) => {
                   const result = detailedResults[q.id] || allTestResults?.results?.find((r: any) => r.question_id === q.id);
                   const isExpanded = expandedQuestion === q.id;
-                  
+
                   return (
                     <>
                       <tr key={q.id} className={isExpanded ? 'bg-primary-50' : ''}>
@@ -360,7 +360,7 @@ export default function CompetencyPage() {
                             </button>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 max-w-xs">
                           {editingQuestion === q.id ? (
                             <textarea
                               value={editQuestionText}
@@ -369,10 +369,10 @@ export default function CompetencyPage() {
                               rows={2}
                             />
                           ) : (
-                            <div className="text-sm text-gray-900">{q.question_text}</div>
+                            <div className="text-sm text-gray-900 break-words whitespace-normal">{q.question_text}</div>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 max-w-md">
                           {editingQuestion === q.id ? (
                             <textarea
                               value={editExpectedAnswer}
@@ -381,17 +381,15 @@ export default function CompetencyPage() {
                               rows={2}
                             />
                           ) : (
-                            <div className="text-sm text-gray-700 max-w-md">
+                            <div className="text-sm text-gray-700 break-words whitespace-normal">
                               {q.expected_answer_text || <span className="text-gray-400">Not set</span>}
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 max-w-md">
                           {result ? (
-                            <div className="text-sm text-gray-900 max-w-md">
-                              <div className="truncate" title={result.answer || result.actual_answer || 'No answer'}>
-                                {result.answer || result.actual_answer || <span className="text-gray-400">No answer</span>}
-                              </div>
+                            <div className="text-sm text-gray-900 break-words whitespace-normal">
+                              {result.answer || result.actual_answer || <span className="text-gray-400">No answer</span>}
                             </div>
                           ) : (
                             <span className="text-gray-400 text-sm">Not tested</span>
@@ -493,8 +491,8 @@ export default function CompetencyPage() {
                                     <div className="space-y-2">
                                       {result.citations.map((citation: any, idx: number) => (
                                         <div key={idx} className="text-xs text-gray-600">
-                                          • Document: {citation.doc_id?.substring(0, 8)}..., 
-                                          Page {citation.page_num}, 
+                                          • Document: {citation.doc_id?.substring(0, 8)}...,
+                                          Page {citation.page_num},
                                           Clause {citation.clause_number || 'N/A'}
                                         </div>
                                       ))}
