@@ -16,7 +16,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(document_id: str):
     """
-    Get document by ID
+    Get document by ID with full metadata and parties
     """
     db = get_db_session()
     try:
@@ -24,12 +24,38 @@ async def get_document(document_id: str):
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
+        # Get document metadata
+        doc_metadata = db_service.get_document_metadata(db, document_id)
+        
+        # Get parties
+        parties = db_service.get_parties(db, document_id)
+        
+        # Build comprehensive metadata
+        metadata = doc.metadata_json or {}
+        if doc_metadata:
+            metadata.update({
+                'effective_date': doc_metadata.effective_date.isoformat() if doc_metadata.effective_date else None,
+                'governing_law': doc_metadata.governing_law,
+                'is_mutual': doc_metadata.is_mutual,
+                'term_months': doc_metadata.term_months,
+                'survival_months': doc_metadata.survival_months,
+            })
+        
+        metadata['parties'] = [
+            {
+                'name': p.party_name,
+                'type': p.party_type,
+                'address': p.address
+            }
+            for p in parties
+        ]
+
         return DocumentResponse(
             id=str(doc.id),
             filename=doc.filename,
             upload_date=doc.upload_date,
             status=doc.status.value if hasattr(doc.status, 'value') else str(doc.status),
-            metadata=doc.metadata_json
+            metadata=metadata
         )
     finally:
         db.close()

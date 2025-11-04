@@ -54,30 +54,30 @@ export default function DashboardPage() {
         try {
           // Get full document details
           const fullDoc = await documentAPI.get(doc.id);
-          
+
           // Extract metadata
           const metadata = fullDoc.metadata_json || {};
           const effectiveDate = metadata.effective_date || fullDoc.metadata?.effective_date;
           const termMonths = metadata.term_months || fullDoc.metadata?.term_months;
-          
+
           // Calculate expiration date
           let expirationDate: string | undefined;
           let daysUntilExpiration: number | undefined;
           let expirationStatus: 'active' | 'expiring_soon' | 'expiring_very_soon' | 'expired' = 'active';
-          
+
           if (effectiveDate && termMonths) {
             const effective = new Date(effectiveDate);
             const expiration = new Date(effective);
             expiration.setMonth(expiration.getMonth() + termMonths);
             expirationDate = expiration.toISOString().split('T')[0];
-            
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const expDate = new Date(expiration);
             expDate.setHours(0, 0, 0, 0);
-            
+
             daysUntilExpiration = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-            
+
             if (daysUntilExpiration < 0) {
               expirationStatus = 'expired';
             } else if (daysUntilExpiration <= 30) {
@@ -86,10 +86,10 @@ export default function DashboardPage() {
               expirationStatus = 'expiring_soon';
             }
           }
-          
+
           // Extract company name from filename
           const companyName = extractCompanyName(doc.filename);
-          
+
           return {
             ...doc,
             effective_date: effectiveDate,
@@ -98,7 +98,7 @@ export default function DashboardPage() {
             is_mutual: metadata.is_mutual,
             term_months: termMonths,
             survival_months: metadata.survival_months,
-            parties: fullDoc.parties || metadata.parties || [],
+            parties: metadata.parties || [],
             days_until_expiration: daysUntilExpiration,
             expiration_status: expirationStatus,
             company_name: companyName,
@@ -112,7 +112,7 @@ export default function DashboardPage() {
         }
       })
     );
-    
+
     return enriched;
   };
 
@@ -123,6 +123,39 @@ export default function DashboardPage() {
       return parts[0].trim();
     }
     return filename.replace('.pdf', '').replace('.docx', '');
+  };
+
+  const parseExpirationDate = (dateStr: string): Date | null => {
+    // Parse dates like "Sept. 2028" or "September 2028"
+    const monthNames: { [key: string]: number } = {
+      'jan': 0, 'january': 0,
+      'feb': 1, 'february': 1,
+      'mar': 2, 'march': 2,
+      'apr': 3, 'april': 3,
+      'may': 4,
+      'jun': 5, 'june': 5,
+      'jul': 6, 'july': 6,
+      'aug': 7, 'august': 7,
+      'sep': 8, 'sept': 8, 'september': 8,
+      'oct': 9, 'october': 9,
+      'nov': 10, 'november': 10,
+      'dec': 11, 'december': 11,
+    };
+    
+    try {
+      const parts = dateStr.trim().toLowerCase().replace(/\./g, '').split(/\s+/);
+      if (parts.length >= 2) {
+        const monthName = parts[0];
+        const year = parseInt(parts[1]);
+        const month = monthNames[monthName];
+        if (month !== undefined && !isNaN(year)) {
+          return new Date(year, month, 1);
+        }
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+    return null;
   };
 
   const getStatusColor = (status: string) => {
@@ -165,7 +198,7 @@ export default function DashboardPage() {
 
   const sortedDocuments = [...filteredDocuments].sort((a, b) => {
     let comparison = 0;
-    
+
     if (sortBy === 'expiration') {
       const aDays = a.days_until_expiration ?? Infinity;
       const bDays = b.days_until_expiration ?? Infinity;
@@ -179,7 +212,7 @@ export default function DashboardPage() {
       const bDate = b.effective_date ? new Date(b.effective_date).getTime() : 0;
       comparison = aDate - bDate;
     }
-    
+
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 
@@ -462,4 +495,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
