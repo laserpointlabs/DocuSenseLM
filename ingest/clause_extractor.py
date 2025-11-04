@@ -43,6 +43,8 @@ class ClauseExtractor:
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?([A-Z][a-z]+ \d{1,2}, \d{4})',
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',
+            r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',  # "entered into as of August 11, 2025"
+            r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})',  # "entered into as of Aug. 11, 2025"
             r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',  # General date format
             r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',  # Full month name
             r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})',  # Abbreviated month
@@ -409,11 +411,16 @@ class ClauseExtractor:
     def _extract_date(self, text: str) -> Optional[datetime]:
         """Extract effective date"""
         for pattern in self.date_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
                 date_str = match.group(1)
+                # Clean up extra spaces that might be in the date string
+                date_str = re.sub(r'\s+', ' ', date_str).strip()
                 try:
-                    return date_parser.parse(date_str)
+                    parsed_date = date_parser.parse(date_str)
+                    # Validate it's a reasonable date (not too far in past/future)
+                    if parsed_date.year >= 2020 and parsed_date.year <= 2030:
+                        return parsed_date
                 except:
                     continue
         return None
