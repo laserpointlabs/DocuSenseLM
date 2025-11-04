@@ -10,6 +10,9 @@ help:
 	@echo "  make seed       - Seed sample documents"
 	@echo "  make reindex    - Re-index all documents"
 	@echo "  make eval       - Run evaluation harness"
+	@echo "  make load-questions - Load competency questions from QA pairs"
+	@echo "  make test-questions - Run tests for loaded questions"
+	@echo "  make load-and-test - Load questions and run tests"
 
 setup:
 	@if [ ! -f .env ]; then cp .env.example .env; fi
@@ -44,3 +47,15 @@ reindex:
 
 eval:
 	docker-compose exec api python eval/run_eval.py --verbose
+
+load-questions:
+	@echo "Loading competency questions from eval/qa_pairs.json..."
+	@python3 scripts/load_competency_questions.py --use-db
+
+test-questions:
+	@echo "Running tests for competency questions..."
+	@python3 scripts/load_competency_questions.py --test-only --test
+
+load-and-test:
+	@echo "Loading questions and running tests..."
+	@python3 scripts/load_competency_questions.py --use-db --test
