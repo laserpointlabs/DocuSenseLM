@@ -43,6 +43,21 @@ export default function QuestionBuilderPage() {
     }
   };
 
+  const handleDeleteQuestion = async (questionId: string) => {
+    if (!confirm('Are you sure you want to delete this question?')) {
+      return;
+    }
+
+    try {
+      await competencyAPI.deleteQuestion(questionId);
+      // Reload questions to get the updated list
+      await loadQuestions();
+      alert('Question deleted successfully!');
+    } catch (error: any) {
+      alert(`Failed to delete question: ${error.message}`);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
@@ -95,11 +110,20 @@ export default function QuestionBuilderPage() {
         ) : (
           <ul className="space-y-2">
             {questions.map((q) => (
-              <li key={q.id} className="p-3 bg-gray-50 rounded-md">
-                <p className="text-sm text-gray-900">{q.question_text}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Created: {new Date(q.created_at).toLocaleDateString()}
-                </p>
+              <li key={q.id} className="p-3 bg-gray-50 rounded-md flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm text-gray-900">{q.question_text}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Created: {new Date(q.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDeleteQuestion(q.id)}
+                  className="ml-4 text-red-600 hover:text-red-800 text-sm font-medium"
+                  title="Delete question"
+                >
+                  Delete
+                </button>
               </li>
             ))}
           </ul>

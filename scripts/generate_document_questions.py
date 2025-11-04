@@ -165,7 +165,8 @@ def generate_questions_for_document(document_id: str, key_info: Dict, use_llm: b
 
     # Questions about specific clauses
     key_clauses = key_info.get("key_clauses", [])
-    for clause in key_clauses[:5]:  # Limit to first 5 key clauses
+    # Limit to first 3 key clauses to keep total questions manageable
+    for clause in key_clauses[:3]:
         clause_title = clause.get("title", "").strip()
         clause_num = clause.get("number", "")
         # Skip single-letter titles and very short titles

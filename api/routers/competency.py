@@ -87,6 +87,31 @@ async def list_questions(
         db.close()
 
 
+@router.delete("/questions/{question_id}")
+async def delete_question(question_id: str):
+    """Delete a competency question"""
+    db = get_db_session()
+    try:
+        question = db.query(CompetencyQuestion).filter(CompetencyQuestion.id == question_id).first()
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Delete associated test runs and feedback first
+        db.query(TestFeedback).filter(TestFeedback.test_run_id.in_(
+            db.query(TestRun.id).filter(TestRun.question_id == question_id)
+        )).delete(synchronize_session=False)
+        
+        db.query(TestRun).filter(TestRun.question_id == question_id).delete()
+        
+        # Delete the question
+        db.delete(question)
+        db.commit()
+        
+        return {"message": "Question deleted successfully", "question_id": question_id}
+    finally:
+        db.close()
+
+
 @router.post("/questions/{question_id}/suggest")
 async def suggest_ground_truth(question_id: str):
     """LLM-assisted ground truth suggestion"""
