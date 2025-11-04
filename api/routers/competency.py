@@ -107,10 +107,10 @@ async def update_question(question_id: str, request: CompetencyQuestionUpdate):
             expected_answer_text=request.expected_answer_text,
             is_active=request.is_active
         )
-        
+
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
-        
+
         return {
             "id": str(question.id),
             "question_text": question.question_text,
@@ -136,18 +136,18 @@ async def delete_question(question_id: str):
         question = db.query(CompetencyQuestion).filter(CompetencyQuestion.id == question_id).first()
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
-        
+
         # Delete associated test runs and feedback first
         db.query(TestFeedback).filter(TestFeedback.test_run_id.in_(
             db.query(TestRun.id).filter(TestRun.question_id == question_id)
         )).delete(synchronize_session=False)
-        
+
         db.query(TestRun).filter(TestRun.question_id == question_id).delete()
-        
+
         # Delete the question
         db.delete(question)
         db.commit()
-        
+
         return {"message": "Question deleted successfully", "question_id": question_id}
     finally:
         db.close()

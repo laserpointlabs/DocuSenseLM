@@ -1,6 +1,7 @@
 """
 Database service for document queries
 """
+import uuid
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -139,7 +140,7 @@ class DBService:
         question = db.query(CompetencyQuestion).filter(CompetencyQuestion.id == question_id).first()
         if not question:
             return None
-        
+
         if question_text is not None:
             question.question_text = question_text
         if category_id is not None:
@@ -156,7 +157,7 @@ class DBService:
             question.expected_answer_text = expected_answer_text
         if is_active is not None:
             question.is_active = is_active
-        
+
         question.version = (question.version or 1) + 1
         db.commit()
         db.refresh(question)
