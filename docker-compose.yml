@@ -141,23 +141,22 @@ services:
       - ./ingest:/app
       - ./docs:/app/docs:ro
 
-  # UI - Commented out for now, run locally with: cd ui && npm install && npm run dev
-  # ui:
-  #   build:
-  #     context: ./ui
-  #     dockerfile: Dockerfile
-  #   container_name: nda-ui
-  #   environment:
-  #     - NEXT_PUBLIC_API_URL=http://localhost:8000
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - api
-  #   volumes:
-  #     - ./ui:/app
-  #     - /app/node_modules
-  #     - /app/.next
-  #   command: npm run dev
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: nda-ui
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./ui:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
 
 volumes:
   postgres_data:
