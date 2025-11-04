@@ -153,9 +153,23 @@ async def run_test(request: TestRunRequest):
 
         response_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-        # Calculate accuracy (simplified - would compare to ground truth)
-        accuracy_score = None  # TODO: Compare to ground truth
-
+        # Calculate accuracy by comparing to expected answer
+        accuracy_score = None
+        if question.expected_answer_text:
+            expected = question.expected_answer_text.lower().strip()
+            actual = answer_obj.text.lower().strip() if answer_obj.text else ""
+            
+            # Simple similarity check
+            if expected in actual or actual in expected:
+                accuracy_score = 0.9
+            elif expected and actual:
+                # Calculate word overlap
+                expected_words = set(expected.split())
+                actual_words = set(actual.split())
+                if expected_words and actual_words:
+                    overlap = len(expected_words & actual_words)
+                    accuracy_score = overlap / max(len(expected_words), len(actual_words))
+        
         # Store test run
         test_run = TestRun(
             question_id=request.question_id,
@@ -172,6 +186,7 @@ async def run_test(request: TestRunRequest):
             "test_run_id": str(test_run.id),
             "question_id": request.question_id,
             "answer": answer_obj.text,
+            "accuracy_score": accuracy_score,
             "citations": [
                 {
                     "doc_id": c.doc_id,
