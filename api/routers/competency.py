@@ -297,11 +297,67 @@ async def get_test_results(
                     "run_at": tr.run_at,
                     "answer_text": tr.answer_text,
                     "accuracy_score": tr.accuracy_score,
-                    "response_time_ms": tr.response_time_ms
+                    "response_time_ms": tr.response_time_ms,
+                    "retrieved_clauses": tr.retrieved_clauses
                 }
                 for tr in test_runs
             ],
             "total": total
+        }
+    finally:
+        db.close()
+
+
+@router.get("/test/results/latest")
+async def get_latest_test_results():
+    """Get the latest test result for each active question"""
+    db = get_db_session()
+    try:
+        # Get all active questions
+        questions = db.query(CompetencyQuestion).filter(
+            CompetencyQuestion.is_active == True
+        ).all()
+
+        results = []
+        for question in questions:
+            # Get the most recent test run for this question
+            latest_run = db.query(TestRun).filter(
+                TestRun.question_id == question.id
+            ).order_by(TestRun.run_at.desc()).first()
+
+            if latest_run:
+                # Calculate passed status (using 0.7 threshold)
+                passed = (
+                    latest_run.accuracy_score is not None and
+                    latest_run.accuracy_score >= 0.7
+                )
+
+                results.append({
+                    "test_run_id": str(latest_run.id),
+                    "question_id": str(question.id),
+                    "question_text": question.question_text,
+                    "expected_answer": question.expected_answer_text,
+                    "document_id": str(question.document_id) if question.document_id else None,
+                    "passed": passed,
+                    "answer": latest_run.answer_text,
+                    "actual_answer": latest_run.answer_text,
+                    "accuracy_score": latest_run.accuracy_score,
+                    "citations_count": len(latest_run.retrieved_clauses) if latest_run.retrieved_clauses else 0,
+                    "response_time_ms": latest_run.response_time_ms,
+                    "run_at": latest_run.run_at
+                })
+
+        # Calculate summary stats
+        passed_count = sum(1 for r in results if r.get("passed"))
+        failed_count = len(results) - passed_count
+        pass_rate = (passed_count / len(results) * 100) if results else 0
+
+        return {
+            "total": len(results),
+            "passed": passed_count,
+            "failed": failed_count,
+            "passRate": pass_rate,
+            "results": results
         }
     finally:
         db.close()

@@ -27,6 +27,7 @@ export default function CompetencyPage() {
 
   useEffect(() => {
     loadQuestions();
+    loadLatestTestResults();
   }, []);
 
   const loadQuestions = async () => {
@@ -38,6 +39,37 @@ export default function CompetencyPage() {
       console.error('Failed to load questions:', error);
     } finally {
       setLoadingQuestions(false);
+    }
+  };
+
+  const loadLatestTestResults = async () => {
+    try {
+      const results = await competencyAPI.getLatestTestResults();
+      
+      // Build detailed results map
+      const detailed: Record<string, any> = {};
+      results.results?.forEach((result: any) => {
+        detailed[result.question_id] = result;
+      });
+      setDetailedResults(detailed);
+      
+      // Set all test results for summary display
+      if (results.results && results.results.length > 0) {
+        setAllTestResults({
+          total: results.total,
+          passed: results.passed,
+          failed: results.failed,
+          passRate: results.passRate,
+          results: results.results.map((r: any) => ({
+            ...r,
+            confidence: r.accuracy_score || 0,
+            passed: r.passed
+          }))
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load latest test results:', error);
+      // Don't show error to user, just silently fail
     }
   };
 
@@ -193,6 +225,9 @@ export default function CompetencyPage() {
         detailed[result.question_id] = result;
       });
       setDetailedResults(detailed);
+      
+      // Results are automatically saved to database by the API
+      // They will persist and be loaded on refresh
     } catch (error: any) {
       alert(`Failed to run all tests: ${error.message}`);
     } finally {

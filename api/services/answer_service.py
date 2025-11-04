@@ -84,11 +84,11 @@ class AnswerService:
         """
         if not answer_text:
             return answer_text
-        
+
         import re
         question_lower = question.lower()
         answer_clean = answer_text.strip()
-        
+
         # For date questions, try to extract just the date
         if any(word in question_lower for word in ['date', 'effective', 'when']):
             # Look for date patterns like "September 5, 2025" or "July 16, 2025"
@@ -96,7 +96,7 @@ class AnswerService:
             match = re.search(date_pattern, answer_clean)
             if match:
                 return match.group(1)
-        
+
         # For duration/term questions, extract just the duration
         if any(word in question_lower for word in ['term', 'duration', 'how long', 'months', 'years']):
             # Look for patterns like "3 years" or "36 months"
@@ -104,7 +104,7 @@ class AnswerService:
             match = re.search(duration_pattern, answer_clean, re.IGNORECASE)
             if match:
                 return match.group(1)
-        
+
         # For governing law questions, extract just the jurisdiction
         if any(word in question_lower for word in ['governing law', 'jurisdiction', 'law applies']):
             # Look for patterns like "State of Delaware" or "State of California"
@@ -112,7 +112,7 @@ class AnswerService:
             match = re.search(law_pattern, answer_clean)
             if match:
                 return f"State of {match.group(1)}"
-        
+
         # For mutual/unilateral questions, extract just the answer
         if any(word in question_lower for word in ['mutual', 'unilateral']):
             answer_lower = answer_clean.lower()
@@ -120,14 +120,14 @@ class AnswerService:
                 return 'mutual'
             elif 'unilateral' in answer_lower:
                 return 'unilateral'
-        
+
         # For other questions, return first sentence or up to 100 chars
         sentences = answer_clean.split('.')
         if len(sentences) > 0:
             first_sentence = sentences[0].strip()
             if len(first_sentence) <= 100:
                 return first_sentence
-        
+
         # Default: return first 100 characters
         return answer_clean[:100] if len(answer_clean) > 100 else answer_clean
 
