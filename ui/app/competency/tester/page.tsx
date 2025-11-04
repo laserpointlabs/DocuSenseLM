@@ -9,6 +9,8 @@ export default function TesterPage() {
   const [testResult, setTestResult] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [testingAll, setTestingAll] = useState(false);
+  const [allTestResults, setAllTestResults] = useState<any | null>(null);
 
   useEffect(() => {
     loadQuestions();
@@ -39,18 +41,120 @@ export default function TesterPage() {
     }
   };
 
+  const runAllTests = async () => {
+    if (questions.length === 0) {
+      alert('No questions available to test');
+      return;
+    }
+
+    if (!confirm(`Run tests for all ${questions.length} questions? This may take a few minutes.`)) {
+      return;
+    }
+
+    setTestingAll(true);
+    setAllTestResults(null);
+    setTestResult(null);
+    
+    try {
+      const results = await competencyAPI.runAllTests();
+      setAllTestResults(results);
+      
+      // Show summary alert
+      const passRate = results.pass_rate?.toFixed(1) || '0';
+      alert(`Testing complete!\n\nTotal: ${results.total}\nPassed: ${results.passed}\nFailed: ${results.failed}\nPass Rate: ${passRate}%`);
+    } catch (error: any) {
+      alert(`Failed to run all tests: ${error.message}`);
+    } finally {
+      setTestingAll(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Test Runner</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Run competency tests and view results
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Test Runner</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Run competency tests and view results
+          </p>
+        </div>
+        <button
+          onClick={runAllTests}
+          disabled={testingAll || loadingQuestions || questions.length === 0}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        >
+          {testingAll ? (
+            <>
+              <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              Testing All...
+            </>
+          ) : (
+            'Test All'
+          )}
+        </button>
       </div>
+
+      {allTestResults && (
+        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Test All Results</h2>
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-900">{allTestResults.total}</div>
+              <div className="text-sm text-gray-600">Total Questions</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{allTestResults.passed}</div>
+              <div className="text-sm text-gray-600">Passed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-600">{allTestResults.failed}</div>
+              <div className="text-sm text-gray-600">Failed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary-600">{allTestResults.pass_rate?.toFixed(1)}%</div>
+              <div className="text-sm text-gray-600">Pass Rate</div>
+            </div>
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Question</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Response Time</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Citations</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {allTestResults.results?.map((result: any, idx: number) => (
+                  <tr key={idx}>
+                    <td className="px-4 py-3 text-sm text-gray-900 max-w-md truncate">
+                      {result.question_text}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        result.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {result.passed ? 'Passed' : 'Failed'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {result.response_time_ms ? `${result.response_time_ms}ms` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {result.citations_count || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Questions</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Questions ({questions.length})</h2>
           {loadingQuestions ? (
             <p className="text-sm text-gray-600">Loading...</p>
           ) : questions.length === 0 ? (

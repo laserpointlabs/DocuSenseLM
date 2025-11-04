@@ -108,10 +108,18 @@ async def run_test(request: TestRunRequest):
             raise HTTPException(status_code=404, detail="Question not found")
 
         # Run answer generation
+        # If question has a document_id, prioritize that document
+        filters = None
+        if request.document_id:
+            filters = {"document_id": request.document_id}
+        elif question.document_id:
+            # Use the question's associated document if no specific document requested
+            filters = {"document_id": str(question.document_id)}
+
         start_time = datetime.now()
         answer_obj = await answer_service.generate_answer(
             question=question.question_text,
-            filters={"document_id": request.document_id} if request.document_id else None
+            filters=filters
         )
         end_time = datetime.now()
 
@@ -214,6 +222,100 @@ async def get_test_results(
                 for tr in test_runs
             ],
             "total": total
+        }
+    finally:
+        db.close()
+
+
+@router.post("/test/run-all")
+async def run_all_tests():
+    """Run tests for all active competency questions"""
+    db = get_db_session()
+    try:
+        # Get all active questions
+        questions = db.query(CompetencyQuestion).filter(
+            CompetencyQuestion.is_active == True
+        ).all()
+        
+        if not questions:
+            return {
+                "message": "No active questions found",
+                "total": 0,
+                "results": []
+            }
+        
+        results = []
+        total_passed = 0
+        total_failed = 0
+        
+        for question in questions:
+            try:
+                # Run test for this question
+                filters = None
+                if question.document_id:
+                    filters = {"document_id": str(question.document_id)}
+                
+                start_time = datetime.now()
+                answer_obj = await answer_service.generate_answer(
+                    question=question.question_text,
+                    filters=filters
+                )
+                end_time = datetime.now()
+                
+                response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+                
+                # Check if test passed (has answer and reasonable response time)
+                passed = (
+                    answer_obj.text and 
+                    len(answer_obj.text) > 10 and
+                    response_time_ms < 30000  # 30 second timeout
+                )
+                
+                if passed:
+                    total_passed += 1
+                else:
+                    total_failed += 1
+                
+                # Store test run
+                test_run = TestRun(
+                    question_id=str(question.id),
+                    answer_text=answer_obj.text,
+                    retrieved_clauses=[c.doc_id for c in answer_obj.citations],
+                    accuracy_score=None,
+                    response_time_ms=response_time_ms
+                )
+                db.add(test_run)
+                db.commit()
+                db.refresh(test_run)
+                
+                results.append({
+                    "test_run_id": str(test_run.id),
+                    "question_id": str(question.id),
+                    "question_text": question.question_text,
+                    "document_id": str(question.document_id) if question.document_id else None,
+                    "passed": passed,
+                    "answer": answer_obj.text,
+                    "citations_count": len(answer_obj.citations),
+                    "response_time_ms": response_time_ms,
+                    "run_at": test_run.run_at
+                })
+                
+            except Exception as e:
+                total_failed += 1
+                results.append({
+                    "question_id": str(question.id),
+                    "question_text": question.question_text,
+                    "passed": False,
+                    "error": str(e)
+                })
+        
+        return {
+            "message": f"Completed testing {len(questions)} questions",
+            "total": len(questions),
+            "passed": total_passed,
+            "failed": total_failed,
+            "pass_rate": (total_passed / len(questions) * 100) if questions else 0,
+            "results": results
         }
     finally:
         db.close()

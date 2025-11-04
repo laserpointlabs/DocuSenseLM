@@ -59,3 +59,15 @@ test-questions:
 load-and-test:
 	@echo "Loading questions and running tests..."
 	@python3 scripts/load_competency_questions.py --use-db --test
+
+refresh-questions:
+	@echo "Refreshing questions (delete old, generate new from documents)..."
+	@bash scripts/refresh_questions.sh
+
+clean-questions:
+	@echo "Cleaning all competency questions..."
+	@python3 scripts/clean_questions.py
+
+generate-doc-questions:
+	@echo "Generating document-specific questions..."
+	@python3 scripts/generate_document_questions.py --create --no-llm
