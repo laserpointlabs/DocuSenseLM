@@ -57,7 +57,14 @@ export default function DashboardPage() {
         try {
           // Extract metadata from the document (already includes DocumentMetadata fields)
           const metadata = (doc as any).metadata || (doc as any).metadata_json || {};
-          const effectiveDate = metadata.effective_date;
+          
+          // Handle ISO date strings from API (e.g., "2025-09-05T00:00:00+00:00")
+          let effectiveDate = metadata.effective_date;
+          if (effectiveDate && typeof effectiveDate === 'string') {
+            // Extract just the date part (YYYY-MM-DD)
+            effectiveDate = effectiveDate.split('T')[0];
+          }
+          
           const termMonths = metadata.term_months;
 
           // Calculate expiration date
@@ -66,24 +73,30 @@ export default function DashboardPage() {
           let expirationStatus: 'active' | 'expiring_soon' | 'expiring_very_soon' | 'expired' = 'active';
 
           if (effectiveDate && termMonths) {
-            const effective = new Date(effectiveDate);
-            const expiration = new Date(effective);
-            expiration.setMonth(expiration.getMonth() + termMonths);
-            expirationDate = expiration.toISOString().split('T')[0];
+            try {
+              const effective = new Date(effectiveDate);
+              if (!isNaN(effective.getTime())) {
+                const expiration = new Date(effective);
+                expiration.setMonth(expiration.getMonth() + termMonths);
+                expirationDate = expiration.toISOString().split('T')[0];
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const expDate = new Date(expiration);
-            expDate.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const expDate = new Date(expiration);
+                expDate.setHours(0, 0, 0, 0);
 
-            daysUntilExpiration = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                daysUntilExpiration = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-            if (daysUntilExpiration < 0) {
-              expirationStatus = 'expired';
-            } else if (daysUntilExpiration <= 30) {
-              expirationStatus = 'expiring_very_soon';
-            } else if (daysUntilExpiration <= 90) {
-              expirationStatus = 'expiring_soon';
+                if (daysUntilExpiration < 0) {
+                  expirationStatus = 'expired';
+                } else if (daysUntilExpiration <= 30) {
+                  expirationStatus = 'expiring_very_soon';
+                } else if (daysUntilExpiration <= 90) {
+                  expirationStatus = 'expiring_soon';
+                }
+              }
+            } catch (dateError) {
+              console.error(`Error parsing date for document ${doc.id}:`, dateError);
             }
           }
 
