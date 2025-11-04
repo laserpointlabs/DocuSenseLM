@@ -71,3 +71,7 @@ clean-questions:
 generate-doc-questions:
 	@echo "Generating document-specific questions..."
 	@python3 scripts/generate_document_questions.py --create --no-llm
+
+recalculate-expirations:
+	@echo "Recalculating expiration dates from filenames..."
+	@python3 scripts/recalculate_expirations.py
