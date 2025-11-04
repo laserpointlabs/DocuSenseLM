@@ -22,6 +22,7 @@ export default function CompetencyPage() {
 
   // Testing
   const [testingAll, setTestingAll] = useState(false);
+  const [testingQuestion, setTestingQuestion] = useState<string | null>(null);
   const [allTestResults, setAllTestResults] = useState<any | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [detailedResults, setDetailedResults] = useState<Record<string, any>>({});
@@ -239,6 +240,52 @@ export default function CompetencyPage() {
       });
     } catch (error: any) {
       console.error(`Failed to load detailed result for ${questionId}:`, error);
+    }
+  };
+
+  const handleTestQuestion = async (questionId: string) => {
+    setTestingQuestion(questionId);
+    try {
+      const result = await competencyAPI.runTest(questionId);
+      const question = questions.find(q => q.id === questionId);
+      const questionThreshold = question?.confidence_threshold || 0.7;
+
+      const testResult = {
+        ...result,
+        expected_answer: question?.expected_answer_text || '',
+        confidence: result.accuracy_score || 0,
+        passed: (result.accuracy_score || 0) >= questionThreshold
+      };
+
+      // Update detailed results
+      setDetailedResults({
+        ...detailedResults,
+        [questionId]: testResult
+      });
+
+      // Update allTestResults if it exists
+      if (allTestResults) {
+        const updatedResults = allTestResults.results.map((r: any) =>
+          r.question_id === questionId ? {
+            ...testResult,
+            question_id: questionId,
+            question_text: question?.question_text || '',
+            actual_answer: result.answer,
+            citations_count: result.citations?.length || 0
+          } : r
+        );
+        setAllTestResults({
+          ...allTestResults,
+          results: updatedResults
+        });
+      }
+
+      // Reload latest test results to ensure consistency
+      await loadLatestTestResults();
+    } catch (error: any) {
+      alert(`Failed to test question: ${error.message}`);
+    } finally {
+      setTestingQuestion(null);
     }
   };
 
@@ -627,14 +674,29 @@ export default function CompetencyPage() {
                           ) : (
                             <div className="flex gap-2">
                               <button
+                                onClick={() => handleTestQuestion(q.id)}
+                                disabled={testingQuestion === q.id}
+                                className="text-green-600 hover:text-green-900 disabled:text-gray-400 text-sm"
+                                title="Test this question"
+                              >
+                                {testingQuestion === q.id ? (
+                                  <span className="flex items-center gap-1">
+                                    <div className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-green-600"></div>
+                                    Testing...
+                                  </span>
+                                ) : (
+                                  'Test'
+                                )}
+                              </button>
+                              <button
                                 onClick={() => handleEditQuestion(q)}
-                                className="text-blue-600 hover:text-blue-900"
+                                className="text-blue-600 hover:text-blue-900 text-sm"
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => handleDeleteQuestion(q.id)}
-                                className="text-red-600 hover:text-red-900"
+                                className="text-red-600 hover:text-red-900 text-sm"
                               >
                                 Delete
                               </button>

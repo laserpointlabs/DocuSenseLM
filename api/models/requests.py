@@ -14,6 +14,7 @@ class AnswerRequest(BaseModel):
     question: str
     document_id: Optional[str] = None
     filters: Optional[dict] = None
+    max_context_chunks: Optional[int] = 10
 
 
 class UploadRequest(BaseModel):

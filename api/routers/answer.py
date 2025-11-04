@@ -41,4 +41,8 @@ async def answer(request: AnswerRequest):
             question=request.question
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_detail = str(e)
+        print(f"Answer endpoint error: {error_detail}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_detail)
