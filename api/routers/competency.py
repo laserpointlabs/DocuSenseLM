@@ -296,21 +296,38 @@ async def run_all_tests():
                 filters = None
                 if question.document_id:
                     filters = {"document_id": str(question.document_id)}
-
+                
                 start_time = datetime.now()
                 answer_obj = await answer_service.generate_answer(
                     question=question.question_text,
                     filters=filters
                 )
                 end_time = datetime.now()
-
+                
                 response_time_ms = int((end_time - start_time).total_seconds() * 1000)
-
-                # Check if test passed (has answer and reasonable response time)
+                
+                # Calculate accuracy score
+                accuracy_score = None
+                if question.expected_answer_text:
+                    expected = question.expected_answer_text.lower().strip()
+                    actual = answer_obj.text.lower().strip() if answer_obj.text else ""
+                    
+                    if expected in actual or actual in expected:
+                        accuracy_score = 0.9
+                    elif expected and actual:
+                        expected_words = set(expected.split())
+                        actual_words = set(actual.split())
+                        if expected_words and actual_words:
+                            overlap = len(expected_words & actual_words)
+                            accuracy_score = overlap / max(len(expected_words), len(actual_words))
+                
+                # Check if test passed (has answer, reasonable response time, and meets confidence threshold)
+                confidence_threshold = 0.7  # Default threshold
                 passed = (
-                    answer_obj.text and
+                    answer_obj.text and 
                     len(answer_obj.text) > 10 and
-                    response_time_ms < 30000  # 30 second timeout
+                    response_time_ms < 30000 and
+                    (accuracy_score is not None and accuracy_score >= confidence_threshold)
                 )
 
                 if passed:
