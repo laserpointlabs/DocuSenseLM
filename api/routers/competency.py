@@ -29,6 +29,7 @@ async def create_question(request: CompetencyQuestionCreate):
             verification_hint=request.verification_hint,
             expected_clause=request.expected_clause,
             expected_page=request.expected_page,
+            expected_answer_text=request.expected_answer_text,
             created_by=None  # TODO: Get from auth
         )
 
@@ -44,6 +45,7 @@ async def create_question(request: CompetencyQuestionCreate):
             "verification_hint": question.verification_hint,
             "expected_clause": question.expected_clause,
             "expected_page": question.expected_page,
+            "expected_answer_text": question.expected_answer_text,
             "created_at": question.created_at
         }
     finally:
@@ -76,6 +78,7 @@ async def list_questions(
                     "verification_hint": q.verification_hint,
                     "expected_clause": q.expected_clause,
                     "expected_page": q.expected_page,
+                    "expected_answer_text": q.expected_answer_text,
                     "created_at": q.created_at,
                     "version": q.version
                 }

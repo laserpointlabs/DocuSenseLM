@@ -103,6 +103,7 @@ class DBService:
         verification_hint: Optional[str] = None,
         expected_clause: Optional[str] = None,
         expected_page: Optional[int] = None,
+        expected_answer_text: Optional[str] = None,
         created_by: Optional[str] = None
     ) -> CompetencyQuestion:
         """Create a new competency question"""
@@ -113,6 +114,7 @@ class DBService:
             verification_hint=verification_hint,
             expected_clause=expected_clause,
             expected_page=expected_page,
+            expected_answer_text=expected_answer_text,
             created_by=created_by
         )
         db.add(question)
