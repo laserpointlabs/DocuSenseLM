@@ -32,4 +32,4 @@ EXPOSE 8000
 
 # Run application
 WORKDIR /app
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-exclude", "scripts/*", "--reload-exclude", "*.pyc"]

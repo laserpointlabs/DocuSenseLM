@@ -16,15 +16,15 @@ def generate_sample_questions(limit=10):
     """Generate sample questions with expected answers"""
     db = get_db_session()
     all_questions = []
-    
+
     try:
         docs = db.query(Document).filter(Document.status == DocumentStatus.PROCESSED).limit(3).all()
-        
+
         for doc in docs:
             metadata = db.query(DocumentMetadata).filter(DocumentMetadata.document_id == doc.id).first()
             if not metadata:
                 continue
-            
+
             # Question 1: Effective Date
             if metadata.effective_date:
                 effective_date_str = metadata.effective_date.strftime("%B %d, %Y")
@@ -34,7 +34,7 @@ def generate_sample_questions(limit=10):
                     "document_id": str(doc.id),
                     "verification_hint": f"Check the effective date clause in {doc.filename}"
                 })
-            
+
             # Question 2: Term
             if metadata.term_months:
                 years = metadata.term_months // 12
@@ -45,7 +45,7 @@ def generate_sample_questions(limit=10):
                     "document_id": str(doc.id),
                     "verification_hint": f"Check the term clause in {doc.filename}"
                 })
-            
+
             # Question 3: Governing Law
             if metadata.governing_law:
                 all_questions.append({
@@ -54,7 +54,7 @@ def generate_sample_questions(limit=10):
                     "document_id": str(doc.id),
                     "verification_hint": f"Check the governing law clause in {doc.filename}"
                 })
-            
+
             # Question 4: Mutual/Unilateral
             if metadata.is_mutual is not None:
                 mutual_text = "mutual" if metadata.is_mutual else "unilateral"
@@ -64,7 +64,7 @@ def generate_sample_questions(limit=10):
                     "document_id": str(doc.id),
                     "verification_hint": f"Check if both parties have obligations in {doc.filename}"
                 })
-            
+
             # Question 5: Parties
             parties = db.query(Party).filter(Party.document_id == doc.id).all()
             valid_parties = [p.party_name for p in parties if len(p.party_name.strip()) > 3 and 'executed' not in p.party_name.lower()]
@@ -75,11 +75,11 @@ def generate_sample_questions(limit=10):
                     "document_id": str(doc.id),
                     "verification_hint": f"Check the parties section in {doc.filename}"
                 })
-            
+
             if len(all_questions) >= limit:
                 all_questions = all_questions[:limit]
                 break
-        
+
         return all_questions
     finally:
         db.close()
@@ -111,18 +111,17 @@ if __name__ == "__main__":
     print("Generating Sample Questions with Expected Answers")
     print("=" * 70)
     print()
-    
+
     questions = generate_sample_questions(limit=10)
-    
+
     print(f"Generated {len(questions)} questions:")
     for i, q in enumerate(questions, 1):
         print(f"\n{i}. {q['question']}")
         print(f"   Expected: {q['expected_answer']}")
-    
+
     print("\n" + "=" * 70)
     print("Creating questions in database...")
     print("=" * 70)
-    
+
     created = create_questions(questions)
     print(f"✅ Created {created} questions with expected answers")
-
