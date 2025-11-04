@@ -268,12 +268,12 @@ def save_test_runs(results: List[Dict]):
             
             test_run = TestRun(
                 question_id=question_id,
-                passed=result["passed"],
                 accuracy_score=result.get("accuracy_score"),
                 response_time_ms=result.get("response_time_ms"),
                 answer_text=result.get("actual_answer"),
                 citations_count=result.get("citations_count", 0)
             )
+            # TestRun doesn't have a 'passed' field - we infer it from accuracy_score
             db.add(test_run)
             saved += 1
         
