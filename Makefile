@@ -74,7 +74,7 @@ generate-doc-questions:
 
 generate-questions-with-answers:
 	@echo "Generating questions with expected answers from documents..."
-	@docker-compose exec api python /app/scripts/generate_questions_with_answers.py --create --limit 10 || docker-compose exec api bash -c "cd /app && python scripts/generate_questions_with_answers.py --create --limit 10"
+	@docker-compose exec api python3 /app/scripts/generate_sample_questions.py
 
 review-and-test:
 	@echo "Reviewing and testing all competency questions..."
