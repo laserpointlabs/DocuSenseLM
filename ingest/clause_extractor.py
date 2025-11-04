@@ -38,11 +38,15 @@ class ClauseExtractor:
             r'([A-Z][A-Z\s&]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company))',
         ]
 
-        # Date patterns
+        # Date patterns - enhanced to capture more variations
         self.date_patterns = [
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?([A-Z][a-z]+ \d{1,2}, \d{4})',
-            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-            r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',
+            r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
+            r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',
+            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',  # General date format
+            r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',  # Full month name
+            r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})',  # Abbreviated month
+            r'(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})',  # Day Month Year
         ]
 
         # Governing law patterns - enhanced to capture more variations

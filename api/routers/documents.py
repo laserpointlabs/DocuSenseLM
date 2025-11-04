@@ -40,7 +40,7 @@ async def get_document(document_id: str):
                 'term_months': doc_metadata.term_months,
                 'survival_months': doc_metadata.survival_months,
             })
-        
+
         # Ensure governing_law is at top level for easy access
         if not metadata.get('governing_law') and doc_metadata and doc_metadata.governing_law:
             metadata['governing_law'] = doc_metadata.governing_law
