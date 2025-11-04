@@ -340,13 +340,13 @@ async def run_all_tests():
                     question_id=str(question.id),
                     answer_text=answer_obj.text,
                     retrieved_clauses=[c.doc_id for c in answer_obj.citations],
-                    accuracy_score=None,
+                    accuracy_score=accuracy_score,
                     response_time_ms=response_time_ms
                 )
                 db.add(test_run)
                 db.commit()
                 db.refresh(test_run)
-
+                
                 results.append({
                     "test_run_id": str(test_run.id),
                     "question_id": str(question.id),
@@ -354,6 +354,7 @@ async def run_all_tests():
                     "document_id": str(question.document_id) if question.document_id else None,
                     "passed": passed,
                     "answer": answer_obj.text,
+                    "accuracy_score": accuracy_score,
                     "citations_count": len(answer_obj.citations),
                     "response_time_ms": response_time_ms,
                     "run_at": test_run.run_at
