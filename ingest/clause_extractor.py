@@ -52,11 +52,17 @@ class ClauseExtractor:
             r'jurisdiction[:\s]+([A-Z][^\n,\.]+)',
         ]
 
-        # Term patterns
+        # Term patterns - enhanced to capture various phrasings
         self.term_patterns = [
             r'term\s+of\s+(\d+)\s+(?:months?|years?)',
             r'period\s+of\s+(\d+)\s+(?:months?|years?)',
-            r'expires?\s+(?:on|after)\s+(\d+)\s+(?:months?|years?)',
+            r'duration\s+of\s+(\d+)\s+(?:months?|years?)',
+            r'expires?\s+(?:on|after|in)\s+(\d+)\s+(?:months?|years?)',
+            r'(\d+)\s+(?:years?|months?)\s+(?:from|after|following)\s+(?:the\s+)?(?:effective|execution|date)',
+            r'(?:for|shall\s+continue|continues?)\s+(?:a\s+)?(?:period\s+of\s+)?(\d+)\s+(?:years?|months?)',
+            r'(\d+)[-\s]?(?:year|month)\s+(?:term|period|agreement)',
+            # Common patterns: "2 years", "3 years", "24 months", "36 months"
+            r'(?:agreement|nda|this\s+agreement)\s+(?:shall\s+continue|is|remains)\s+(?:in\s+effect|effective)\s+(?:for\s+)?(?:a\s+)?(?:period\s+of\s+)?(\d+)\s+(?:years?|months?)',
         ]
 
         # Survival patterns
@@ -401,14 +407,58 @@ class ClauseExtractor:
 
     def _extract_term(self, text: str) -> Optional[int]:
         """Extract term duration in months"""
+        # Try all patterns and take the first valid match
+        # Look for common values (2 years = 24 months, 3 years = 36 months)
+        best_match = None
+        best_value = None
+        
         for pattern in self.term_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                try:
+                    value = int(match.group(1))
+                    # Convert years to months if needed
+                    match_text = match.group(0).lower()
+                    if 'year' in match_text:
+                        value_months = value * 12
+                    else:
+                        value_months = value
+                    
+                    # Prefer common NDA terms (2-5 years, or 12-60 months)
+                    # If we find a reasonable value, use it
+                    if 12 <= value_months <= 120:  # 1 year to 10 years
+                        if best_value is None or (24 <= value_months <= 36):  # Prefer 2-3 year terms
+                            best_match = match
+                            best_value = value_months
+                except (ValueError, IndexError):
+                    continue
+        
+        # If we found a match, return it
+        if best_value is not None:
+            return best_value
+        
+        # Fallback: Look for explicit "2 year" or "3 year" mentions
+        # Common NDA terms: "2 years", "3 years", "24 months", "36 months"
+        explicit_patterns = [
+            r'(?:^|\s)(?:two|2)\s+years?',
+            r'(?:^|\s)(?:three|3)\s+years?',
+            r'(?:^|\s)(?:24|thirty[-\s]?four)\s+months?',
+            r'(?:^|\s)(?:36|thirty[-\s]?six)\s+months?',
+        ]
+        
+        for pattern in explicit_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                value = int(match.group(1))
-                # Convert years to months if needed
-                if 'year' in match.group(0).lower():
-                    return value * 12
-                return value
+                match_text = match.group(0).lower()
+                if 'two' in match_text or '2' in match_text:
+                    return 24  # 2 years
+                elif 'three' in match_text or '3' in match_text:
+                    return 36  # 3 years
+                elif '24' in match_text or 'thirty-four' in match_text:
+                    return 24
+                elif '36' in match_text or 'thirty-six' in match_text:
+                    return 36
+        
         return None
 
     def _extract_survival(self, text: str) -> Optional[int]:

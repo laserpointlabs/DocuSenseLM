@@ -141,7 +141,7 @@ export default function DashboardPage() {
       'nov': 10, 'november': 10,
       'dec': 11, 'december': 11,
     };
-    
+
     try {
       const parts = dateStr.trim().toLowerCase().replace(/\./g, '').split(/\s+/);
       if (parts.length >= 2) {
