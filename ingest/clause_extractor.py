@@ -486,7 +486,7 @@ class ClauseExtractor:
             r'(?:^|\s)(?:24|thirty[-\s]?four)\s+months?',
             r'(?:^|\s)(?:36|thirty[-\s]?six)\s+months?',
         ]
-        
+
         for pattern in explicit_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:

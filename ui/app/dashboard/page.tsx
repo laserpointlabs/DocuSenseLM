@@ -94,7 +94,7 @@ export default function DashboardPage() {
             ...doc,
             effective_date: effectiveDate,
             expiration_date: expirationDate,
-            governing_law: metadata.governing_law,
+            governing_law: metadata.governing_law || fullDoc.metadata?.governing_law,
             is_mutual: metadata.is_mutual,
             term_months: termMonths,
             survival_months: metadata.survival_months,

@@ -35,11 +35,15 @@ async def get_document(document_id: str):
         if doc_metadata:
             metadata.update({
                 'effective_date': doc_metadata.effective_date.isoformat() if doc_metadata.effective_date else None,
-                'governing_law': doc_metadata.governing_law,
+                'governing_law': doc_metadata.governing_law,  # This will be in metadata
                 'is_mutual': doc_metadata.is_mutual,
                 'term_months': doc_metadata.term_months,
                 'survival_months': doc_metadata.survival_months,
             })
+        
+        # Ensure governing_law is at top level for easy access
+        if not metadata.get('governing_law') and doc_metadata and doc_metadata.governing_law:
+            metadata['governing_law'] = doc_metadata.governing_law
 
         metadata['parties'] = [
             {

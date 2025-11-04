@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""
+Script to clean governing law values in the database by removing trailing clauses
+"""
+import os
+import sys
+import re
+
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from api.db import get_db_session
+from api.db.schema import Document, DocumentMetadata, DocumentStatus
+
+def clean_governing_law(law: str) -> str:
+    """Clean governing law by removing trailing clauses"""
+    if not law:
+        return None
+    
+    # Clean up common suffixes and trailing clauses
+    law = re.sub(r'\s+excluding.*$', '', law, flags=re.IGNORECASE)
+    law = re.sub(r'\s+without.*$', '', law, flags=re.IGNORECASE)
+    law = re.sub(r'\s+conflicts?\s+of\s+law.*$', '', law, flags=re.IGNORECASE)
+    law = re.sub(r'\s+principles.*$', '', law, flags=re.IGNORECASE)
+    law = re.sub(r'\s+thereof.*$', '', law, flags=re.IGNORECASE)
+    # Remove trailing punctuation
+    law = law.rstrip('.,;')
+    law = law.strip()
+    
+    # Format as "State of X" if needed
+    if law and len(law) > 3:
+        if law.lower().startswith('the state of '):
+            law = law.replace('the ', '', 1)  # Remove "the" prefix
+        if not law.startswith('State of '):
+            # If it's just a state name, add "State of" prefix
+            if not any(word in law.lower() for word in ['state', 'province', 'country']):
+                law = f"State of {law}"
+        return law
+    
+    return None
+
+
+def update_governing_laws():
+    """Update governing law values in the database"""
+    db = get_db_session()
+    try:
+        documents = db.query(Document).filter(
+            Document.status == DocumentStatus.PROCESSED
+        ).all()
+        
+        print(f"📋 Processing {len(documents)} documents...")
+        print()
+        
+        updated_count = 0
+        
+        for doc in documents:
+            metadata = db.query(DocumentMetadata).filter(
+                DocumentMetadata.document_id == doc.id
+            ).first()
+            
+            if not metadata or not metadata.governing_law:
+                continue
+            
+            original = metadata.governing_law
+            cleaned = clean_governing_law(original)
+            
+            if cleaned and cleaned != original:
+                metadata.governing_law = cleaned
+                updated_count += 1
+                print(f"✅ Updated {doc.filename[:50]:50}")
+                print(f"   From: {original}")
+                print(f"   To:   {cleaned}")
+                print()
+        
+        db.commit()
+        print(f"✅ Updated {updated_count} documents with cleaned governing law")
+        
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error: {e}")
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    print("=" * 70)
+    print("Clean Governing Law Values")
+    print("=" * 70)
+    print()
+    
+    update_governing_laws()
+    
+    print()
+    print("=" * 70)
+    print("Done!")
+    print("=" * 70)
+
