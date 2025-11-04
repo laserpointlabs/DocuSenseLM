@@ -332,6 +332,16 @@ async def get_latest_test_results():
                     latest_run.accuracy_score >= 0.7
                 )
 
+                # Build citations from retrieved_clauses (stored as doc_ids)
+                citations = []
+                if latest_run.retrieved_clauses:
+                    # Note: We store doc_ids in retrieved_clauses, but don't have full citation details
+                    # This is a limitation - full citations should be stored separately
+                    citations = [
+                        {"doc_id": doc_id, "clause_number": None, "page_num": None}
+                        for doc_id in latest_run.retrieved_clauses
+                    ]
+
                 results.append({
                     "test_run_id": str(latest_run.id),
                     "question_id": str(question.id),
@@ -342,6 +352,7 @@ async def get_latest_test_results():
                     "answer": latest_run.answer_text,
                     "actual_answer": latest_run.answer_text,
                     "accuracy_score": latest_run.accuracy_score,
+                    "citations": citations,
                     "citations_count": len(latest_run.retrieved_clauses) if latest_run.retrieved_clauses else 0,
                     "response_time_ms": latest_run.response_time_ms,
                     "run_at": latest_run.run_at
@@ -441,14 +452,27 @@ async def run_all_tests():
                 db.commit()
                 db.refresh(test_run)
 
+                # Build citations list
+                citations = [
+                    {
+                        "doc_id": c.doc_id,
+                        "clause_number": c.clause_number,
+                        "page_num": c.page_num
+                    }
+                    for c in answer_obj.citations
+                ]
+
                 results.append({
                     "test_run_id": str(test_run.id),
                     "question_id": str(question.id),
                     "question_text": question.question_text,
+                    "expected_answer": question.expected_answer_text,
                     "document_id": str(question.document_id) if question.document_id else None,
                     "passed": passed,
                     "answer": answer_obj.text,
+                    "actual_answer": answer_obj.text,
                     "accuracy_score": accuracy_score,
+                    "citations": citations,
                     "citations_count": len(answer_obj.citations),
                     "response_time_ms": response_time_ms,
                     "run_at": test_run.run_at

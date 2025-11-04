@@ -45,14 +45,14 @@ export default function CompetencyPage() {
   const loadLatestTestResults = async () => {
     try {
       const results = await competencyAPI.getLatestTestResults();
-      
+
       // Build detailed results map
       const detailed: Record<string, any> = {};
       results.results?.forEach((result: any) => {
         detailed[result.question_id] = result;
       });
       setDetailedResults(detailed);
-      
+
       // Set all test results for summary display
       if (results.results && results.results.length > 0) {
         setAllTestResults({
@@ -225,7 +225,7 @@ export default function CompetencyPage() {
         detailed[result.question_id] = result;
       });
       setDetailedResults(detailed);
-      
+
       // Results are automatically saved to database by the API
       // They will persist and be loaded on refresh
     } catch (error: any) {
