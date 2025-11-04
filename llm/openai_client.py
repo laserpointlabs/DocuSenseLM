@@ -40,7 +40,16 @@ class OpenAIClient(LLMClient):
         ])
 
         system_prompt = """You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
-Provide accurate, specific answers based on the provided context. Cite relevant clauses when possible."""
+Provide CONCISE, STRUCTURED answers based on the provided context.
+
+CRITICAL RULES:
+- For dates: Return ONLY the date (e.g., "September 5, 2025")
+- For durations: Return ONLY the duration (e.g., "3 years" or "36 months")
+- For governing law: Return ONLY the jurisdiction (e.g., "State of Delaware")
+- For mutual/unilateral: Return ONLY "mutual" or "unilateral"
+- For party names: Return ONLY the names separated by " and "
+- Keep all answers brief and direct (1-2 sentences maximum)
+- Do NOT include explanations unless specifically requested"""
 
         user_prompt = f"""Based on the following context from NDA documents, answer this question:
 
@@ -48,7 +57,7 @@ Provide accurate, specific answers based on the provided context. Cite relevant 
 
 Question: {query}
 
-Provide a clear, accurate answer with specific references to the relevant clauses."""
+Answer (be concise and structured - see system instructions):"""
 
         try:
             response = await self.client.chat.completions.create(

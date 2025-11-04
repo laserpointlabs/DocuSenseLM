@@ -36,17 +36,26 @@ class OllamaClient(LLMClient):
             for chunk in context_chunks
         ])
 
-        # Build prompt
+        # Build prompt with structured response instructions
         prompt = f"""You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
 
-Based on the following context from NDA documents, answer the user's question. Provide accurate, specific answers with references to the relevant clauses.
+Based on the following context from NDA documents, answer the user's question with a CONCISE, STRUCTURED response.
+
+CRITICAL INSTRUCTIONS:
+- If the question asks for a DATE, return ONLY the date (e.g., "September 5, 2025" or "July 16, 2025")
+- If the question asks for a DURATION or TERM, return ONLY the duration (e.g., "3 years" or "36 months")
+- If the question asks for GOVERNING LAW, return ONLY the jurisdiction (e.g., "State of Delaware" or "State of California")
+- If the question asks for a YES/NO or MUTUAL/UNILATERAL, return ONLY the answer (e.g., "mutual" or "unilateral")
+- If the question asks for PARTY NAMES, return ONLY the names separated by " and " (e.g., "Company A and Company B")
+- For other questions, provide a brief, direct answer (1-2 sentences maximum)
+- Do NOT include explanations, context, or additional information unless specifically requested
 
 Context:
 {context_text}
 
 User Question: {query}
 
-Answer the question based on the context provided. Be specific and cite the relevant clauses when possible."""
+Answer:"""
 
         try:
             response = await self.client.post(
