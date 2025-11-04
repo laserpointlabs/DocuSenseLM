@@ -4,7 +4,7 @@ Competency question router
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from api.models.requests import (
-    CompetencyQuestionCreate, TestRunRequest, TestFeedbackRequest
+    CompetencyQuestionCreate, CompetencyQuestionUpdate, TestRunRequest, TestFeedbackRequest
 )
 from api.services.db_service import db_service
 from api.services.answer_service import answer_service
@@ -90,6 +90,44 @@ async def list_questions(
         db.close()
 
 
+@router.put("/questions/{question_id}")
+async def update_question(question_id: str, request: CompetencyQuestionUpdate):
+    """Update a competency question"""
+    db = get_db_session()
+    try:
+        question = db_service.update_competency_question(
+            db=db,
+            question_id=question_id,
+            question_text=request.question_text,
+            category_id=request.category_id,
+            document_id=request.document_id,
+            verification_hint=request.verification_hint,
+            expected_clause=request.expected_clause,
+            expected_page=request.expected_page,
+            expected_answer_text=request.expected_answer_text,
+            is_active=request.is_active
+        )
+        
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        return {
+            "id": str(question.id),
+            "question_text": question.question_text,
+            "category_id": str(question.category_id) if question.category_id else None,
+            "document_id": str(question.document_id) if question.document_id else None,
+            "verification_hint": question.verification_hint,
+            "expected_clause": question.expected_clause,
+            "expected_page": question.expected_page,
+            "expected_answer_text": question.expected_answer_text,
+            "is_active": question.is_active,
+            "version": question.version,
+            "created_at": question.created_at
+        }
+    finally:
+        db.close()
+
+
 @router.delete("/questions/{question_id}")
 async def delete_question(question_id: str):
     """Delete a competency question"""
@@ -98,18 +136,18 @@ async def delete_question(question_id: str):
         question = db.query(CompetencyQuestion).filter(CompetencyQuestion.id == question_id).first()
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
-
+        
         # Delete associated test runs and feedback first
         db.query(TestFeedback).filter(TestFeedback.test_run_id.in_(
             db.query(TestRun.id).filter(TestRun.question_id == question_id)
         )).delete(synchronize_session=False)
-
+        
         db.query(TestRun).filter(TestRun.question_id == question_id).delete()
-
+        
         # Delete the question
         db.delete(question)
         db.commit()
-
+        
         return {"message": "Question deleted successfully", "question_id": question_id}
     finally:
         db.close()

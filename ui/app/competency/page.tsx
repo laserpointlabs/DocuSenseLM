@@ -13,6 +13,12 @@ export default function CompetencyPage() {
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
   const [creatingQuestion, setCreatingQuestion] = useState(false);
 
+  // Question editing
+  const [editingQuestion, setEditingQuestion] = useState<string | null>(null);
+  const [editQuestionText, setEditQuestionText] = useState('');
+  const [editExpectedAnswer, setEditExpectedAnswer] = useState('');
+  const [updatingQuestion, setUpdatingQuestion] = useState(false);
+
   // Testing
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<any | null>(null);
@@ -60,6 +66,40 @@ export default function CompetencyPage() {
     }
   };
 
+  const handleEditQuestion = (question: any) => {
+    setEditingQuestion(question.id);
+    setEditQuestionText(question.question_text);
+    setEditExpectedAnswer(question.expected_answer_text || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingQuestion(null);
+    setEditQuestionText('');
+    setEditExpectedAnswer('');
+  };
+
+  const handleUpdateQuestion = async (questionId: string) => {
+    if (!editQuestionText.trim()) {
+      alert('Question text is required');
+      return;
+    }
+
+    setUpdatingQuestion(true);
+    try {
+      await competencyAPI.updateQuestion(questionId, {
+        question_text: editQuestionText,
+        expected_answer_text: editExpectedAnswer || undefined,
+      });
+      await loadQuestions();
+      handleCancelEdit();
+      alert('Question updated successfully!');
+    } catch (error: any) {
+      alert(`Failed to update question: ${error.message}`);
+    } finally {
+      setUpdatingQuestion(false);
+    }
+  };
+
   const handleDeleteQuestion = async (questionId: string) => {
     if (!confirm('Are you sure you want to delete this question?')) {
       return;
@@ -71,6 +111,9 @@ export default function CompetencyPage() {
       if (selectedQuestion === questionId) {
         setSelectedQuestion(null);
         setTestResult(null);
+      }
+      if (editingQuestion === questionId) {
+        handleCancelEdit();
       }
       alert('Question deleted successfully!');
     } catch (error: any) {
@@ -331,31 +374,82 @@ export default function CompetencyPage() {
                       : 'bg-gray-50 border-gray-200'
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900 font-medium">{q.question_text}</p>
-                      {q.expected_answer_text && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Expected: {q.expected_answer_text.substring(0, 60)}...
-                        </p>
-                      )}
+                  {editingQuestion === q.id ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Question Text
+                        </label>
+                        <textarea
+                          value={editQuestionText}
+                          onChange={(e) => setEditQuestionText(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          rows={2}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Expected Answer
+                        </label>
+                        <textarea
+                          value={editExpectedAnswer}
+                          onChange={(e) => setEditExpectedAnswer(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          rows={2}
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={updatingQuestion}
+                          className="text-xs px-3 py-1 text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded border border-gray-300"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleUpdateQuestion(q.id)}
+                          disabled={updatingQuestion || !editQuestionText.trim()}
+                          className="text-xs px-3 py-1 text-white bg-primary-600 hover:bg-primary-700 rounded disabled:bg-gray-400"
+                        >
+                          {updatingQuestion ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2 ml-2">
-                      <button
-                        onClick={() => runTest(q.id)}
-                        disabled={testing}
-                        className="text-xs px-2 py-1 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
-                      >
-                        Test
-                      </button>
-                      <button
-                        onClick={() => handleDeleteQuestion(q.id)}
-                        className="text-xs px-2 py-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-900 font-medium">{q.question_text}</p>
+                          {q.expected_answer_text && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Expected: {q.expected_answer_text.substring(0, 60)}...
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-2">
+                          <button
+                            onClick={() => runTest(q.id)}
+                            disabled={testing}
+                            className="text-xs px-2 py-1 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                          >
+                            Test
+                          </button>
+                          <button
+                            onClick={() => handleEditQuestion(q)}
+                            className="text-xs px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteQuestion(q.id)}
+                            className="text-xs px-2 py-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

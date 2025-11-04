@@ -122,6 +122,46 @@ class DBService:
         db.refresh(question)
         return question
 
+    def update_competency_question(
+        self,
+        db: Session,
+        question_id: str,
+        question_text: Optional[str] = None,
+        category_id: Optional[str] = None,
+        document_id: Optional[str] = None,
+        verification_hint: Optional[str] = None,
+        expected_clause: Optional[str] = None,
+        expected_page: Optional[int] = None,
+        expected_answer_text: Optional[str] = None,
+        is_active: Optional[bool] = None
+    ) -> Optional[CompetencyQuestion]:
+        """Update a competency question"""
+        question = db.query(CompetencyQuestion).filter(CompetencyQuestion.id == question_id).first()
+        if not question:
+            return None
+        
+        if question_text is not None:
+            question.question_text = question_text
+        if category_id is not None:
+            question.category_id = uuid.UUID(category_id) if category_id else None
+        if document_id is not None:
+            question.document_id = uuid.UUID(document_id) if document_id else None
+        if verification_hint is not None:
+            question.verification_hint = verification_hint
+        if expected_clause is not None:
+            question.expected_clause = expected_clause
+        if expected_page is not None:
+            question.expected_page = expected_page
+        if expected_answer_text is not None:
+            question.expected_answer_text = expected_answer_text
+        if is_active is not None:
+            question.is_active = is_active
+        
+        question.version = (question.version or 1) + 1
+        db.commit()
+        db.refresh(question)
+        return question
+
 
 # Global service instance
 db_service = DBService()
