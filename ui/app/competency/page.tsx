@@ -6,13 +6,13 @@ import { competencyAPI } from '@/lib/api';
 export default function CompetencyPage() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
-  
+
   // Question creation
   const [questionText, setQuestionText] = useState('');
   const [expectedAnswer, setExpectedAnswer] = useState('');
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
   const [creatingQuestion, setCreatingQuestion] = useState(false);
-  
+
   // Testing
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<any | null>(null);
@@ -82,18 +82,18 @@ export default function CompetencyPage() {
     setTesting(true);
     setTestResult(null);
     setSelectedQuestion(questionId);
-    
+
     try {
       const result = await competencyAPI.runTest(questionId);
-      
+
       // Use accuracy_score from API (calculated server-side)
       const confidence = result.accuracy_score || 0;
       const passed = confidence >= confidenceThreshold;
-      
+
       const question = questions.find(q => q.id === questionId);
       const expected = question?.expected_answer_text || '';
       const actual = result.answer || '';
-      
+
       setTestResult({
         ...result,
         confidence,
@@ -124,7 +124,7 @@ export default function CompetencyPage() {
 
     try {
       const results = await competencyAPI.runAllTests();
-      
+
       // Use accuracy_score from API results (calculated server-side)
       const enhancedResults = results.results?.map((result: any) => {
         const confidence = result.accuracy_score || 0;
@@ -134,11 +134,11 @@ export default function CompetencyPage() {
           passed: confidence >= confidenceThreshold
         };
       }) || [];
-      
+
       const passed = enhancedResults.filter(r => r.passed).length;
       const failed = enhancedResults.filter(r => !r.passed).length;
       const passRate = (passed / enhancedResults.length) * 100;
-      
+
       setAllTestResults({
         ...results,
         results: enhancedResults,
@@ -380,7 +380,7 @@ export default function CompetencyPage() {
                   {testResult.passed ? '✅ Passed' : '❌ Failed'}
                 </span>
               </div>
-              
+
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Confidence Score</h3>
                 <div className="flex items-center gap-2">
