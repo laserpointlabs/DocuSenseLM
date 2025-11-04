@@ -416,10 +416,32 @@ class ClauseExtractor:
 
     def _extract_governing_law(self, text: str) -> Optional[str]:
         """Extract governing law/jurisdiction"""
+        # Try all patterns and return the first valid match
         for pattern in self.governing_law_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(1).strip()
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if match.groups():
+                    law = match.group(1).strip()
+                    # Clean up common suffixes and trailing clauses
+                    law = re.sub(r'\s+excluding.*$', '', law, flags=re.IGNORECASE)
+                    law = re.sub(r'\s+without.*$', '', law, flags=re.IGNORECASE)
+                    law = re.sub(r'\s+conflicts?\s+of\s+law.*$', '', law, flags=re.IGNORECASE)
+                    law = re.sub(r'\s+principles.*$', '', law, flags=re.IGNORECASE)
+                    law = re.sub(r'\s+thereof.*$', '', law, flags=re.IGNORECASE)
+                    # Remove trailing punctuation
+                    law = law.rstrip('.,;')
+                    # Check if pattern matched "State of X" - if so, include it
+                    if law and len(law) > 3:
+                        pattern_text = match.group(0).lower()
+                        if 'state of' in pattern_text:
+                            # Already includes "State of" prefix
+                            state_name = law
+                            if not state_name.startswith('State of '):
+                                return f"State of {state_name}"
+                            return state_name
+                        else:
+                            # Just a state name, format as "State of X"
+                            return f"State of {law}"
         return None
 
     def _extract_term(self, text: str) -> Optional[int]:
