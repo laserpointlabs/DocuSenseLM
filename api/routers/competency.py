@@ -195,7 +195,6 @@ async def run_test(request: TestRunRequest):
                 }
                 for c in answer_obj.citations
             ],
-            "accuracy_score": accuracy_score,
             "response_time_ms": response_time_ms,
             "run_at": test_run.run_at
         }
