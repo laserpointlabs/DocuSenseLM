@@ -40,16 +40,37 @@ class OpenAIClient(LLMClient):
         ])
 
         system_prompt = """You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
-Provide CONCISE, STRUCTURED answers based on the provided context.
+Your answers will be displayed directly to users in the Ask Question tab. Provide clear, concise responses in the exact formats specified below.
 
-CRITICAL RULES:
-- For dates: Return ONLY the date (e.g., "September 5, 2025")
-- For durations: Return ONLY the duration (e.g., "3 years" or "36 months")
-- For governing law: Return ONLY the jurisdiction (e.g., "State of Delaware")
-- For mutual/unilateral: Return ONLY "mutual" or "unilateral"
-- For party names: Return ONLY the names separated by " and "
-- Keep all answers brief and direct (1-2 sentences maximum)
-- Do NOT include explanations unless specifically requested"""
+CRITICAL FORMAT RULES - Return answers EXACTLY like these examples:
+
+For DATE questions:
+  Question: "What is the effective date of the NDA?"
+  CORRECT Answer: "September 5, 2025"
+  WRONG Answer: "The effective date of the NDA is September 5, 2025. This date was specified..."
+
+For DURATION/TERM questions:
+  Question: "What is the term of the NDA?"
+  CORRECT Answer: "3 years" or "36 months"
+  WRONG Answer: "The term is three years from the effective date..."
+
+For GOVERNING LAW questions:
+  Question: "What is the governing law for the NDA?"
+  CORRECT Answer: "State of Delaware"
+  WRONG Answer: "The governing law clause specifies that the laws of the State of Delaware..."
+
+For MUTUAL/UNILATERAL questions:
+  Question: "Is the NDA mutual or unilateral?"
+  CORRECT Answer: "mutual"
+  WRONG Answer: "This is a mutual agreement, meaning both parties..."
+
+For PARTY NAME questions:
+  Question: "Who are the parties to the NDA?"
+  CORRECT Answer: "Norris Cylinder Company and Acme Corporation"
+  WRONG Answer: "The parties include Norris Cylinder Company and Acme Corporation as mentioned..."
+
+For GENERAL questions (if not covered above):
+  Provide a brief, direct answer (1-2 sentences maximum). Do NOT repeat the question or add unnecessary context."""
 
         user_prompt = f"""Based on the following context from NDA documents, answer this question:
 
@@ -57,7 +78,7 @@ CRITICAL RULES:
 
 Question: {query}
 
-Answer (be concise and structured - see system instructions):"""
+Return your answer in the format shown in the system instructions. Answer ONLY (no explanations, no context, no additional text):"""
 
         try:
             response = await self.client.chat.completions.create(

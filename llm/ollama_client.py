@@ -36,26 +36,48 @@ class OllamaClient(LLMClient):
             for chunk in context_chunks
         ])
 
-        # Build prompt with structured response instructions
+        # Build prompt with explicit format examples
         prompt = f"""You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
 
-Based on the following context from NDA documents, answer the user's question with a CONCISE, STRUCTURED response.
+Based on the following context from NDA documents, answer the user's question. Your answer will be displayed directly to users in the Ask Question tab, so provide clear, concise responses.
 
-CRITICAL INSTRUCTIONS:
-- If the question asks for a DATE, return ONLY the date (e.g., "September 5, 2025" or "July 16, 2025")
-- If the question asks for a DURATION or TERM, return ONLY the duration (e.g., "3 years" or "36 months")
-- If the question asks for GOVERNING LAW, return ONLY the jurisdiction (e.g., "State of Delaware" or "State of California")
-- If the question asks for a YES/NO or MUTUAL/UNILATERAL, return ONLY the answer (e.g., "mutual" or "unilateral")
-- If the question asks for PARTY NAMES, return ONLY the names separated by " and " (e.g., "Company A and Company B")
-- For other questions, provide a brief, direct answer (1-2 sentences maximum)
-- Do NOT include explanations, context, or additional information unless specifically requested
+CRITICAL FORMAT RULES - Return answers EXACTLY like these examples:
 
-Context:
+For DATE questions:
+  Question: "What is the effective date of the NDA?"
+  CORRECT Answer: "September 5, 2025"
+  WRONG Answer: "The effective date of the NDA is September 5, 2025. This date was specified in the agreement..."
+
+For DURATION/TERM questions:
+  Question: "What is the term of the NDA?"
+  CORRECT Answer: "3 years"
+  Alternative: "36 months"
+  WRONG Answer: "The term is three years from the effective date..."
+
+For GOVERNING LAW questions:
+  Question: "What is the governing law for the NDA?"
+  CORRECT Answer: "State of Delaware"
+  WRONG Answer: "The governing law clause specifies that the laws of the State of Delaware apply..."
+
+For MUTUAL/UNILATERAL questions:
+  Question: "Is the NDA mutual or unilateral?"
+  CORRECT Answer: "mutual"
+  WRONG Answer: "This is a mutual agreement, meaning both parties have obligations..."
+
+For PARTY NAME questions:
+  Question: "Who are the parties to the NDA?"
+  CORRECT Answer: "Norris Cylinder Company and Acme Corporation"
+  WRONG Answer: "The parties include Norris Cylinder Company and Acme Corporation as mentioned in..."
+
+For GENERAL questions (if not covered above):
+  Provide a brief, direct answer (1-2 sentences maximum). Do NOT repeat the question or add unnecessary context.
+
+Context from NDA documents:
 {context_text}
 
 User Question: {query}
 
-Answer:"""
+Return your answer in the format shown in the examples above. Answer ONLY (no explanations, no context, no additional text):"""
 
         try:
             response = await self.client.post(
