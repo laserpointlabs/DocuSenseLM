@@ -43,7 +43,8 @@ class ClauseExtractor:
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?([A-Z][a-z]+ \d{1,2}, \d{4})',
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',
-            r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d\s*\d{3,4})',  # "entered into as of August 11, 202 5" (capture groups)
+            r'(?:entered\s+into|dated|executed).*?as\s+of\s+([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{1,4}\s*\d{0,4})',  # "entered into as of August 11, 202 5" (capture groups, more flexible)
+            r'([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{1,4}\s*\d{0,4})(?:\s+by\s+and\s+between|\s+between|\s+the)',  # "August 11, 202 5 by and between" (direct match)
             r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',  # "entered into as of August 11, 2025"
             r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})',  # "entered into as of Aug. 11, 2025"
             r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',  # General date format
@@ -422,7 +423,11 @@ class ClauseExtractor:
                     year = match.group(3)
                     # Clean year (remove spaces between digits)
                     year_clean = re.sub(r'\s+', '', year)
-                    date_str = f"{month} {day}, {year_clean}"
+                    # Only process if year looks valid (4 digits)
+                    if len(year_clean) == 4:
+                        date_str = f"{month} {day}, {year_clean}"
+                    else:
+                        continue
                 else:
                     date_str = match.group(1)
                     # Clean up extra spaces that might be in the date string
