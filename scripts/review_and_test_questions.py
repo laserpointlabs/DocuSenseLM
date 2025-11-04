@@ -24,7 +24,7 @@ def get_active_questions() -> List[Dict]:
         questions = db.query(CompetencyQuestion).filter(
             CompetencyQuestion.is_active == True
         ).all()
-        
+
         return [
             {
                 "id": str(q.id),
@@ -48,7 +48,7 @@ async def run_test_for_question(question: Dict) -> Dict:
         filters = None
         if question.get("document_id"):
             filters = {"document_id": question["document_id"]}
-        
+
         # Run answer generation
         start_time = datetime.now()
         answer_obj = await answer_service.generate_answer(
@@ -56,13 +56,13 @@ async def run_test_for_question(question: Dict) -> Dict:
             filters=filters
         )
         end_time = datetime.now()
-        
+
         response_time_ms = int((end_time - start_time).total_seconds() * 1000)
-        
+
         # Calculate confidence/accuracy
         expected = question.get("expected_answer", "").lower().strip()
         actual = answer_obj.text.lower().strip() if answer_obj.text else ""
-        
+
         accuracy_score = None
         if expected and actual:
             if expected in actual or actual in expected:
@@ -73,7 +73,7 @@ async def run_test_for_question(question: Dict) -> Dict:
                 if expected_words and actual_words:
                     overlap = len(expected_words & actual_words)
                     accuracy_score = overlap / max(len(expected_words), len(actual_words))
-        
+
         return {
             "question_id": question["id"],
             "question_text": question["question_text"],
@@ -101,28 +101,28 @@ async def review_and_test_all():
     print("Competency Question Review and Test")
     print("=" * 70)
     print()
-    
+
     # Get all questions
     questions = get_active_questions()
-    
+
     if not questions:
         print("❌ No active questions found. Run generate_questions_with_answers.py first.")
         return
-    
+
     print(f"📋 Found {len(questions)} questions to review")
     print()
     print("=" * 70)
     print("Running Tests...")
     print("=" * 70)
     print()
-    
+
     # Run tests for all questions
     results = []
     for i, question in enumerate(questions, 1):
         print(f"[{i}/{len(questions)}] Testing: {question['question_text'][:60]}...")
         result = await run_test_for_question(question)
         results.append(result)
-        
+
         # Show quick result
         if result.get("error"):
             print(f"   ❌ Error: {result['error']}")
@@ -131,33 +131,33 @@ async def review_and_test_all():
         else:
             print(f"   ⚠️  Failed (Confidence: {(result.get('accuracy_score', 0) * 100):.1f}%)")
         print()
-    
+
     # Display full results
     print("\n" + "=" * 70)
     print("Test Results Summary")
     print("=" * 70)
     print()
-    
+
     passed = sum(1 for r in results if r.get("passed"))
     failed = len(results) - passed
     pass_rate = (passed / len(results) * 100) if results else 0
-    
+
     print(f"Total Questions: {len(results)}")
     print(f"Passed: {passed} ({(passed/len(results)*100):.1f}%)")
     print(f"Failed: {failed} ({(failed/len(results)*100):.1f}%)")
     print()
-    
+
     # Detailed results
     print("=" * 70)
     print("Detailed Results")
     print("=" * 70)
     print()
-    
+
     for i, result in enumerate(results, 1):
         status = "✅ PASS" if result.get("passed") else "❌ FAIL"
         confidence = result.get("accuracy_score")
         confidence_str = f"{(confidence * 100):.1f}%" if confidence else "N/A"
-        
+
         print(f"[{i}] {status} - Confidence: {confidence_str}")
         print(f"    Question: {result['question_text']}")
         print(f"    Expected: {result.get('expected_answer', 'N/A')}")
@@ -167,7 +167,7 @@ async def review_and_test_all():
         print(f"    Response Time: {result.get('response_time_ms', 'N/A')}ms")
         print(f"    Citations: {result.get('citations_count', 0)}")
         print()
-    
+
     # Approval summary
     print("=" * 70)
     print("Review Summary")
@@ -177,14 +177,14 @@ async def review_and_test_all():
     print(f"❌ {failed} questions failed (confidence < 70% or error)")
     print(f"📊 Pass Rate: {pass_rate:.1f}%")
     print()
-    
+
     if pass_rate >= 70:
         print("✅ Overall system performance: GOOD")
     elif pass_rate >= 50:
         print("⚠️  Overall system performance: NEEDS IMPROVEMENT")
     else:
         print("❌ Overall system performance: POOR")
-    
+
     print("\n" + "=" * 70)
     print("Done!")
     print("=" * 70)
@@ -192,4 +192,3 @@ async def review_and_test_all():
 
 if __name__ == "__main__":
     asyncio.run(review_and_test_all())
-

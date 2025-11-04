@@ -72,6 +72,14 @@ generate-doc-questions:
 	@echo "Generating document-specific questions..."
 	@python3 scripts/generate_document_questions.py --create --no-llm
 
+generate-questions-with-answers:
+	@echo "Generating questions with expected answers from documents..."
+	@docker-compose exec api python /app/scripts/generate_questions_with_answers.py --create --limit 10 || docker-compose exec api bash -c "cd /app && python scripts/generate_questions_with_answers.py --create --limit 10"
+
+review-and-test:
+	@echo "Reviewing and testing all competency questions..."
+	@docker-compose exec api python /app/scripts/review_and_test_questions.py || docker-compose exec api bash -c "cd /app && python scripts/review_and_test_questions.py"
+
 recalculate-expirations:
 	@echo "Recalculating expiration dates from filenames..."
 	@python3 scripts/recalculate_expirations.py
