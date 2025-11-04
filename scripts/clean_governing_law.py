@@ -25,16 +25,30 @@ def clean_governing_law(law: str) -> str:
     law = re.sub(r'\s+thereof.*$', '', law, flags=re.IGNORECASE)
     # Remove trailing punctuation
     law = law.rstrip('.,;')
+    # Normalize whitespace (multiple spaces to single space)
+    law = re.sub(r'\s+', ' ', law)
     law = law.strip()
     
     # Format as "State of X" if needed
     if law and len(law) > 3:
+        # Remove "the" prefix if present
         if law.lower().startswith('the state of '):
-            law = law.replace('the ', '', 1)  # Remove "the" prefix
-        if not law.startswith('State of '):
+            law = law[4:]  # Remove "the " prefix
+        elif law.lower().startswith('the '):
+            # Just "the Delaware" -> "State of Delaware"
+            law = law[4:]
+        
+        # Normalize "State of" format
+        if law.lower().startswith('state of '):
+            # Extract state name (remove "state of " prefix)
+            state_name = law[10:].strip()
+            if state_name:
+                return f"State of {state_name}"
+        else:
             # If it's just a state name, add "State of" prefix
             if not any(word in law.lower() for word in ['state', 'province', 'country']):
-                law = f"State of {law}"
+                return f"State of {law}"
+        
         return law
     
     return None
