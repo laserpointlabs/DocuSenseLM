@@ -30,6 +30,7 @@ async def create_question(request: CompetencyQuestionCreate):
             expected_clause=request.expected_clause,
             expected_page=request.expected_page,
             expected_answer_text=request.expected_answer_text,
+            confidence_threshold=request.confidence_threshold,
             created_by=None  # TODO: Get from auth
         )
 
@@ -79,6 +80,7 @@ async def list_questions(
                     "expected_clause": q.expected_clause,
                     "expected_page": q.expected_page,
                     "expected_answer_text": q.expected_answer_text,
+                    "confidence_threshold": q.confidence_threshold,
                     "created_at": q.created_at,
                     "version": q.version
                 }
@@ -105,6 +107,7 @@ async def update_question(question_id: str, request: CompetencyQuestionUpdate):
             expected_clause=request.expected_clause,
             expected_page=request.expected_page,
             expected_answer_text=request.expected_answer_text,
+            confidence_threshold=request.confidence_threshold,
             is_active=request.is_active
         )
 
@@ -120,6 +123,7 @@ async def update_question(question_id: str, request: CompetencyQuestionUpdate):
             "expected_clause": question.expected_clause,
             "expected_page": question.expected_page,
             "expected_answer_text": question.expected_answer_text,
+            "confidence_threshold": question.confidence_threshold,
             "is_active": question.is_active,
             "version": question.version,
             "created_at": question.created_at
@@ -326,10 +330,11 @@ async def get_latest_test_results():
             ).order_by(TestRun.run_at.desc()).first()
 
             if latest_run:
-                # Calculate passed status (using 0.7 threshold)
+                # Calculate passed status using question's confidence threshold
+                confidence_threshold = question.confidence_threshold if question.confidence_threshold is not None else 0.7
                 passed = (
                     latest_run.accuracy_score is not None and
-                    latest_run.accuracy_score >= 0.7
+                    latest_run.accuracy_score >= confidence_threshold
                 )
 
                 # Build citations from retrieved_clauses (stored as doc_ids)
@@ -427,7 +432,8 @@ async def run_all_tests():
                             accuracy_score = overlap / max(len(expected_words), len(actual_words))
 
                 # Check if test passed (has answer, reasonable response time, and meets confidence threshold)
-                confidence_threshold = 0.7  # Default threshold
+                # Use confidence threshold from the question, default to 0.7
+                confidence_threshold = question.confidence_threshold if question.confidence_threshold is not None else 0.7
                 passed = (
                     answer_obj.text and
                     len(answer_obj.text) > 10 and
@@ -494,6 +500,51 @@ async def run_all_tests():
             "failed": total_failed,
             "pass_rate": (total_passed / len(questions) * 100) if questions else 0,
             "results": results
+        }
+    finally:
+        db.close()
+
+
+@router.put("/threshold/global")
+async def set_global_threshold(threshold: float = Query(..., ge=0.0, le=1.0)):
+    """Set confidence threshold for all active questions"""
+    db = get_db_session()
+    try:
+        # Update all active questions with the new threshold
+        updated_count = db.query(CompetencyQuestion).filter(
+            CompetencyQuestion.is_active == True
+        ).update(
+            {CompetencyQuestion.confidence_threshold: threshold},
+            synchronize_session=False
+        )
+        db.commit()
+
+        return {
+            "message": f"Updated confidence threshold for {updated_count} questions",
+            "threshold": threshold,
+            "updated_count": updated_count
+        }
+    finally:
+        db.close()
+
+
+@router.get("/threshold/global")
+async def get_global_threshold():
+    """Get the current global confidence threshold (from first active question)"""
+    db = get_db_session()
+    try:
+        # Get threshold from first active question as the "global" value
+        question = db.query(CompetencyQuestion).filter(
+            CompetencyQuestion.is_active == True
+        ).first()
+
+        if question:
+            threshold = question.confidence_threshold if question.confidence_threshold is not None else 0.7
+        else:
+            threshold = 0.7
+
+        return {
+            "threshold": threshold
         }
     finally:
         db.close()

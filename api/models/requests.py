@@ -32,6 +32,7 @@ class CompetencyQuestionCreate(BaseModel):
     expected_page: Optional[int] = None  # Expected page for verification
     expected_clause_id: Optional[str] = None
     expected_answer_text: Optional[str] = None
+    confidence_threshold: Optional[float] = 0.7
 
 
 class CompetencyQuestionUpdate(BaseModel):
@@ -43,6 +44,7 @@ class CompetencyQuestionUpdate(BaseModel):
     expected_clause: Optional[str] = None
     expected_page: Optional[int] = None
     expected_answer_text: Optional[str] = None
+    confidence_threshold: Optional[float] = None
     is_active: Optional[bool] = None
 
 

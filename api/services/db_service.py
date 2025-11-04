@@ -105,6 +105,7 @@ class DBService:
         expected_clause: Optional[str] = None,
         expected_page: Optional[int] = None,
         expected_answer_text: Optional[str] = None,
+        confidence_threshold: Optional[float] = 0.7,
         created_by: Optional[str] = None
     ) -> CompetencyQuestion:
         """Create a new competency question"""
@@ -116,6 +117,7 @@ class DBService:
             expected_clause=expected_clause,
             expected_page=expected_page,
             expected_answer_text=expected_answer_text,
+            confidence_threshold=confidence_threshold,
             created_by=created_by
         )
         db.add(question)
@@ -134,6 +136,7 @@ class DBService:
         expected_clause: Optional[str] = None,
         expected_page: Optional[int] = None,
         expected_answer_text: Optional[str] = None,
+        confidence_threshold: Optional[float] = None,
         is_active: Optional[bool] = None
     ) -> Optional[CompetencyQuestion]:
         """Update a competency question"""
@@ -155,6 +158,8 @@ class DBService:
             question.expected_page = expected_page
         if expected_answer_text is not None:
             question.expected_answer_text = expected_answer_text
+        if confidence_threshold is not None:
+            question.confidence_threshold = float(confidence_threshold)
         if is_active is not None:
             question.is_active = is_active
 

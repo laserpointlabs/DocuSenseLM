@@ -124,6 +124,7 @@ class CompetencyQuestion(Base):
     expected_clause = Column(String(200), nullable=True)  # Expected clause title/number
     expected_page = Column(Integer, nullable=True)  # Expected page number for verification
     expected_answer_text = Column(Text, nullable=True)  # Expected answer for validation
+    confidence_threshold = Column(Float, default=0.7)  # Confidence threshold for passing tests
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     version = Column(Integer, default=1)

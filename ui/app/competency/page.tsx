@@ -17,6 +17,7 @@ export default function CompetencyPage() {
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null);
   const [editQuestionText, setEditQuestionText] = useState('');
   const [editExpectedAnswer, setEditExpectedAnswer] = useState('');
+  const [editConfidenceThreshold, setEditConfidenceThreshold] = useState(0.7);
   const [updatingQuestion, setUpdatingQuestion] = useState(false);
 
   // Testing
@@ -25,15 +26,58 @@ export default function CompetencyPage() {
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [detailedResults, setDetailedResults] = useState<Record<string, any>>({});
 
+  // Global threshold
+  const [globalThreshold, setGlobalThreshold] = useState(0.7);
+  const [updatingGlobalThreshold, setUpdatingGlobalThreshold] = useState(false);
+
   useEffect(() => {
     loadQuestions();
-    loadLatestTestResults();
+    loadGlobalThreshold();
   }, []);
+
+  // Load test results after questions are loaded (so we have question thresholds)
+  useEffect(() => {
+    if (questions.length > 0) {
+      loadLatestTestResults();
+    }
+  }, [questions]);
+
+  const loadGlobalThreshold = async () => {
+    try {
+      const response = await competencyAPI.getGlobalThreshold();
+      setGlobalThreshold(response.threshold || 0.7);
+    } catch (error) {
+      console.error('Failed to load global threshold:', error);
+    }
+  };
+
+  const handleGlobalThresholdChange = async (newThreshold: number) => {
+    setGlobalThreshold(newThreshold);
+    setUpdatingGlobalThreshold(true);
+    try {
+      await competencyAPI.setGlobalThreshold(newThreshold);
+      // Reload questions to get updated thresholds
+      await loadQuestions();
+      // Reload test results to recalculate with new threshold
+      await loadLatestTestResults();
+      alert(`Global confidence threshold updated to ${(newThreshold * 100).toFixed(0)}% for all questions`);
+    } catch (error: any) {
+      alert(`Failed to update global threshold: ${error.message}`);
+      // Revert on error
+      await loadGlobalThreshold();
+    } finally {
+      setUpdatingGlobalThreshold(false);
+    }
+  };
 
   const loadQuestions = async () => {
     setLoadingQuestions(true);
     try {
       const response = await competencyAPI.listQuestions();
+      console.log('Loaded questions:', response.questions?.map((q: any) => ({
+        id: q.id.substring(0, 8),
+        threshold: q.confidence_threshold
+      })));
       setQuestions(response.questions || []);
     } catch (error) {
       console.error('Failed to load questions:', error);
@@ -46,25 +90,42 @@ export default function CompetencyPage() {
     try {
       const results = await competencyAPI.getLatestTestResults();
 
-      // Build detailed results map
+      // Build detailed results map, recalculating pass/fail using each question's threshold
       const detailed: Record<string, any> = {};
       results.results?.forEach((result: any) => {
-        detailed[result.question_id] = result;
+        const question = questions.find(q => q.id === result.question_id);
+        const questionThreshold = question?.confidence_threshold || 0.7;
+        detailed[result.question_id] = {
+          ...result,
+          confidence: result.accuracy_score || 0,
+          passed: (result.accuracy_score || 0) >= questionThreshold
+        };
       });
       setDetailedResults(detailed);
 
+      // Recalculate summary stats using updated pass/fail status
+      const updatedResults = results.results?.map((r: any) => {
+        const question = questions.find(q => q.id === r.question_id);
+        const questionThreshold = question?.confidence_threshold || 0.7;
+        return {
+          ...r,
+          confidence: r.accuracy_score || 0,
+          passed: (r.accuracy_score || 0) >= questionThreshold
+        };
+      }) || [];
+
+      const passed = updatedResults.filter((r: any) => r.passed).length;
+      const failed = updatedResults.length - passed;
+      const passRate = updatedResults.length > 0 ? (passed / updatedResults.length) * 100 : 0;
+
       // Set all test results for summary display
-      if (results.results && results.results.length > 0) {
+      if (updatedResults.length > 0) {
         setAllTestResults({
-          total: results.total,
-          passed: results.passed,
-          failed: results.failed,
-          passRate: results.passRate,
-          results: results.results.map((r: any) => ({
-            ...r,
-            confidence: r.accuracy_score || 0,
-            passed: r.passed
-          }))
+          total: updatedResults.length,
+          passed,
+          failed,
+          passRate,
+          results: updatedResults
         });
       }
     } catch (error) {
@@ -81,7 +142,7 @@ export default function CompetencyPage() {
 
     setCreatingQuestion(true);
     try {
-      await competencyAPI.createQuestion(questionText, undefined, expectedAnswer);
+      await competencyAPI.createQuestion(questionText, undefined, expectedAnswer, confidenceThreshold);
       setQuestionText('');
       setExpectedAnswer('');
       await loadQuestions();
@@ -94,15 +155,20 @@ export default function CompetencyPage() {
   };
 
   const handleEditQuestion = (question: any) => {
+    console.log('Editing question:', question.id, 'confidence_threshold:', question.confidence_threshold);
     setEditingQuestion(question.id);
     setEditQuestionText(question.question_text);
     setEditExpectedAnswer(question.expected_answer_text || '');
+    const threshold = question.confidence_threshold ?? 0.7;
+    console.log('Setting editConfidenceThreshold to:', threshold);
+    setEditConfidenceThreshold(threshold);
   };
 
   const handleCancelEdit = () => {
     setEditingQuestion(null);
     setEditQuestionText('');
     setEditExpectedAnswer('');
+    setEditConfidenceThreshold(0.7);
   };
 
   const handleUpdateQuestion = async (questionId: string) => {
@@ -113,14 +179,20 @@ export default function CompetencyPage() {
 
     setUpdatingQuestion(true);
     try {
-      await competencyAPI.updateQuestion(questionId, {
+      console.log('Updating question with confidence_threshold:', editConfidenceThreshold);
+      const result = await competencyAPI.updateQuestion(questionId, {
         question_text: editQuestionText,
         expected_answer_text: editExpectedAnswer || undefined,
+        confidence_threshold: editConfidenceThreshold,
       });
+      console.log('Update result:', result);
       await loadQuestions();
+      // Reload test results to recalculate pass/fail with new threshold
+      await loadLatestTestResults();
       handleCancelEdit();
       alert('Question updated successfully!');
     } catch (error: any) {
+      console.error('Update error:', error);
       alert(`Failed to update question: ${error.message}`);
     } finally {
       setUpdatingQuestion(false);
@@ -155,13 +227,14 @@ export default function CompetencyPage() {
     try {
       const result = await competencyAPI.runTest(questionId);
       const question = questions.find(q => q.id === questionId);
+      const questionThreshold = question?.confidence_threshold || 0.7;
       setDetailedResults({
         ...detailedResults,
         [questionId]: {
           ...result,
           expected_answer: question?.expected_answer_text || '',
           confidence: result.accuracy_score || 0,
-          passed: (result.accuracy_score || 0) >= confidenceThreshold
+          passed: (result.accuracy_score || 0) >= questionThreshold
         }
       });
     } catch (error: any) {
@@ -198,12 +271,13 @@ export default function CompetencyPage() {
       const enhancedResults = results.results?.map((result: any) => {
         const question = questions.find(q => q.id === result.question_id);
         const confidence = result.accuracy_score || 0;
+        const questionThreshold = question?.confidence_threshold || 0.7;
         return {
           ...result,
           question_text: result.question_text || question?.question_text,
           expected_answer: question?.expected_answer_text || '',
           confidence,
-          passed: confidence >= confidenceThreshold
+          passed: confidence >= questionThreshold
         };
       }) || [];
 
@@ -226,7 +300,8 @@ export default function CompetencyPage() {
       });
       setDetailedResults(detailed);
 
-      // Results are automatically saved to database by the API
+      // Reload test results from database to ensure we have the latest saved results
+      await loadLatestTestResults();
       // They will persist and be loaded on refresh
     } catch (error: any) {
       alert(`Failed to run all tests: ${error.message}`);
@@ -242,6 +317,49 @@ export default function CompetencyPage() {
         <p className="mt-2 text-sm text-gray-600">
           Build questions, set expected answers, and test system accuracy
         </p>
+      </div>
+
+      {/* Global Confidence Threshold */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Global Confidence Threshold (applies to all questions)
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={globalThreshold}
+                onChange={(e) => {
+                  const newValue = parseFloat(e.target.value);
+                  setGlobalThreshold(newValue);
+                }}
+                onMouseUp={(e) => {
+                  const newValue = parseFloat((e.target as HTMLInputElement).value);
+                  handleGlobalThresholdChange(newValue);
+                }}
+                onTouchEnd={(e) => {
+                  const newValue = parseFloat((e.target as HTMLInputElement).value);
+                  handleGlobalThresholdChange(newValue);
+                }}
+                disabled={updatingGlobalThreshold}
+                className="flex-1 max-w-md"
+              />
+              <span className="text-lg font-semibold text-gray-900 min-w-[4rem]">
+                {(globalThreshold * 100).toFixed(0)}%
+              </span>
+              {updatingGlobalThreshold && (
+                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              This threshold applies to all questions. Tests must meet this confidence level to pass.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Create Question Section */}
@@ -370,6 +488,7 @@ export default function CompetencyPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8"></th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Question</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Expected Answer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Threshold</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">Actual Answer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Confidence</th>
@@ -421,6 +540,28 @@ export default function CompetencyPage() {
                             </div>
                           )}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {editingQuestion === q.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={editConfidenceThreshold}
+                                onChange={(e) => setEditConfidenceThreshold(parseFloat(e.target.value))}
+                                className="w-24"
+                              />
+                              <span className="text-sm text-gray-600 min-w-[3rem]">
+                                {(editConfidenceThreshold * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-700">
+                              {((q.confidence_threshold ?? 0.7) * 100).toFixed(0)}%
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-4 max-w-md">
                           {result ? (
                             <div className="text-sm text-gray-900 break-words whitespace-normal">
@@ -447,13 +588,13 @@ export default function CompetencyPage() {
                               <div className="flex-1 bg-gray-200 rounded-full h-2 w-16">
                                 <div
                                   className={`h-2 rounded-full ${
-                                    result.confidence >= confidenceThreshold ? 'bg-green-500' : 'bg-red-500'
+                                    result.confidence >= (q.confidence_threshold || 0.7) ? 'bg-green-500' : 'bg-red-500'
                                   }`}
                                   style={{ width: `${result.confidence * 100}%` }}
                                 ></div>
                               </div>
                               <span className={`text-sm font-medium ${
-                                result.confidence >= confidenceThreshold ? 'text-green-600' : 'text-red-600'
+                                result.confidence >= (q.confidence_threshold || 0.7) ? 'text-green-600' : 'text-red-600'
                               }`}>
                                 {(result.confidence * 100).toFixed(1)}%
                               </span>
@@ -503,7 +644,7 @@ export default function CompetencyPage() {
                       </tr>
                       {isExpanded && result && (
                         <tr>
-                          <td colSpan={8} className="px-6 py-4 bg-gray-50">
+                          <td colSpan={9} className="px-6 py-4 bg-gray-50">
                             <div className="space-y-4">
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -539,7 +680,7 @@ export default function CompetencyPage() {
                                 <div>
                                   <span className="text-gray-600">Confidence:</span>
                                   <span className={`ml-2 font-medium ${
-                                    result.confidence >= confidenceThreshold ? 'text-green-600' : 'text-red-600'
+                                    result.confidence >= (q.confidence_threshold || 0.7) ? 'text-green-600' : 'text-red-600'
                                   }`}>
                                     {(result.confidence * 100).toFixed(1)}%
                                   </span>
