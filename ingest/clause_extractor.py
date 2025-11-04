@@ -45,11 +45,18 @@ class ClauseExtractor:
             r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',
         ]
 
-        # Governing law patterns
+        # Governing law patterns - enhanced to capture more variations
         self.governing_law_patterns = [
-            r'governed?\s+by\s+the\s+laws?\s+of\s+([A-Z][^\n,\.]+)',
-            r'construed?\s+in\s+accordance\s+with\s+the\s+laws?\s+of\s+([A-Z][^\n,\.]+)',
-            r'jurisdiction[:\s]+([A-Z][^\n,\.]+)',
+            r'governed?\s+by\s+the\s+laws?\s+of\s+(?:the\s+)?State\s+of\s+([A-Z][^\n,\.;]+)',  # "State of Delaware excluding..."
+            r'governed?\s+by\s+the\s+laws?\s+of\s+([A-Z][^\n,\.;]+)',
+            r'construed?\s+in\s+accordance\s+with\s+the\s+laws?\s+of\s+(?:the\s+)?State\s+of\s+([A-Z][^\n,\.;]+)',
+            r'construed?\s+in\s+accordance\s+with\s+the\s+laws?\s+of\s+([A-Z][^\n,\.;]+)',
+            r'jurisdiction[:\s]+(?:the\s+)?State\s+of\s+([A-Z][^\n,\.;]+)',
+            r'jurisdiction[:\s]+([A-Z][^\n,\.;]+)',
+            r'applicable\s+law[:\s]+(?:the\s+)?State\s+of\s+([A-Z][^\n,\.;]+)',
+            r'applicable\s+law[:\s]+([A-Z][^\n,\.;]+)',
+            r'governing\s+law[:\s]+(?:the\s+)?State\s+of\s+([A-Z][^\n,\.;]+)',
+            r'governing\s+law[:\s]+([A-Z][^\n,\.;]+)',
         ]
 
         # Term patterns - enhanced to capture various phrasings
