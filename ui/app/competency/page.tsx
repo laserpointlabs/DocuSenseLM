@@ -86,27 +86,13 @@ export default function CompetencyPage() {
     try {
       const result = await competencyAPI.runTest(questionId);
       
-      // Calculate if answer matches expected (simple similarity)
-      const question = questions.find(q => q.id === questionId);
-      const expected = question?.expected_answer_text?.toLowerCase().trim() || '';
-      const actual = result.answer?.toLowerCase().trim() || '';
-      
-      // Simple confidence calculation based on text similarity
-      let confidence = 0;
-      if (expected && actual) {
-        // Check if expected answer is contained in actual answer
-        if (actual.includes(expected) || expected.includes(actual)) {
-          confidence = 0.9;
-        } else {
-          // Calculate basic word overlap
-          const expectedWords = expected.split(/\s+/);
-          const actualWords = actual.split(/\s+/);
-          const commonWords = expectedWords.filter(w => actualWords.includes(w));
-          confidence = commonWords.length / Math.max(expectedWords.length, actualWords.length);
-        }
-      }
-      
+      // Use accuracy_score from API (calculated server-side)
+      const confidence = result.accuracy_score || 0;
       const passed = confidence >= confidenceThreshold;
+      
+      const question = questions.find(q => q.id === questionId);
+      const expected = question?.expected_answer_text || '';
+      const actual = result.answer || '';
       
       setTestResult({
         ...result,
@@ -139,24 +125,9 @@ export default function CompetencyPage() {
     try {
       const results = await competencyAPI.runAllTests();
       
-      // Calculate confidence and pass/fail for each result
+      // Use accuracy_score from API results (calculated server-side)
       const enhancedResults = results.results?.map((result: any) => {
-        const question = questions.find(q => q.id === result.question_id);
-        const expected = question?.expected_answer_text?.toLowerCase().trim() || '';
-        const actual = result.answer?.toLowerCase().trim() || '';
-        
-        let confidence = 0;
-        if (expected && actual) {
-          if (actual.includes(expected) || expected.includes(actual)) {
-            confidence = 0.9;
-          } else {
-            const expectedWords = expected.split(/\s+/);
-            const actualWords = actual.split(/\s+/);
-            const commonWords = expectedWords.filter(w => actualWords.includes(w));
-            confidence = commonWords.length / Math.max(expectedWords.length, actualWords.length);
-          }
-        }
-        
+        const confidence = result.accuracy_score || 0;
         return {
           ...result,
           confidence,
