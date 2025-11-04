@@ -296,6 +296,17 @@ def main():
             q["document_id"] = document_id
             q["document_filename"] = filename
             all_questions.append(q)
+        
+        # Limit to 10 questions total across all documents
+        if len(all_questions) >= 10:
+            all_questions = all_questions[:10]
+            print(f"\n⚠️  Limited to 10 questions total")
+            break
+
+    # Ensure we don't exceed 10 questions
+    if len(all_questions) > 10:
+        print(f"\n⚠️  Limiting to 10 questions (found {len(all_questions)})")
+        all_questions = all_questions[:10]
 
     # Display questions
     print("\n" + "=" * 70)
