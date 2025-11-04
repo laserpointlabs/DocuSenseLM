@@ -43,9 +43,8 @@ class ClauseExtractor:
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?([A-Z][a-z]+ \d{1,2}, \d{4})',
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
             r'(?:Effective|Dated?|Date)\s+(?:Date\s+of\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',
-            r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d\s*\d{3,4})',  # "entered into as of August 11, 202 5" (handles space in year)
+            r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d\s*\d{3,4})',  # "entered into as of August 11, 202 5" (capture groups)
             r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',  # "entered into as of August 11, 2025"
-            r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d\s*\d{3,4})',  # "entered into as of Aug. 11, 202 5"
             r'(?:entered\s+into|dated|executed)\s+(?:as\s+of|on)\s+((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})',  # "entered into as of Aug. 11, 2025"
             r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',  # General date format
             r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})',  # Full month name
@@ -415,11 +414,22 @@ class ClauseExtractor:
         for pattern in self.date_patterns:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
-                date_str = match.group(1)
-                # Clean up extra spaces that might be in the date string
-                # Handle spaces in year (e.g., "202 5" -> "2025")
-                date_str = re.sub(r'(\d)\s+(\d)', r'\1\2', date_str)  # Remove spaces between digits
-                date_str = re.sub(r'\s+', ' ', date_str).strip()  # Normalize other spaces
+                # Handle patterns with multiple capture groups (e.g., month, day, year separately)
+                if len(match.groups()) >= 3:
+                    # Pattern like "entered into as of August 11, 202 5"
+                    month = match.group(1)
+                    day = match.group(2)
+                    year = match.group(3)
+                    # Clean year (remove spaces between digits)
+                    year_clean = re.sub(r'\s+', '', year)
+                    date_str = f"{month} {day}, {year_clean}"
+                else:
+                    date_str = match.group(1)
+                    # Clean up extra spaces that might be in the date string
+                    # Handle spaces in year (e.g., "202 5" -> "2025")
+                    date_str = re.sub(r'(\d)\s+(\d)', r'\1\2', date_str)  # Remove spaces between digits
+                    date_str = re.sub(r'\s+', ' ', date_str).strip()  # Normalize other spaces
+                
                 try:
                     parsed_date = date_parser.parse(date_str)
                     # Validate it's a reasonable date (not too far in past/future)
