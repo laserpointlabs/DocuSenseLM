@@ -82,10 +82,10 @@ async def list_documents(
         for doc in documents:
             # Get document metadata
             doc_metadata = db_service.get_document_metadata(db, str(doc.id))
-            
+
             # Get parties
             parties = db_service.get_parties(db, str(doc.id))
-            
+
             # Build comprehensive metadata
             metadata = doc.metadata_json or {}
             if doc_metadata:
@@ -96,7 +96,7 @@ async def list_documents(
                     'term_months': doc_metadata.term_months,
                     'survival_months': doc_metadata.survival_months,
                 })
-            
+
             metadata['parties'] = [
                 {
                     'name': p.party_name,
