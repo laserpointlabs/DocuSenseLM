@@ -80,6 +80,10 @@ review-and-test:
 	@echo "Reviewing and testing all competency questions..."
 	@docker-compose exec api python /app/scripts/review_and_test_questions.py || docker-compose exec api bash -c "cd /app && python scripts/review_and_test_questions.py"
 
+build-and-validate-questions:
+	@echo "Building competency questions with answers and validating..."
+	@docker-compose exec api python3 /app/scripts/build_and_validate_questions.py || docker-compose exec api bash -c "cd /app && python3 scripts/build_and_validate_questions.py"
+
 recalculate-expirations:
 	@echo "Recalculating expiration dates from filenames..."
 	@python3 scripts/recalculate_expirations.py
