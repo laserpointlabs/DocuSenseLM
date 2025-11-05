@@ -39,6 +39,44 @@ class OpenAIClient(LLMClient):
             for chunk in context_chunks
         ])
 
+        # Log context for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"=== OpenAI Answer Generation ===")
+        logger.info(f"Query: {query}")
+        logger.info(f"Number of context chunks: {len(context_chunks)}")
+        logger.info(f"Context text length: {len(context_text)} characters")
+        logger.info(f"Number of citations: {len(citations)}")
+
+        # Log each chunk individually
+        if context_chunks:
+            logger.info(f"=== Context Chunks Details ===")
+            for i, chunk in enumerate(context_chunks):
+                logger.info(f"Chunk {i+1}: doc_id={chunk.doc_id[:8]}..., clause={chunk.clause_number}, page={chunk.page_num}, text_length={len(chunk.text)}")
+                logger.info(f"  Chunk {i+1} text (full): {chunk.text}")
+        else:
+            logger.warning("⚠️  NO CONTEXT CHUNKS PROVIDED!")
+
+        logger.info(f"=== Full Context Text (for prompt) ===")
+        logger.info(f"Context text length: {len(context_text)} characters")
+        logger.info(f"Context text:\n{context_text}")
+        logger.info(f"=== End Context Text ===")
+
+        # Also log the user prompt that will be sent
+        user_prompt = f"""Based on the following context from NDA documents, answer this question:
+
+{context_text}
+
+Question: {query}
+
+IMPORTANT: Only use information from the context provided above. If the context does not contain the answer, respond with "I cannot find this information in the provided documents".
+
+Return your answer in the format shown in the system instructions. Answer ONLY (no explanations, no context, no additional text):"""
+
+        logger.info(f"=== User Prompt (what LLM will see) ===")
+        logger.info(f"{user_prompt}")
+        logger.info(f"=== End User Prompt ===")
+
         system_prompt = """You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
 Your answers will be displayed directly to users in the Ask Question tab. Provide clear, concise responses in the exact formats specified below.
 
@@ -70,13 +108,17 @@ For PARTY NAME questions:
   WRONG Answer: "The parties include Norris Cylinder Company and Acme Corporation as mentioned..."
 
 For GENERAL questions (if not covered above):
-  Provide a brief, direct answer (1-2 sentences maximum). Do NOT repeat the question or add unnecessary context."""
+  Provide a brief, direct answer (1-2 sentences maximum). Do NOT repeat the question or add unnecessary context.
+
+CRITICAL: If the context provided does NOT contain the information needed to answer the question, you MUST respond with "I cannot find this information in the provided documents" or "This information is not available in the provided context". Do NOT make up or guess answers."""
 
         user_prompt = f"""Based on the following context from NDA documents, answer this question:
 
 {context_text}
 
 Question: {query}
+
+IMPORTANT: Only use information from the context provided above. If the context does not contain the answer, respond with "I cannot find this information in the provided documents".
 
 Return your answer in the format shown in the system instructions. Answer ONLY (no explanations, no context, no additional text):"""
 
@@ -91,6 +133,11 @@ Return your answer in the format shown in the system instructions. Answer ONLY (
             )
 
             answer_text = response.choices[0].message.content
+
+            logger.info(f"=== LLM Response ===")
+            logger.info(f"Raw LLM answer: {answer_text}")
+            logger.info(f"Answer length: {len(answer_text)} characters")
+            logger.info(f"=== End LLM Response ===")
 
             return Answer(
                 text=answer_text,

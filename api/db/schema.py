@@ -163,7 +163,8 @@ class TestRun(Base):
     question_id = Column(UUID(as_uuid=True), ForeignKey("competency_questions.id"), nullable=False)
     run_at = Column(DateTime(timezone=True), server_default=func.now())
     answer_text = Column(Text, nullable=True)
-    retrieved_clauses = Column(JSON, nullable=True)  # Array of clause IDs
+    retrieved_clauses = Column(JSON, nullable=True)  # Array of clause IDs (deprecated, use citations_json)
+    citations_json = Column(JSON, nullable=True)  # Full citation data: [{doc_id, clause_number, page_num, span_start, span_end, source_uri, excerpt}]
     accuracy_score = Column(Float, nullable=True)
     response_time_ms = Column(Integer, nullable=False)
 

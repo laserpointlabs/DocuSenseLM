@@ -30,12 +30,17 @@ class ClauseExtractor:
             r'^\s*BACKGROUND',
         ]
 
-        # Party patterns
+        # Party patterns - enhanced to catch more variations
         self.party_patterns = [
-            r'(?:Disclosing|Discloser)\s+Party[:\s]+([A-Z][^\n,]+)',
-            r'(?:Receiving|Recipient)\s+Party[:\s]+([A-Z][^\n,]+)',
-            r'between\s+([A-Z][^\n,]+)\s+and\s+([A-Z][^\n,]+)',
-            r'([A-Z][A-Z\s&]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company))',
+            # Explicit party definitions
+            r'(?:Disclosing|Discloser)\s+Party[:\s]+([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions)?)',
+            r'(?:Receiving|Recipient)\s+Party[:\s]+([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions)?)',
+            # "between X and Y" patterns
+            r'between\s+([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions)?)\s+and\s+([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions)?)',
+            # Company name patterns (must start with capital, contain company suffix)
+            r'\b([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions))\b',
+            # "by and between" pattern
+            r'by\s+and\s+between\s+([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions)?)\s+and\s+([A-Z][A-Za-z0-9\s&,\.-]+(?:Inc\.|LLC|Corp\.|Ltd\.|Company|Corporation|Distribution|Technologies|Systems|Solutions)?)',
         ]
 
         # Date patterns - enhanced to capture more variations
@@ -385,6 +390,7 @@ class ClauseExtractor:
     def _extract_parties(self, text: str) -> List[Dict]:
         """Extract party names and types"""
         parties = []
+        seen_names = set()
 
         # Try to find party definitions
         for pattern in self.party_patterns:
@@ -394,15 +400,38 @@ class ClauseExtractor:
                     for group in match.groups():
                         if group:
                             party_name = group.strip()
+
+                            # Filter out invalid party names
+                            # Skip if too short, too long, or looks like sentence fragment
+                            if len(party_name) < 3 or len(party_name) > 200:
+                                continue
+                            if party_name.lower() in ['the parties', 'delivered', 'executed', 'supersedes',
+                                                      'agreement', 'this agreement', 'the agreement',
+                                                      'party', 'parties', 'party a', 'party b']:
+                                continue
+                            # Skip if it's just common words
+                            if len(party_name.split()) > 10:  # Too long, probably not a company name
+                                continue
+
                             # Determine type if possible
                             party_type = None
-                            if 'disclos' in match.group(0).lower():
+                            match_text = match.group(0).lower()
+                            if 'disclos' in match_text:
                                 party_type = 'disclosing'
-                            elif 'recipient' in match.group(0).lower() or 'receiv' in match.group(0).lower():
+                            elif 'recipient' in match_text or 'receiv' in match_text:
                                 party_type = 'receiving'
+                            elif 'between' in match_text or 'by and between' in match_text:
+                                # For "between X and Y", first is usually disclosing, second receiving
+                                # But we can't determine from position alone, so leave as None
+                                pass
 
-                            # Avoid duplicates
-                            if not any(p['name'] == party_name for p in parties):
+                            # Normalize name (remove extra spaces, trim)
+                            party_name = re.sub(r'\s+', ' ', party_name).strip()
+
+                            # Avoid duplicates (case-insensitive)
+                            name_lower = party_name.lower()
+                            if name_lower not in seen_names:
+                                seen_names.add(name_lower)
                                 parties.append({
                                     'name': party_name,
                                     'type': party_type

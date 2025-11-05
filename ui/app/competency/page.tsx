@@ -729,9 +729,9 @@ export default function CompetencyPage() {
                                     <div className="space-y-2">
                                       {result.citations.map((citation: any, idx: number) => (
                                         <div key={idx} className="text-xs text-gray-600">
-                                          • Document: {citation.doc_id?.substring(0, 8)}...,
-                                          Page {citation.page_num},
-                                          Clause {citation.clause_number || 'N/A'}
+                                          • Document: {citation.doc_id?.substring(0, 8)}...
+                                          {citation.page_num && citation.page_num > 0 && `, Page ${citation.page_num}`}
+                                          {citation.clause_number ? `, Clause ${citation.clause_number}` : ', Clause N/A'}
                                         </div>
                                       ))}
                                     </div>

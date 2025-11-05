@@ -212,11 +212,25 @@ async def run_test(request: TestRunRequest):
                     overlap = len(expected_words & actual_words)
                     accuracy_score = overlap / max(len(expected_words), len(actual_words))
 
-        # Store test run
+        # Store test run with full citations
+        citations_data = [
+            {
+                "doc_id": c.doc_id,
+                "clause_number": c.clause_number,
+                "page_num": c.page_num,
+                "span_start": c.span_start,
+                "span_end": c.span_end,
+                "source_uri": c.source_uri,
+                "excerpt": c.excerpt
+            }
+            for c in answer_obj.citations
+        ]
+
         test_run = TestRun(
             question_id=request.question_id,
             answer_text=answer_obj.text,
-            retrieved_clauses=[c.doc_id for c in answer_obj.citations],
+            retrieved_clauses=[c.doc_id for c in answer_obj.citations],  # Keep for backward compatibility
+            citations_json=citations_data,  # Store full citations
             accuracy_score=accuracy_score,
             response_time_ms=response_time_ms
         )
@@ -233,7 +247,11 @@ async def run_test(request: TestRunRequest):
                 {
                     "doc_id": c.doc_id,
                     "clause_number": c.clause_number,
-                    "page_num": c.page_num
+                    "page_num": c.page_num,
+                    "span_start": c.span_start,
+                    "span_end": c.span_end,
+                    "source_uri": c.source_uri,
+                    "excerpt": c.excerpt
                 }
                 for c in answer_obj.citations
             ],
@@ -337,11 +355,13 @@ async def get_latest_test_results():
                     latest_run.accuracy_score >= confidence_threshold
                 )
 
-                # Build citations from retrieved_clauses (stored as doc_ids)
+                # Build citations from stored citations_json (full citation data)
                 citations = []
-                if latest_run.retrieved_clauses:
-                    # Note: We store doc_ids in retrieved_clauses, but don't have full citation details
-                    # This is a limitation - full citations should be stored separately
+                if latest_run.citations_json:
+                    # Use full citation data if available
+                    citations = latest_run.citations_json
+                elif latest_run.retrieved_clauses:
+                    # Fallback to doc_ids only (backward compatibility)
                     citations = [
                         {"doc_id": doc_id, "clause_number": None, "page_num": None}
                         for doc_id in latest_run.retrieved_clauses
@@ -446,11 +466,25 @@ async def run_all_tests():
                 else:
                     total_failed += 1
 
-                # Store test run
+                # Store test run with full citations
+                citations_data = [
+                    {
+                        "doc_id": c.doc_id,
+                        "clause_number": c.clause_number,
+                        "page_num": c.page_num,
+                        "span_start": c.span_start,
+                        "span_end": c.span_end,
+                        "source_uri": c.source_uri,
+                        "excerpt": c.excerpt
+                    }
+                    for c in answer_obj.citations
+                ]
+
                 test_run = TestRun(
                     question_id=str(question.id),
                     answer_text=answer_obj.text,
-                    retrieved_clauses=[c.doc_id for c in answer_obj.citations],
+                    retrieved_clauses=[c.doc_id for c in answer_obj.citations],  # Keep for backward compatibility
+                    citations_json=citations_data,  # Store full citations
                     accuracy_score=accuracy_score,
                     response_time_ms=response_time_ms
                 )
@@ -458,15 +492,8 @@ async def run_all_tests():
                 db.commit()
                 db.refresh(test_run)
 
-                # Build citations list
-                citations = [
-                    {
-                        "doc_id": c.doc_id,
-                        "clause_number": c.clause_number,
-                        "page_num": c.page_num
-                    }
-                    for c in answer_obj.citations
-                ]
+                # Build citations list from stored data
+                citations = citations_data
 
                 results.append({
                     "test_run_id": str(test_run.id),

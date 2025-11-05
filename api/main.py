@@ -1,6 +1,7 @@
 """
 FastAPI main application
 """
+import logging
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +10,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.routers import (
     search, answer, upload, documents, admin, health, competency
 )
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+logger.info("NDA Dashboard API starting up...")
 
 app = FastAPI(
     title="NDA Dashboard API",

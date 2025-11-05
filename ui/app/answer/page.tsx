@@ -19,7 +19,7 @@ export default function AnswerPage() {
     try {
       const response = await answerAPI.answer({
         question: question.trim(),
-        max_context_chunks: 10,
+        max_context_chunks: 10,  // Increased back to 10 for better context
       });
       setAnswer(response);
     } catch (err: any) {

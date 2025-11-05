@@ -8,15 +8,19 @@ interface CitationChipProps {
 }
 
 export default function CitationChip({ citation }: CitationChipProps) {
+  // Clean up clause number display (remove "8. T" type artifacts)
+  const cleanClauseNumber = citation.clause_number?.replace(/\s*\.\s*T\s*$/, '').trim() || citation.clause_number;
+
   return (
     <Link
       href={`/documents/${citation.doc_id}?page=${citation.page_num}&start=${citation.span_start}&end=${citation.span_end}`}
       className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"
+      title={citation.excerpt ? citation.excerpt.substring(0, 200) : ''}
     >
       <span>
         Doc {citation.doc_id.substring(0, 8)}
-        {citation.clause_number && `, Clause ${citation.clause_number}`}
-        {citation.page_num && `, Page ${citation.page_num}`}
+        {cleanClauseNumber && `, Clause ${cleanClauseNumber}`}
+        {citation.page_num && citation.page_num > 0 && `, Page ${citation.page_num}`}
       </span>
     </Link>
   );

@@ -79,6 +79,40 @@ class Chunker:
             chunks.append(recital_chunk)
             chunk_index += 1
 
+        # Add a special "parties" chunk with party names and addresses for searchability
+        metadata = extracted_data.get('metadata', {})
+        parties_list = metadata.get('parties', [])
+        if parties_list:
+            parties_text_parts = []
+            for party in parties_list:
+                party_name = party.get('name', '')
+                party_address = party.get('address', '')
+                party_type = party.get('type', '')
+
+                if party_name:
+                    party_info = f"Party: {party_name}"
+                    if party_type:
+                        party_info += f" (Type: {party_type})"
+                    if party_address:
+                        party_info += f" Address: {party_address}"
+                    parties_text_parts.append(party_info)
+
+            if parties_text_parts:
+                parties_text = " | ".join(parties_text_parts)
+                parties_chunk = Chunk(
+                    text=parties_text,
+                    chunk_index=chunk_index,
+                    document_id=document_id,
+                    section_type='parties',
+                    clause_number=None,
+                    page_num=1,  # Usually on first page
+                    span_start=0,
+                    span_end=len(parties_text),
+                    source_uri=source_uri
+                )
+                chunks.append(parties_chunk)
+                chunk_index += 1
+
         # Chunk clauses
         for clause in extracted_data.get('clauses', []):
             clause_text = clause['text']
