@@ -1,15 +1,20 @@
 """
-OpenSearch indexing with BM25 and custom analyzers
+OpenSearch indexing with BM25 and custom analyzers.
+
+Implements the generic BM25Backend interface so the same object can be used for
+indexing (ingestion pipeline) and querying (search service).
 """
-from typing import List, Dict
+from typing import Dict, List, Optional
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from opensearchpy.helpers import bulk
 import os
-import json
+
+from api.services.search_backends.base import BM25Backend
+from api.services.service_registry import register_bm25_indexer
 
 
-class OpenSearchIndexer:
-    """Index documents to OpenSearch for BM25 search"""
+class OpenSearchBM25Backend(BM25Backend):
+    """OpenSearch-backed BM25 implementation."""
 
     def __init__(self):
         url = os.getenv("OPENSEARCH_URL", "http://localhost:9200")
@@ -94,6 +99,7 @@ class OpenSearchIndexer:
     def index_chunks(self, chunks: List[Dict], document_metadata: Dict):
         """
         Index document chunks to OpenSearch
+        Uses contextual text for better BM25 retrieval (Phase 3: Contextual Embeddings)
 
         Args:
             chunks: List of chunk dicts with text, metadata, etc.
@@ -102,13 +108,17 @@ class OpenSearchIndexer:
         actions = []
 
         for chunk in chunks:
+            # Build contextual text for BM25 search (same as vector embeddings)
+            contextual_text = self._build_contextual_text(chunk, document_metadata)
+            
             action = {
                 "_index": self.index_name,
                 "_id": chunk.get("chunk_id", chunk.get("id")),
                 "_source": {
                     "doc_id": chunk.get("document_id"),
                     "chunk_id": chunk.get("chunk_id", chunk.get("id")),
-                    "text": chunk.get("text"),
+                    "text": chunk.get("text"),  # Original text
+                    "contextual_text": contextual_text,  # Text with metadata for BM25 search
                     "section_type": chunk.get("section_type"),
                     "clause_number": chunk.get("clause_number"),
                     "page_num": chunk.get("page_num"),
@@ -132,6 +142,65 @@ class OpenSearchIndexer:
                 print(f"Warning: {len(failed)} chunks failed to index")
             return success
         return 0
+    
+    def _build_contextual_text(self, chunk: Dict, metadata: Dict) -> str:
+        """
+        Build contextual text by prepending metadata to chunk text
+        
+        Args:
+            chunk: Chunk dict
+            metadata: Document metadata
+            
+        Returns:
+            Contextual text with metadata prefix
+        """
+        context_parts = []
+        
+        # Add document-level metadata context
+        parties = metadata.get("parties", [])
+        if parties:
+            party_names = [p if isinstance(p, str) else p.get("name", "") for p in parties]
+            party_str = ", ".join([p for p in party_names if p])
+            if party_str:
+                context_parts.append(f"Parties: {party_str}")
+        
+        governing_law = metadata.get("governing_law")
+        if governing_law:
+            context_parts.append(f"Governing Law: {governing_law}")
+        
+        effective_date = metadata.get("effective_date")
+        if effective_date:
+            if isinstance(effective_date, str):
+                context_parts.append(f"Effective Date: {effective_date}")
+            else:
+                # Format datetime
+                context_parts.append(f"Effective Date: {effective_date.strftime('%B %d, %Y')}")
+        
+        is_mutual = metadata.get("is_mutual")
+        if is_mutual is not None:
+            context_parts.append(f"Type: {'mutual' if is_mutual else 'unilateral'}")
+        
+        term_months = metadata.get("term_months")
+        if term_months:
+            if term_months >= 12:
+                years = term_months // 12
+                context_parts.append(f"Term: {years} {'year' if years == 1 else 'years'}")
+            else:
+                context_parts.append(f"Term: {term_months} {'month' if term_months == 1 else 'months'}")
+        
+        # Add clause title if available
+        clause_title = chunk.get("clause_title")
+        if clause_title:
+            context_parts.append(f"Clause: {clause_title}")
+        elif chunk.get("clause_number"):
+            context_parts.append(f"Clause: {chunk.get('clause_number')}")
+        
+        # Build contextual text: metadata context + original text
+        if context_parts:
+            context_prefix = " | ".join(context_parts)
+            return f"[{context_prefix}] {chunk.get('text', '')}"
+        else:
+            return chunk.get("text", "")
 
     def delete_document(self, document_id: str):
         """Delete all chunks for a document from OpenSearch"""
@@ -168,7 +237,7 @@ class OpenSearchIndexer:
         except Exception as e:
             raise Exception(f"Failed to delete document {document_id} from OpenSearch: {e}")
 
-    def search(self, query: str, k: int = 50, filters: Dict = None) -> List[Dict]:
+    def search(self, query: str, k: int = 50, filters: Optional[Dict] = None) -> List[Dict]:
         """
         Search using BM25
 
@@ -241,6 +310,7 @@ class OpenSearchIndexer:
                 "doc_id": hit["_source"]["doc_id"],
                 "section_type": hit["_source"]["section_type"],
                 "clause_number": hit["_source"]["clause_number"],
+                "clause_title": hit["_source"].get("clause_title"),  # Include clause_title for clause matching
                 "page_num": hit["_source"]["page_num"],
                 "span_start": hit["_source"]["span_start"],
                 "span_end": hit["_source"]["span_end"],
@@ -250,5 +320,31 @@ class OpenSearchIndexer:
         return results
 
 
-# Global indexer instance
-opensearch_indexer = OpenSearchIndexer()
+# Lazy singleton for legacy imports while avoiding connections during module import.
+_singleton_backend: Optional[OpenSearchBM25Backend] = None
+
+
+def _get_or_create_backend() -> OpenSearchBM25Backend:
+    global _singleton_backend
+    if _singleton_backend is None:
+        _singleton_backend = OpenSearchBM25Backend()
+    return _singleton_backend
+
+
+class _LazyBackendProxy:
+    def __getattr__(self, item: str):
+        return getattr(_get_or_create_backend(), item)
+
+    def __repr__(self) -> str:
+        return "<OpenSearchBM25Backend (lazy proxy)>"
+
+
+opensearch_backend = _LazyBackendProxy()
+opensearch_indexer = opensearch_backend
+
+
+def _bm25_indexer_factory() -> OpenSearchBM25Backend:
+    return OpenSearchBM25Backend()
+
+
+register_bm25_indexer(_bm25_indexer_factory)

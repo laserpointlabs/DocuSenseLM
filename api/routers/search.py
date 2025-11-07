@@ -4,7 +4,7 @@ Search router
 from fastapi import APIRouter, HTTPException
 from api.models.requests import SearchRequest
 from api.models.responses import SearchResponse, SearchResult
-from api.services.search_service import search_service
+from api.services.search_service import get_search_service_instance
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -15,7 +15,8 @@ async def search(request: SearchRequest):
     Hybrid search endpoint (BM25 + vector)
     """
     try:
-        results = search_service.hybrid_search(
+        service = get_search_service_instance()
+        results = service.hybrid_search(
             query=request.query,
             k=request.k,
             filters=request.filters

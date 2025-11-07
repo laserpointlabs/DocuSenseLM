@@ -1,35 +1,36 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1.4
+FROM python:3.11-slim-bookworm AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=on
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     tesseract-ocr \
     poppler-utils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.txt
 
-# Copy application code
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel && \
+    pip install --progress-bar on -r requirements.txt --index-url https://pypi.org/simple/ --extra-index-url https://download.pytorch.org/whl/cu121
+
 COPY api/ ./api/
 COPY ingest/ ./ingest/
 COPY llm/ ./llm/
 COPY ontology/ ./ontology/
 COPY scripts/ ./scripts/
-COPY requirements.txt ./
 
-# Set environment variables
 ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
 
-# Expose port
 EXPOSE 8000
 
-# Run application
-WORKDIR /app
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-exclude", "scripts/*", "--reload-exclude", "*.pyc"]

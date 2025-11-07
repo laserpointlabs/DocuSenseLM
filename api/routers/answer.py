@@ -38,7 +38,9 @@ async def answer(request: AnswerRequest):
         return AnswerResponse(
             answer=answer_obj.text,
             citations=citations,
-            question=request.question
+            question=request.question,
+            confidence=answer_obj.confidence,
+            evaluation_reasoning=answer_obj.evaluation_reasoning
         )
     except Exception as e:
         import traceback

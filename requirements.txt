@@ -1,13 +1,14 @@
 # FastAPI and web framework
-fastapi==0.104.1
+fastapi==0.112.0
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic>=2.10.0
+pydantic-settings>=2.5.0
 
 # Database
 sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.9; python_version < "3.13"
+psycopg[binary]>=3.2.2; python_version >= "3.13"
 alembic==1.12.1
 
 # Storage
@@ -19,17 +20,20 @@ PyPDF2==3.0.1
 pdf2image==1.16.3
 python-docx==1.1.0
 pytesseract==0.3.10
-Pillow==10.1.0
+Pillow>=10.1.0
 
 # Embeddings and ML
 sentence-transformers==2.3.1
-torch==2.0.1
+torch>=2.5.0
 transformers==4.35.2
 huggingface-hub==0.20.0
-numpy==1.24.3
+numpy>=1.26.0
+
+# Testing
+pytest==7.4.3
 
 # Vector database
-qdrant-client==1.7.0
+qdrant-client>=1.7.1
 
 # Search
 opensearch-py==2.4.0
@@ -46,3 +50,5 @@ redis==5.0.1
 # Utilities
 python-dotenv==1.0.0
 python-dateutil==2.8.2
+setuptools>=69.0.0
+wheel>=0.40.0

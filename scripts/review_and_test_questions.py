@@ -74,6 +74,31 @@ async def run_test_for_question(question: Dict) -> Dict:
                     overlap = len(expected_words & actual_words)
                     accuracy_score = overlap / max(len(expected_words), len(actual_words))
 
+        # Analyze chunks - find which contain the answer
+        chunks_with_answer = []
+        chunks_without_answer = []
+        
+        if expected and actual:
+            search_terms = expected.lower().split() + actual.lower().split()
+            search_terms = [t for t in search_terms if len(t) > 2]
+            
+            for citation in answer_obj.citations:
+                excerpt_lower = citation.excerpt.lower() if citation.excerpt else ""
+                contains_answer = any(term in excerpt_lower for term in search_terms if len(term) > 2)
+                
+                if contains_answer:
+                    chunks_with_answer.append({
+                        "doc_id": citation.doc_id[:8] + "...",
+                        "clause": citation.clause_number,
+                        "page": citation.page_num,
+                    })
+                else:
+                    chunks_without_answer.append({
+                        "doc_id": citation.doc_id[:8] + "...",
+                        "clause": citation.clause_number,
+                        "page": citation.page_num,
+                    })
+        
         return {
             "question_id": question["id"],
             "question_text": question["question_text"],
@@ -82,6 +107,9 @@ async def run_test_for_question(question: Dict) -> Dict:
             "accuracy_score": accuracy_score,
             "response_time_ms": response_time_ms,
             "citations_count": len(answer_obj.citations),
+            "chunks_with_answer": len(chunks_with_answer),
+            "chunks_without_answer": len(chunks_without_answer),
+            "chunk_quality": len(chunks_with_answer) / len(answer_obj.citations) if answer_obj.citations else 0,
             "passed": accuracy_score is not None and accuracy_score >= 0.7
         }
     except Exception as e:
@@ -142,9 +170,18 @@ async def review_and_test_all():
     failed = len(results) - passed
     pass_rate = (passed / len(results) * 100) if results else 0
 
+    # Chunk quality analysis
+    chunk_qualities = [r.get("chunk_quality", 0) for r in results if r.get("chunk_quality")]
+    avg_chunk_quality = sum(chunk_qualities) / len(chunk_qualities) if chunk_qualities else 0
+    total_chunks_with_answer = sum(r.get("chunks_with_answer", 0) for r in results)
+    total_chunks = sum(r.get("citations_count", 0) for r in results)
+
     print(f"Total Questions: {len(results)}")
     print(f"Passed: {passed} ({(passed/len(results)*100):.1f}%)")
     print(f"Failed: {failed} ({(failed/len(results)*100):.1f}%)")
+    print(f"\n📊 Chunk Quality Analysis:")
+    print(f"  Average chunk quality: {avg_chunk_quality:.1%}")
+    print(f"  Chunks with answer: {total_chunks_with_answer}/{total_chunks} ({100*total_chunks_with_answer/total_chunks:.1f}%)")
     print()
 
     # Detailed results
@@ -166,6 +203,8 @@ async def review_and_test_all():
             print(f"    Error:    {result['error']}")
         print(f"    Response Time: {result.get('response_time_ms', 'N/A')}ms")
         print(f"    Citations: {result.get('citations_count', 0)}")
+        if result.get('chunk_quality') is not None:
+            print(f"    Chunk Quality: {result.get('chunks_with_answer', 0)}/{result.get('citations_count', 0)} chunks contain answer ({result.get('chunk_quality', 0):.1%})")
         print()
 
     # Approval summary

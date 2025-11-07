@@ -6,9 +6,20 @@ import os
 from typing import Optional, BinaryIO
 from minio import Minio
 from minio.error import S3Error
-import boto3
-from botocore.exceptions import ClientError
+
+try:  # pragma: no cover - optional dependency
+    import boto3
+    from botocore.exceptions import ClientError
+except ImportError:  # pragma: no cover
+    boto3 = None
+
+    class ClientError(Exception):
+        """Fallback exception when botocore is unavailable."""
+
+        pass
 from io import BytesIO
+
+from api.services.service_registry import register_storage_service
 
 
 class StorageService:
@@ -48,6 +59,9 @@ class StorageService:
 
     def _init_s3(self):
         """Initialize AWS S3 client"""
+        if boto3 is None:
+            raise RuntimeError("boto3 is required for S3 support but is not installed")
+
         self.s3_client = boto3.client(
             's3',
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
@@ -182,5 +196,10 @@ class StorageService:
                 raise Exception(f"Failed to generate MinIO URL: {e}")
 
 
-# Global instance
-storage_service = StorageService()
+
+def _default_storage_factory() -> StorageService:
+    return StorageService()
+
+
+# Register default factory so callers can resolve via the service registry
+register_storage_service(_default_storage_factory)

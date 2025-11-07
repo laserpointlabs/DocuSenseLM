@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from dateutil import parser as date_parser
 
+from ingest.metadata_utils import compute_metadata_quality
+
 
 class ClauseExtractor:
     """Extract clauses and metadata from NDA text"""
@@ -385,12 +387,51 @@ class ClauseExtractor:
         if survival_months:
             metadata['survival_months'] = survival_months
 
+        confidence, missing = compute_metadata_quality(metadata)
+        metadata['confidence_score'] = confidence
+        metadata['missing_fields'] = missing
+        metadata.setdefault('extraction_method', 'heuristic')
+
         return metadata
 
     def _extract_parties(self, text: str) -> List[Dict]:
         """Extract party names and types"""
+        text = text.replace('-\n', '-')
         parties = []
         seen_names = set()
+
+        # Quick pass: collect obvious company names (Acme Corp, Foo LLC, etc.)
+        company_pattern = re.compile(r"([A-Z][A-Za-z&\-\s]+?(?:,\s*)?(?:Corporation|Company|LLC|Inc\.|Ltd\.|Limited))")
+        for name_match in company_pattern.finditer(text):
+            name = name_match.group(1).replace(',', '').strip()
+            key = name.lower()
+            if key in seen_names:
+                continue
+
+            address = None
+            address_match = re.search(rf"{re.escape(name)}\s*,\s*([^\n]+)", text)
+            if address_match:
+                address = address_match.group(1).strip()
+                # Truncate at conjunctions that likely introduce the next party
+                for stop_token in [" and ", " (", ".", "\n", "\r"]:
+                    if stop_token in address:
+                        address = address.split(stop_token)[0].strip()
+                        break
+
+            seen_names.add(key)
+            parties.append({'name': name, 'type': None, 'address': address or None})
+
+        blacklist_substrings = {
+            'year first above written',
+            'mutual non -disclosure agreement',
+            'mutual non-disclosure agreement',
+            'mutual nondisclosure agreement',
+            'non-disclosure agreement',
+            'this agreement',
+            'the agreement',
+            'confidential information',
+            'effective date',
+        }
 
         # Try to find party definitions
         for pattern in self.party_patterns:
@@ -408,6 +449,8 @@ class ClauseExtractor:
                             if party_name.lower() in ['the parties', 'delivered', 'executed', 'supersedes',
                                                       'agreement', 'this agreement', 'the agreement',
                                                       'party', 'parties', 'party a', 'party b']:
+                                continue
+                            if any(substr in party_name.lower() for substr in blacklist_substrings):
                                 continue
                             # Skip if it's just common words
                             if len(party_name.split()) > 10:  # Too long, probably not a company name
@@ -434,7 +477,8 @@ class ClauseExtractor:
                                 seen_names.add(name_lower)
                                 parties.append({
                                     'name': party_name,
-                                    'type': party_type
+                                    'type': party_type,
+                                    'address': None
                                 })
 
         return parties

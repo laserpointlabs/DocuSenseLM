@@ -1,0 +1,3807 @@
+{
+  "timestamp": "2025-11-07T13:04:12.390995",
+  "total_tests": 192,
+  "passed": 172,
+  "failed": 20,
+  "pass_rate": 89.58333333333334,
+  "category_stats": {
+    "Governing Law": {
+      "total": 30,
+      "passed": 27
+    },
+    "Effective Date": {
+      "total": 30,
+      "passed": 24
+    },
+    "Expiration Date": {
+      "total": 30,
+      "passed": 27
+    },
+    "Term": {
+      "total": 30,
+      "passed": 30
+    },
+    "Parties": {
+      "total": 30,
+      "passed": 26
+    },
+    "Mutual Status": {
+      "total": 30,
+      "passed": 26
+    },
+    "Location": {
+      "total": 12,
+      "passed": 12
+    }
+  },
+  "results": [
+    {
+      "question": "What is the governing state of KGS Fire?",
+      "category": "Governing Law",
+      "description": "Governing law for KGS Fire & Security B.V. Sept. 2028",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The governing state for KGS Fire is not explicitly mentioned in the provided documents but we can infer that it's likely California since KGS Fire and Norris Cylinder Company, one of the parties to the NDA, are both based in California.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of KGS Fire?",
+      "category": "Governing Law",
+      "description": "Governing law for KGS Fire & Security B.V. Sept. 2028 (natural)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The document does not provide information about KGS Fire, but it is assumed that the governing law for any entity or party would be mentioned within their respective agreements. Since this question asks about KGS Fire's governing law, no answer can be given without more context. However, in this case, the answer provided is a common example of governing law, and assuming it's for KGS Fire is reasonable.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of KGS Fire?",
+      "category": "Governing Law",
+      "description": "Governing law for KGS Fire & Security B.V. Sept. 2028 (misspelling)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The context does not provide information about KGS Fire, but since it is mentioned in the NDA documents, it can be assumed that it is related to the agreement. The answer directly provides the state where the agreement is being governed, which is California.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the KGS Fire NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for KGS Fire & Security B.V. Sept. 2028",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.0,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The context does not contain information about the effective date of the KGS Fire NDA.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the KGS Fire NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for KGS Fire & Security B.V. Sept. 2028 (natural)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.0,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided documents do not contain information regarding when the KGS Fire NDA took effect.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the KGS Fire NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for KGS Fire & Security B.V. Sept. 2028 (misspelling)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 0.5,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question 'When did the KGS Fire NDA become effective?' as it states that the information is not available in the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the KGS Fire NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for KGS Fire & Security B.V. Sept. 2028",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "September 14, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the KGS Fire NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for KGS Fire & Security B.V. Sept. 2028 (natural)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "September 5, 2028 for all the NDAs",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer provides a specific date that directly addresses the question and appears to be based on factual information from the provided documents.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the KGS Fire NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for KGS Fire & Security B.V. Sept. 2028 (misspelling)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "September 14, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the expiration date of the KGS Fire NDA, and the answer directly provides that date.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the KGS Fire NDA?",
+      "category": "Term",
+      "description": "Term for KGS Fire & Security B.V. Sept. 2028",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information provided in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the KGS Fire NDA?",
+      "category": "Term",
+      "description": "Term for KGS Fire & Security B.V. Sept. 2028 (natural)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer is based on factual information directly extracted from the document",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the KGS Fire NDA?",
+      "category": "Term",
+      "description": "Term for KGS Fire & Security B.V. Sept. 2028 (misspelling)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information found in the provided document.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the KGS Fire NDA?",
+      "category": "Parties",
+      "description": "Parties for KGS Fire & Security B.V. Sept. 2028",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "Netherlands and Kidde-Fenwal LLC",
+        "Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Netherlands and Kidde-Fenwal LLC and Kidde-Fenwal LLC and KGS Fire & Security B.V. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the parties to the KGS Fire NDA and the answer provides those exactly: Netherlands, Kidde-Fenwal LLC, Kidde-Fenwal LLC, and KGS Fire & Security B.V.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Netherlands and Kidde-Fenwal LLC",
+        "Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the KGS Fire NDA?",
+      "category": "Parties",
+      "description": "Parties for KGS Fire & Security B.V. Sept. 2028 (natural)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "Netherlands and Kidde-Fenwal LLC",
+        "Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "KGS Fire & Security B.V. Kidde-Fenwal, LLC and Kidde-Fenwal LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly and accurately addresses the question using information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the KGS Fire NDA?",
+      "category": "Parties",
+      "description": "Parties for KGS Fire & Security B.V. Sept. 2028 (misspelling)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "Netherlands and Kidde-Fenwal LLC",
+        "Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Netherlands and Kidde-Fenwal LLC and Kidde-Fenwal LLC and KGS Fire & Security B.V. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by listing all the parties to the KGS Fire NDA.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Netherlands and Kidde-Fenwal LLC",
+        "Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the KGS Fire NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for KGS Fire & Security B.V. Sept. 2028",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks if the KGS Fire NDA is mutual or one-way. The provided answer states 'mutual', which directly addresses the question and appears to be based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the KGS Fire NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for KGS Fire & Security B.V. Sept. 2028 (natural)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the type of NDA (unidirectional or bidirectional), but the provided answer specifies mutual which is a type of bidirectional agreement.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the KGS Fire NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for KGS Fire & Security B.V. Sept. 2028 (misspelling)",
+      "document_id": "b17fd8c4-0f8c-4fda-a645-e027f98ead94",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Vallen Distribution?",
+      "category": "Governing Law",
+      "description": "Governing law for Vallen Distribution, Inc. July 2028",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "Delaware"
+      ],
+      "actual_answer": "State of Delaware",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided documents",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delaware"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Vallen Distribution?",
+      "category": "Governing Law",
+      "description": "Governing law for Vallen Distribution, Inc. July 2028 (natural)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "Delaware"
+      ],
+      "actual_answer": "State of Delaware",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information found in the provided documents.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delaware"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the govering state of Vallen Distribution?",
+      "category": "Governing Law",
+      "description": "Governing law for Vallen Distribution, Inc. July 2028 (misspelling)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "Delaware"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The question asks for the governing state of Vallen Distribution, but no such information is provided in the given context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Vallen Distribution NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Vallen Distribution, Inc. July 2028",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "2025-07"
+      ],
+      "actual_answer": "July 25, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information found in the provided documents.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-07"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Vallen Distribution NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Vallen Distribution, Inc. July 2028 (natural)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "2025-07"
+      ],
+      "actual_answer": "July 25, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the effective date of an NDA and the answer provides that date.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-07"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Vallen Distributin NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Vallen Distribution, Inc. July 2028 (misspelling)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "2025-07"
+      ],
+      "actual_answer": "July 25, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and appears to be based on factual information from the context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-07"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Vallen Distribution NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Vallen Distribution, Inc. July 2028",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "2028-07"
+      ],
+      "actual_answer": "July 09, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly and accurately addresses the question.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-07"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Vallen Distribution NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Vallen Distribution, Inc. July 2028 (natural)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "2028-07"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents as there is no specific mention of Vallen Distribution NDA or any other agreement related to it in the context provided.",
+      "system_confidence": 1.0,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided context does not contain information about the end date for any Vallen Distribution NDA.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Vallen Distribution NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Vallen Distribution, Inc. July 2028 (misspelling)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "2028-07"
+      ],
+      "actual_answer": "July 09, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-07"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Vallen Distribution NDA?",
+      "category": "Term",
+      "description": "Term for Vallen Distribution, Inc. July 2028",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Vallen Distribution NDA?",
+      "category": "Term",
+      "description": "Term for Vallen Distribution, Inc. July 2028 (natural)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Vallen Distribution NDA?",
+      "category": "Term",
+      "description": "Term for Vallen Distribution, Inc. July 2028 (misspelling)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information found in the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Vallen Distribution NDA?",
+      "category": "Parties",
+      "description": "Parties for Vallen Distribution, Inc. July 2028",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "Vallen Distribution Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Vallen Distribution Inc. and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and Vallen Distribution, Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.9,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides a complete list of the parties involved.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Vallen Distribution Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Vallen Distribution NDA?",
+      "category": "Parties",
+      "description": "Parties for Vallen Distribution, Inc. July 2028 (natural)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "Vallen Distribution Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Vallen Distribution Inc., Kidde-Fenwal LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by listing Vallen Distribution Inc. and Kidde-Fenwal LLC as signatories of the NDA mentioned in the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "Vallen Distribution Inc."
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the Vallen Distribution NDA?",
+      "category": "Parties",
+      "description": "Parties for Vallen Distribution, Inc. July 2028 (misspelling)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "Vallen Distribution Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Vallen Distribution Inc. and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and Vallen Distribution, Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Vallen Distribution Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Vallen Distribution NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Vallen Distribution, Inc. July 2028",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question is asking for the type of agreement between the parties, and the provided answer specifies that it's mutual.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Vallen Distribution NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Vallen Distribution, Inc. July 2028 (natural)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the type of the NDA (bidirectional or unidirectional) but the provided document does not specify this information. However, in the provided context, the answer states that the NDA is mutual which implies a bidirectional agreement.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Vallen Distribution NDA mutal or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Vallen Distribution, Inc. July 2028 (misspelling)",
+      "document_id": "35df5003-efe9-412e-a286-96df9c121f4d",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and correctly addresses the question based on the provided NDA document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Boston Green?",
+      "category": "Governing Law",
+      "description": "Governing law for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The context does not provide information about the governing state of Boston Green.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Boston Green?",
+      "category": "Governing Law",
+      "description": "Governing law for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided context does not contain any information about the governing law for Boston Green.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of Boston Green?",
+      "category": "Governing Law",
+      "description": "Governing law for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The question refers to Boston Green but no information about its governing state is provided in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Boston Green NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "2025-10"
+      ],
+      "actual_answer": "October 31, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asked for the effective date of the NDA and the provided answer directly addressed this",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-10"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Boston Green NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "2025-10"
+      ],
+      "actual_answer": "October 31, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the effective date of an NDA, and the answer provided directly addresses this with a specific date.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-10"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Boston Green NDA become efective?",
+      "category": "Effective Date",
+      "description": "Effective date for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "2025-10"
+      ],
+      "actual_answer": "October 31, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly and completely addresses the question.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-10"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Boston Green NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "2028-10"
+      ],
+      "actual_answer": "October 15, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-10"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Boston Green NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "2028-10"
+      ],
+      "actual_answer": "September 5, 2028",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The date provided directly answers the question and is based on factual information from the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Boston Green NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "2028-10"
+      ],
+      "actual_answer": "October 15, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information found in the provided documents",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-10"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Boston Green NDA?",
+      "category": "Term",
+      "description": "Term for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Boston Green NDA?",
+      "category": "Term",
+      "description": "Term for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and concisely provides the term of the NDA as three years.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Boston Green NDA?",
+      "category": "Term",
+      "description": "Term for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information found in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Where is Boston Green located?",
+      "category": "Location",
+      "description": "Location for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "MA 02347",
+        "USA"
+      ],
+      "actual_answer": "Boston Green Company is located at Inc., 102 Charles Eldridge Dr., Lakeville, MA 02347, USA",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by providing Boston Green Company's location",
+      "contains_expected": true,
+      "matched_terms": [
+        "MA 02347",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.7
+    },
+    {
+      "question": "Where is Boston Green headquartered?",
+      "category": "Location",
+      "description": "Location for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "MA 02347",
+        "USA"
+      ],
+      "actual_answer": "Boston Green Company is headquartered at Inc., 102 Charles Eldridge Dr., Lakeville, MA 02347, USA.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the location of Boston Green Company and the answer provides the exact address.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MA 02347",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Where is Boston Green locatd?",
+      "category": "Location",
+      "description": "Location for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "MA 02347",
+        "USA"
+      ],
+      "actual_answer": "Boston Green Company is located at 102 Charles Eldridge Dr., Lakeville, MA 02347, USA",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided documents",
+      "contains_expected": true,
+      "matched_terms": [
+        "MA 02347",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Boston Green NDA?",
+      "category": "Parties",
+      "description": "Parties for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "Boston Green Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Boston Green Company and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and Boston Green Company , Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.9,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides a complete list of parties to the Boston Green NDA.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Boston Green Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Boston Green NDA?",
+      "category": "Parties",
+      "description": "Parties for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "Boston Green Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 0.0,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The answer does not provide any information about who the signatories of the Boston Green NDA are.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the Boston Green NDA?",
+      "category": "Parties",
+      "description": "Parties for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "Boston Green Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Boston Green Company and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and Boston Green Company , Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the parties to the Boston Green NDA, and the provided answer correctly lists Boston Green Company, USA and Kidde-Fenwal LLC, Boston Green Company, Inc., and Kidde-Fenwal, LLC.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Boston Green Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Boston Green NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Boston Green Company, Inc. Oct. 2028",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Boston Green NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Boston Green Company, Inc. Oct. 2028 (natural)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "The Boston Green NDA is bidirectional.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks about the bidirectionality of the Boston Green NDA, and the answer directly provides that it is bidirectional.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Boston Green NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Boston Green Company, Inc. Oct. 2028 (misspelling)",
+      "document_id": "5170a772-c08c-4a01-83ba-2362ead8a759",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on the factual information provided in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of McGill Hose?",
+      "category": "Governing Law",
+      "description": "Governing law for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The document does not provide specific information about McGill Hose, but the answer is based on the assumption that since no governing state was mentioned for any other party in the context, it can be inferred that McGill Hose's governing state could also be California, as that is where Acme Corporation is located.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of McGill Hose?",
+      "category": "Governing Law",
+      "description": "Governing law for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing law of McGill Hose, and the answer provides that information correctly.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing stat of McGill Hose?",
+      "category": "Governing Law",
+      "description": "Governing law for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided question asks about McGill Hose, but there is no information available regarding its governing stat in the given documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the McGill Hose NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "August 26, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and completely addresses the question by providing the specific effective date of the NDA",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the McGill Hose NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "August 26, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asked for the effective date of an NDA and the answer provided directly addressed that",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the McGill Hose NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "August 26, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and accurately addresses the question based on information provided in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the McGill Hose NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "August 10, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly and correctly addresses the question, using information found in the NDA document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the McGill Hose NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "September 5, 2029",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides a date that appears to be factual based on the provided context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the McGill Hose NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "August 10, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information found in the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the McGill Hose NDA?",
+      "category": "Term",
+      "description": "Term for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information from the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the McGill Hose NDA?",
+      "category": "Term",
+      "description": "Term for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information provided in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the McGill Hose NDA?",
+      "category": "Term",
+      "description": "Term for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Where is McGill Hose located?",
+      "category": "Location",
+      "description": "Location for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "MA 01028",
+        "USA"
+      ],
+      "actual_answer": "McGill Hose is located at 45 Industrial Dr., East Longmeadow, MA 01028, USA",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides the exact location of McGill Hose.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MA 01028",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.7
+    },
+    {
+      "question": "Where is McGill Hose headquartered?",
+      "category": "Location",
+      "description": "Location for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "MA 01028",
+        "USA"
+      ],
+      "actual_answer": "McGill Hose is headquartered at 45 Industrial Dr., East Longmeadow, MA 01028, USA.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides a complete and informative response based on factual information.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MA 01028",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Where is McGill Hose located?",
+      "category": "Location",
+      "description": "Location for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "MA 01028",
+        "USA"
+      ],
+      "actual_answer": "\"45 Industrial Dr., East Longmeadow, MA 01028, USA\"",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer is directly derived from the given document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MA 01028",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the McGill Hose NDA?",
+      "category": "Parties",
+      "description": "Parties for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "McGill Hose and Coupling Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "McGill Hose and Coupling Inc. and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and McGill Hose and Coupling Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is complete, providing all the party names.",
+      "contains_expected": true,
+      "matched_terms": [
+        "McGill Hose and Coupling Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the McGill Hose NDA?",
+      "category": "Parties",
+      "description": "Parties for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "McGill Hose and Coupling Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "McGill Hose and Coupling Inc., Kidde-Fenwal LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks who the signatories of the McGill Hose NDA are and the provided answer directly states that they are McGill Hose and Coupling Inc., Kidde-Fenwal LLC.",
+      "contains_expected": true,
+      "matched_terms": [
+        "McGill Hose and Coupling Inc."
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the partis to the McGill Hose NDA?",
+      "category": "Parties",
+      "description": "Parties for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "McGill Hose and Coupling Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "McGill Hose and Coupling Inc.\nKidde-Fenwal LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and completely addresses the question as it provides the names of both parties to the McGill Hose NDA.",
+      "contains_expected": true,
+      "matched_terms": [
+        "McGill Hose and Coupling Inc."
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the McGill Hose NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for McGill Hose and Coupling Inc. August 2028",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and appears to be based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the McGill Hose NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for McGill Hose and Coupling Inc. August 2028 (natural)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.7,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided context does not specify whether the McGill Hose NDA is bidirectional or unidirectional.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the McGill Hose NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for McGill Hose and Coupling Inc. August 2028 (misspelling)",
+      "document_id": "ab249908-a73b-4db9-9dbb-bfc6721b9d13",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the NDA type between McGill Hose and another party. The answer directly addresses this by stating 'mutual', which is consistent with the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Central Coating?",
+      "category": "Governing Law",
+      "description": "Governing law for Central Coating Technologies, Inc. Sept. 2028",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The document does not specify the governing state for Central Coating. However, it is inferred that since the location of the company (Central Coating) is given as California, the governing state would be California.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Central Coating?",
+      "category": "Governing Law",
+      "description": "Governing law for Central Coating Technologies, Inc. Sept. 2028 (natural)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing law of Central Coating, and the provided answer directly mentions that the governing law is in fact 'State of California', which can be found in the document context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of Central Coating?",
+      "category": "Governing Law",
+      "description": "Governing law for Central Coating Technologies, Inc. Sept. 2028 (misspelling)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of Central Coating and the provided answer is State of California. The document does not mention anything about the jurisdiction or governance of Central Coating except for the governing law for the NDA which is specified as Delaware.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Central Coating NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Central Coating Technologies, Inc. Sept. 2028",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "September 08, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the effective date of the NDA, and the answer provides a specific date which directly addresses the question.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Central Coating NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Central Coating Technologies, Inc. Sept. 2028 (natural)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "September 08, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and appears to be based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Central Coating NDA become effetive?",
+      "category": "Effective Date",
+      "description": "Effective date for Central Coating Technologies, Inc. Sept. 2028 (misspelling)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "September 08, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and appears to be based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Central Coating NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Central Coating Technologies, Inc. Sept. 2028",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "August 23, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Central Coating NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Central Coating Technologies, Inc. Sept. 2028 (natural)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "September 5, 20XX + 3 years (The term of all NDAs expires after three years from the date hereof)",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer provides a direct and accurate calculation of the expiration date for the Central Coating NDA based on the information in the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Central Coating NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Central Coating Technologies, Inc. Sept. 2028 (misspelling)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "August 23, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The date of expiration for the Central Coating NDA is provided and directly addresses the question",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Central Coating NDA?",
+      "category": "Term",
+      "description": "Term for Central Coating Technologies, Inc. Sept. 2028",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided document.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Central Coating NDA?",
+      "category": "Term",
+      "description": "Term for Central Coating Technologies, Inc. Sept. 2028 (natural)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and correctly addresses the question as it is based on factual information from the provided document.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Central Coating NDA?",
+      "category": "Term",
+      "description": "Term for Central Coating Technologies, Inc. Sept. 2028 (misspelling)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Central Coating NDA?",
+      "category": "Parties",
+      "description": "Parties for Central Coating Technologies, Inc. Sept. 2028",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "Central Coating Technologies Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Central Coating Technologies Inc. and USA and Kidde-Fenwal LLC and Central Coating Technologies Inc. and Kidde-Fenwal LLC and Central Coating Technologies , Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided documents.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Central Coating Technologies Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Central Coating NDA?",
+      "category": "Parties",
+      "description": "Parties for Central Coating Technologies, Inc. Sept. 2028 (natural)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "Central Coating Technologies Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.5,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The answer does not address the question as the information about the signatories of the Central Coating NDA is not provided in the given context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the Central Coating NDA?",
+      "category": "Parties",
+      "description": "Parties for Central Coating Technologies, Inc. Sept. 2028 (misspelling)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "Central Coating Technologies Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Central Coating Technologies Inc. and USA and Kidde-Fenwal LLC and Central Coating Technologies Inc. and Kidde-Fenwal LLC and Central Coating Technologies , Inc. Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides a complete list of parties involved in the Central Coating NDA.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Central Coating Technologies Inc.",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Central Coating NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Central Coating Technologies, Inc. Sept. 2028",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and accurately addresses the question using the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Central Coating NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Central Coating Technologies, Inc. Sept. 2028 (natural)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided context does not specify a unidirectional or bidirectional nature of the NDA, but it is stated that the agreement is mutual, which implies a bidirectional non-disclosure.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Central Coating NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Central Coating Technologies, Inc. Sept. 2028 (misspelling)",
+      "document_id": "ac5860b6-b92f-4149-aa25-e0ace59fb300",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the type of agreement between Central Coating parties and the provided answer 'mutual' accurately reflects this information from the document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Delva Tool?",
+      "category": "Governing Law",
+      "description": "Governing law for Delva Tool & Machine, LLC_SIGNED NDA",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided context does not contain any information about the governing state for Delva Tool.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Delva Tool?",
+      "category": "Governing Law",
+      "description": "Governing law for Delva Tool & Machine, LLC_SIGNED NDA (natural)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided context does not contain any information about the governing law of Delva Tool.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing stae of Delva Tool?",
+      "category": "Governing Law",
+      "description": "Governing law for Delva Tool & Machine, LLC_SIGNED NDA (misspelling)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The question asks for the governing state of 'Delva Tool', but the provided documents do not contain any mention or reference to 'Delva Tool'.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Delva Tool NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Delva Tool & Machine, LLC_SIGNED NDA",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "August 11, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the effective date of a specific NDA (Delva Tool), and the answer provides that date directly.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Delva Tool NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Delva Tool & Machine, LLC_SIGNED NDA (natural)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "August 11, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Delva Tool NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Delva Tool & Machine, LLC_SIGNED NDA (misspelling)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "August 11, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information provided in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-08"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Delva Tool NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Delva Tool & Machine, LLC_SIGNED NDA",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "July 26, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided document",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Delva Tool NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Delva Tool & Machine, LLC_SIGNED NDA (natural)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question and neither the context nor the documents contain information about the end date of the Delva Tool NDA.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Delva Tool NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Delva Tool & Machine, LLC_SIGNED NDA (misspelling)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "July 26, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by providing an exact date which is a factual information found in the provided documents",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Delva Tool NDA?",
+      "category": "Term",
+      "description": "Term for Delva Tool & Machine, LLC_SIGNED NDA",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses and correctly answers the question based on the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Delva Tool NDA?",
+      "category": "Term",
+      "description": "Term for Delva Tool & Machine, LLC_SIGNED NDA (natural)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and accurately addresses the question, as it is clearly stated in the provided documents that the duration of the Delva Tool NDA is 3 years.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Delva Tool NDA?",
+      "category": "Term",
+      "description": "Term for Delva Tool & Machine, LLC_SIGNED NDA (misspelling)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Delva Tool NDA?",
+      "category": "Parties",
+      "description": "Parties for Delva Tool & Machine, LLC_SIGNED NDA",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "Delva Tool & Machine LLC",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Delva Tool & Machine LLC and USA and Kidde-Fenwal LLC and Mill Creek Machining Kidde-Fenwal LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delva Tool & Machine LLC",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Delva Tool NDA?",
+      "category": "Parties",
+      "description": "Parties for Delva Tool & Machine, LLC_SIGNED NDA (natural)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "Delva Tool & Machine LLC",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Party: Delva Tool & Machine LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the signatories of Delva Tool NDA, and the answer provides the name of one signatory.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delva Tool & Machine LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the partis to the Delva Tool NDA?",
+      "category": "Parties",
+      "description": "Parties for Delva Tool & Machine, LLC_SIGNED NDA (misspelling)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "Delva Tool & Machine LLC",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Delva Tool & Machine LLC, USA and Kidde-Fenwal LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the parties to the Delva Tool NDA and the provided answer lists those exact parties.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delva Tool & Machine LLC",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Delva Tool NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Delva Tool & Machine, LLC_SIGNED NDA",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asked for the type of NDA (mutual or one-way) and the answer directly addressed that.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Delva Tool NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Delva Tool & Machine, LLC_SIGNED NDA (natural)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks about the bidirectionality of an NDA related to the Delva Tool, and the answer 'mutual' indicates that it is bidirectional.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Delva Tool NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Delva Tool & Machine, LLC_SIGNED NDA (misspelling)",
+      "document_id": "e5e723e9-22ac-41d3-a4e5-52bfebf000f5",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by stating that the Delva Tool NDA is mutual.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Fanuc America?",
+      "category": "Governing Law",
+      "description": "Governing law for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of Fanuc America, and the answer provided is 'State of California', which appears to be a factual and correct answer based on the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Fanuc America?",
+      "category": "Governing Law",
+      "description": "Governing law for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer is based on factual information found in the provided documents.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of Fanuc America?",
+      "category": "Governing Law",
+      "description": "Governing law for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of Fanuc America, and the provided answer states 'State of California', which is correct according to the information in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Fanuc America NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "2025-06"
+      ],
+      "actual_answer": "June 16, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided documents",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-06"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Fanuc America NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "2025-06"
+      ],
+      "actual_answer": "June 16, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and accurately addresses the question.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-06"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Fanuc America NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "2025-06"
+      ],
+      "actual_answer": "June 16, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-06"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Fanuc America NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "2028-06"
+      ],
+      "actual_answer": "May 31, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information found within the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Fanuc America NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "2028-06"
+      ],
+      "actual_answer": "September 5, 2028 (for all documents)",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and completely addresses the question by providing a specific end date for the Fanuc America NDA.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Fanuc America NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "2028-06"
+      ],
+      "actual_answer": "May 31, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information found in the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Fanuc America NDA?",
+      "category": "Term",
+      "description": "Term for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Fanuc America NDA?",
+      "category": "Term",
+      "description": "Term for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Fanuc America NDA?",
+      "category": "Term",
+      "description": "Term for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer is directly taken from the provided context and correctly addresses the question.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Where is Fanuc America located?",
+      "category": "Location",
+      "description": "Location for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "MI 48309 -3253",
+        "USA"
+      ],
+      "actual_answer": "Fanuc America Corporation is located at 3900 West Hamlin Road, Rochester Hills, MI 48309 -3253, USA",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides factual information",
+      "contains_expected": true,
+      "matched_terms": [
+        "MI 48309 -3253",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.7
+    },
+    {
+      "question": "Where is Fanuc America headquartered?",
+      "category": "Location",
+      "description": "Location for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "MI 48309 -3253",
+        "USA"
+      ],
+      "actual_answer": "\"Michigan\"",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The context does not provide information about Fanuc America's headquarter location, but the answer 'Michigan' is a correct statement because Fanuc America Corporation's headquarters are indeed located in Rochester Hills, Michigan.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Where is Fanuc America locatd?",
+      "category": "Location",
+      "description": "Location for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "MI 48309 -3253",
+        "USA"
+      ],
+      "actual_answer": "Fanuc America Corporation is located at 3900 West Hamlin Road, Rochester Hills, MI 48309 -3253, USA.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MI 48309 -3253",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Fanuc America NDA?",
+      "category": "Parties",
+      "description": "Parties for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "Fanuc America Corporation",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Fanuc America Corporation and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and Fanuc America Corporation Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides a complete list of parties to the Fanuc America NDA.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Fanuc America Corporation",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Fanuc America NDA?",
+      "category": "Parties",
+      "description": "Parties for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "Fanuc America Corporation",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Fanuc America Corporation and Kidde-Fenwal LLC",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and appears to be based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Fanuc America Corporation"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the Fanuc America NDA?",
+      "category": "Parties",
+      "description": "Parties for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "Fanuc America Corporation",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Fanuc America Corporation and USA and Kidde-Fenwal LLC and Kidde-Fenwal LLC and Fanuc America Corporation Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses and correctly identifies the parties to the NDA as Fanuc America Corporation and Kidde-Fenwal LLC.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Fanuc America Corporation",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Fanuc America NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Fanuc America Corporation June 2028",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer is based on the text 'mutual' which is found in the provided context",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Fanuc America NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Fanuc America Corporation June 2028 (natural)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.5,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided documents do not contain information about whether the Fanuc America NDA is bidirectional or unidirectional.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Fanuc America NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Fanuc America Corporation June 2028 (misspelling)",
+      "document_id": "ecb6c5cd-4369-42db-a98f-20275a5d666b",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided documents",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Norris Cylinder?",
+      "category": "Governing Law",
+      "description": "Governing law for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "Delaware"
+      ],
+      "actual_answer": "State of Delaware",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of Norris Cylinder, and the provided answer is the governing law for the NDA, which happens to be the State of Delaware.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delaware"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Norris Cylinder?",
+      "category": "Governing Law",
+      "description": "Governing law for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "Delaware"
+      ],
+      "actual_answer": "State of Delaware",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information from the context",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delaware"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of Norris Cylinder?",
+      "category": "Governing Law",
+      "description": "Governing law for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "Delaware"
+      ],
+      "actual_answer": "State of Delaware",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of Norris Cylinder, and the answer provided directly addresses this by stating 'State of Delaware', which matches what is stated in the document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Delaware"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Norris Cylinder NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "September 03, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Norris Cylinder NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "September 03, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information provided in the context",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Norris Cylinder NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "2025-09"
+      ],
+      "actual_answer": "September 03, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly and accurately addresses the question based on the information given in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "2025-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Norris Cylinder NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "August 18, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information found in the provided documents",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Norris Cylinder NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "September 5, 2028",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided documents",
+      "contains_expected": true,
+      "matched_terms": [
+        "2028-09"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Norris Cylinder NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "2028-09"
+      ],
+      "actual_answer": "August 18, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by providing a specific date that is found in the NDA document.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Norris Cylinder NDA?",
+      "category": "Term",
+      "description": "Term for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information found in the provided document",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Norris Cylinder NDA?",
+      "category": "Term",
+      "description": "Term for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Norris Cylinder NDA?",
+      "category": "Term",
+      "description": "Term for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and accurately addresses the question by stating the term of the NDA as '3 years' based on the provided document.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Where is Norris Cylinder located?",
+      "category": "Location",
+      "description": "Location for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "TX 75607",
+        "USA"
+      ],
+      "actual_answer": "Norris Cylinder Company is located at 4818 West Loop 281, Long View, TX 75607, USA.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for Norris Cylinder's location, and the provided answer directly addresses this.",
+      "contains_expected": true,
+      "matched_terms": [
+        "TX 75607",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.7
+    },
+    {
+      "question": "Where is Norris Cylinder headquartered?",
+      "category": "Location",
+      "description": "Location for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "TX 75607",
+        "USA"
+      ],
+      "actual_answer": "Norris Cylinder Company is headquartered at 4818 West Loop 281, Long View, TX 75607, USA",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question, is complete and informative, and appears to be based on factual information.",
+      "contains_expected": true,
+      "matched_terms": [
+        "TX 75607",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Where is Norris Cylinder locatd?",
+      "category": "Location",
+      "description": "Location for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "TX 75607",
+        "USA"
+      ],
+      "actual_answer": "Norris Cylinder Company is located at 4818 West Loop 281, Long View, TX 75607, USA",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The location of Norris Cylinder Company is provided in the context",
+      "contains_expected": true,
+      "matched_terms": [
+        "TX 75607",
+        "USA"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Norris Cylinder NDA?",
+      "category": "Parties",
+      "description": "Parties for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "Norris Cylinder Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Norris Cylinder Company and USA and Kidde-Fenwal LLC and Norris Cylinder Com pany Kidde-Fenwal LLC and Norris Cylinder Com pany Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The answer includes redundant party names and misspelled entities",
+      "contains_expected": true,
+      "matched_terms": [
+        "Norris Cylinder Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Norris Cylinder NDA?",
+      "category": "Parties",
+      "description": "Parties for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "Norris Cylinder Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.0,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The context provided does not contain information about who the signatories of the Norris Cylinder NDA are.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the Norris Cylinder NDA?",
+      "category": "Parties",
+      "description": "Parties for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "Norris Cylinder Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "Norris Cylinder Company and USA and Kidde-Fenwal LLC and Norris Cylinder Com pany Kidde-Fenwal LLC and Norris Cylinder Com pany Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The answer contains repetition and incorrect formatting which makes it difficult to accurately determine the parties involved.",
+      "contains_expected": true,
+      "matched_terms": [
+        "Norris Cylinder Company",
+        "USA and Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Norris Cylinder NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Norris Cylinder Company_Signed NDA",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Norris Cylinder NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Norris Cylinder Company_Signed NDA (natural)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks about the type of NDA for Norris Cylinder and the provided answer is 'mutual', which is confirmed in the document as it states that both parties are bound by mutual confidentiality obligations.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Norris Cylinder NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Norris Cylinder Company_Signed NDA (misspelling)",
+      "document_id": "dc929c1c-24e0-4849-bafe-d31064ea53e5",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of Shaoxing ERCO?",
+      "category": "Governing Law",
+      "description": "Governing law for Shaoxing ERCO Electric Co., Ltd July 2028",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The context does not provide information about the governing state of Shaoxing ERCO",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of Shaoxing ERCO?",
+      "category": "Governing Law",
+      "description": "Governing law for Shaoxing ERCO Electric Co., Ltd July 2028 (natural)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The question asks for the governing law of Shaoxing ERCO, but there is no information in the provided context that mentions Shaoxing ERCO or its governing law.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of Shaoxing ERCO?",
+      "category": "Governing Law",
+      "description": "Governing law for Shaoxing ERCO Electric Co., Ltd July 2028 (misspelling)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided context does not contain information about Shaoxing ERCO's governing state.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the Shaoxing ERCO NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for Shaoxing ERCO Electric Co., Ltd July 2028",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "2025-07"
+      ],
+      "actual_answer": "September 08, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by providing a specific date which can be found in the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Shaoxing ERCO NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for Shaoxing ERCO Electric Co., Ltd July 2028 (natural)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "2025-07"
+      ],
+      "actual_answer": "September 08, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by providing a specific date and appears to be based on factual information.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the Shaoxing ERCO NDA become effecive?",
+      "category": "Effective Date",
+      "description": "Effective date for Shaoxing ERCO Electric Co., Ltd July 2028 (misspelling)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "2025-07"
+      ],
+      "actual_answer": "September 08, 2025",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the effective date of an NDA and the provided answer is a specific date (September 08, 2025) which is directly relevant to the question.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the Shaoxing ERCO NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Shaoxing ERCO Electric Co., Ltd July 2028",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "2028-07"
+      ],
+      "actual_answer": "June 30, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided documents",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Shaoxing ERCO NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Shaoxing ERCO Electric Co., Ltd July 2028 (natural)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "2028-07"
+      ],
+      "actual_answer": "September 5, 2028",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information from the provided documents",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the Shaoxing ERCO NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for Shaoxing ERCO Electric Co., Ltd July 2028 (misspelling)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "2028-07"
+      ],
+      "actual_answer": "June 30, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by providing a specific date and it is based on factual information found in the provided documents",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the Shaoxing ERCO NDA?",
+      "category": "Term",
+      "description": "Term for Shaoxing ERCO Electric Co., Ltd July 2028",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses and correctly answers the question based on information from the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the Shaoxing ERCO NDA?",
+      "category": "Term",
+      "description": "Term for Shaoxing ERCO Electric Co., Ltd July 2028 (natural)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the Shaoxing ERCO NDA?",
+      "category": "Term",
+      "description": "Term for Shaoxing ERCO Electric Co., Ltd July 2028 (misspelling)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information from the given context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the Shaoxing ERCO NDA?",
+      "category": "Parties",
+      "description": "Parties for Shaoxing ERCO Electric Co., Ltd July 2028",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "China and Kidde-Fenwal LLC",
+        "Ltd Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "China and Kidde-Fenwal LLC and Ltd Kidde-Fenwal LLC and Shaoxing ERCO Electric Co., Ltd Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question by listing all parties to the Shaoxing ERCO NDA",
+      "contains_expected": true,
+      "matched_terms": [
+        "China and Kidde-Fenwal LLC",
+        "Ltd Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the Shaoxing ERCO NDA?",
+      "category": "Parties",
+      "description": "Parties for Shaoxing ERCO Electric Co., Ltd July 2028 (natural)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "China and Kidde-Fenwal LLC",
+        "Ltd Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question 'Who are the signatories of the Shaoxing ERCO NDA' as it states that the information is not available in the provided documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the Shaoxing ERCO NDA?",
+      "category": "Parties",
+      "description": "Parties for Shaoxing ERCO Electric Co., Ltd July 2028 (misspelling)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "China and Kidde-Fenwal LLC",
+        "Ltd Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "China and Kidde-Fenwal LLC and Ltd Kidde-Fenwal LLC and Shaoxing ERCO Electric Co., Ltd Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information from the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "China and Kidde-Fenwal LLC",
+        "Ltd Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the Shaoxing ERCO NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Shaoxing ERCO Electric Co., Ltd July 2028",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asked for the NDA type between Shaoxing ERCO and it was explicitly stated as mutual in the provided context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Shaoxing ERCO NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Shaoxing ERCO Electric Co., Ltd July 2028 (natural)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.5,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question as the documents do not contain any information regarding the Shaoxing ERCO NDA being bidirectional or unidirectional.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the Shaoxing ERCO NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for Shaoxing ERCO Electric Co., Ltd July 2028 (misspelling)",
+      "document_id": "ca82139d-20eb-44bd-9f8c-061d3875599b",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the governing state of UNIQUE FIRE?",
+      "category": "Governing Law",
+      "description": "Governing law for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of 'UNIQUE FIRE', and the provided answer directly states it is 'State of California'.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing law of UNIQUE FIRE?",
+      "category": "Governing Law",
+      "description": "Governing law for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (natural)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing law of UNIQUE FIRE and the answer is provided in the context",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the governing state of UNIQUE FIRE?",
+      "category": "Governing Law",
+      "description": "Governing law for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (misspelling)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "California"
+      ],
+      "actual_answer": "State of California",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the governing state of 'UNIQUE FIRE', and the answer provided correctly identifies it as 'State of California' which is present in the context.",
+      "contains_expected": true,
+      "matched_terms": [
+        "California"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "When did the UNIQUE FIRE NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question as the effective date of the NDA is not specified in the given context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the UNIQUE FIRE NDA take effect?",
+      "category": "Effective Date",
+      "description": "Effective date for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (natural)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.5,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question and the necessary information for answering it is not present in the given context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "When did the UNIQUE FIRE NDA become effective?",
+      "category": "Effective Date",
+      "description": "Effective date for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (misspelling)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "2025-08"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 0.5,
+      "llm_confidence": 0.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not address the question, as it states that the information is not available in the documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What date does the UNIQUE FIRE NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "July 26, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and correctly provides the expiration date of the UNIQUE FIRE NDA as specified in the provided context.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the UNIQUE FIRE NDA end?",
+      "category": "Expiration Date",
+      "description": "Expiration date for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (natural)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question as the date when the UNIQUE FIRE NDA ends is not specified in the given documents.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What date does the UNIQUE FIRE NDA expire?",
+      "category": "Expiration Date",
+      "description": "Expiration date for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (misspelling)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "2028-08"
+      ],
+      "actual_answer": "July 26, 2028",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The provided answer directly addresses the question and is based on factual information present in the document",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "What is the term of the UNIQUE FIRE NDA?",
+      "category": "Term",
+      "description": "Term for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information provided in the context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the duration of the UNIQUE FIRE NDA?",
+      "category": "Term",
+      "description": "Term for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (natural)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question, provides a clear and concise duration of the NDA, and appears to be based on factual information from the provided context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "What is the term of the UNIQUE FIRE NDA?",
+      "category": "Term",
+      "description": "Term for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (misspelling)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "36"
+      ],
+      "actual_answer": "3 years",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and is based on factual information found in the provided context",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Who are the parties to the UNIQUE FIRE NDA?",
+      "category": "Parties",
+      "description": "Parties for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "MALAYSIA and Kidde-Fenwal LLC",
+        "UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "MALAYSIA and Kidde-Fenwal LLC and UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC and UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and appears to be based on factual information from the provided document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MALAYSIA and Kidde-Fenwal LLC",
+        "UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the signatories of the UNIQUE FIRE NDA?",
+      "category": "Parties",
+      "description": "Parties for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (natural)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "MALAYSIA and Kidde-Fenwal LLC",
+        "UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents",
+      "system_confidence": 1.0,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The question asks for the signatories of the UNIQUE FIRE NDA, but the provided documents do not contain any information about the signatories.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Who are the parties to the UNIQUE FIRE NDA?",
+      "category": "Parties",
+      "description": "Parties for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (misspelling)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "MALAYSIA and Kidde-Fenwal LLC",
+        "UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC"
+      ],
+      "actual_answer": "MALAYSIA and Kidde-Fenwal LLC and UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC and UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal, LLC",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly addresses the question and provides all parties to the UNIQUE FIRE NDA.",
+      "contains_expected": true,
+      "matched_terms": [
+        "MALAYSIA and Kidde-Fenwal LLC",
+        "UNIQUE FIRE INDUSTRY SDN BHD Kidde-Fenwal LLC"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    },
+    {
+      "question": "Is the UNIQUE FIRE NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer is directly extracted from the provided NDA document.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the UNIQUE FIRE NDA bidirectional or unidirectional?",
+      "category": "Mutual Status",
+      "description": "Mutual status for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (natural)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "I cannot find this information in the provided documents.",
+      "system_confidence": 0.5,
+      "llm_confidence": 0.5,
+      "llm_correctness": false,
+      "llm_reasoning": "The provided answer does not directly address the question as it states that the information is not available in the provided documents, while the question asks for an evaluation of a previous answer.",
+      "contains_expected": false,
+      "matched_terms": [],
+      "passed": false,
+      "min_confidence": 0.8
+    },
+    {
+      "question": "Is the UNIQUE FIRE NDA mutual or one-way?",
+      "category": "Mutual Status",
+      "description": "Mutual status for UNIQUE FIRE INDUSTRY SDN BHD Aug. 2028 (misspelling)",
+      "document_id": "3312229b-8bf0-424d-a51f-fe19e08caa42",
+      "expected_contains": [
+        "mutual"
+      ],
+      "actual_answer": "mutual",
+      "system_confidence": 0.95,
+      "llm_confidence": 1.0,
+      "llm_correctness": true,
+      "llm_reasoning": "The answer directly and correctly addresses the question as the provided context does not specify a one-way agreement.",
+      "contains_expected": true,
+      "matched_terms": [
+        "mutual"
+      ],
+      "passed": true,
+      "min_confidence": 0.6
+    }
+  ]
+}

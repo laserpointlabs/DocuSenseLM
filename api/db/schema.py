@@ -2,9 +2,11 @@
 PostgreSQL database schema for NDA Dashboard
 """
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Boolean, Text, JSON,
-    Float, ForeignKey, Index, Enum
+    Column, Integer, String, DateTime, Date, Boolean, Text, JSON,
+    Float, ForeignKey, Index, Enum, LargeBinary, CheckConstraint,
+    UniqueConstraint, DDL, event, text
 )
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
@@ -12,6 +14,20 @@ import uuid
 import enum
 
 Base = declarative_base()
+
+
+class TSVectorType(TypeDecorator):
+    """Dialect-aware TSVECTOR column that falls back to TEXT."""
+
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):  # pragma: no cover - depends on dialect
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import TSVECTOR as PG_TSVECTOR
+
+            return dialect.type_descriptor(PG_TSVECTOR())
+        return dialect.type_descriptor(Text())
 
 
 class DocumentStatus(enum.Enum):
@@ -30,11 +46,13 @@ class Document(Base):
     status = Column(Enum(DocumentStatus), default=DocumentStatus.UPLOADED)
     s3_path = Column(String(512), nullable=True)  # Path in MinIO/S3
     metadata_json = Column(JSON, nullable=True)
+    file_sha256 = Column(LargeBinary, nullable=True, unique=True)
 
     # Indexes
     __table_args__ = (
         Index('idx_documents_status', 'status'),
         Index('idx_documents_upload_date', 'upload_date'),
+        UniqueConstraint('file_sha256', name='uq_documents_file_sha'),
     )
 
 
@@ -188,3 +206,110 @@ class TestFeedback(Base):
     __table_args__ = (
         Index('idx_feedback_test_run', 'test_run_id'),
     )
+
+
+class NDARecord(Base):
+    """
+    Canonical NDA registry entry.
+    Stores normalized metadata used for deterministic lookups and lifecycle events.
+    """
+    __tablename__ = "nda_records"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=True, unique=True)
+    direction = Column(String(20), nullable=True)
+    nda_type = Column(String(20), nullable=True)
+    counterparty_name = Column(String(255), nullable=False)
+    counterparty_domain = Column(String(255), nullable=True)
+    entity_id = Column(String(255), nullable=True)
+    owner_user_id = Column(UUID(as_uuid=True), nullable=True)
+    effective_date = Column(Date, nullable=True)
+    term_months = Column(Integer, nullable=True)
+    survival_months = Column(Integer, nullable=True)
+    expiry_date = Column(Date, nullable=True)
+    status = Column(String(20), nullable=False, default="signed")
+    file_uri = Column(String(512), nullable=False)
+    file_sha256 = Column(LargeBinary, nullable=False, unique=True)
+    extracted_text = Column(Text, nullable=True)
+    text_tsv = Column(TSVectorType())
+    tags = Column(JSON, nullable=False, default=dict)
+    facts_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('document_id', name='uq_nda_records_document_id'),
+        CheckConstraint(
+            "status IN ('draft','negotiating','approved','signed','expired','terminated')",
+            name='chk_nda_records_status'
+        ),
+        Index('idx_nda_records_counterparty', 'counterparty_domain', 'counterparty_name'),
+        Index('idx_nda_records_expiry_signed', 'expiry_date',
+              postgresql_where=text("status = 'signed'")),
+        Index('idx_nda_records_text_tsv', 'text_tsv', postgresql_using='gin'),
+    )
+
+
+class NDAEvent(Base):
+    """
+    Lifecycle events for NDAs (expiring windows, conflicts, etc.).
+    """
+    __tablename__ = "nda_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nda_id = Column(UUID(as_uuid=True), ForeignKey("nda_records.id"), nullable=False)
+    kind = Column(String(50), nullable=False)
+    scheduled_for = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index('idx_nda_events_pending', 'kind', postgresql_where=text("delivered_at IS NULL")),
+        Index('idx_nda_events_nda_id', 'nda_id'),
+        Index('idx_nda_events_scheduled_for', 'scheduled_for'),
+        UniqueConstraint('nda_id', 'kind', 'scheduled_for', name='uq_nda_event_dedupe'),
+    )
+
+
+# ---------- Postgres helpers: extensions, triggers ----------
+
+# pgcrypto and pg_trgm extensions are created in migrations.
+
+_nda_tsv_function = DDL(
+    """
+    CREATE OR REPLACE FUNCTION nda_set_tsv()
+    RETURNS trigger AS $$
+    BEGIN
+        NEW.text_tsv :=
+            to_tsvector(
+                'english',
+                coalesce(NEW.extracted_text, '') || ' ' || coalesce(NEW.counterparty_name, '')
+            );
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    """
+).execute_if(dialect='postgresql')
+
+_nda_tsv_trigger = DDL(
+    """
+    CREATE TRIGGER nda_tsv_trg
+    BEFORE INSERT OR UPDATE OF extracted_text, counterparty_name
+    ON nda_records
+    FOR EACH ROW EXECUTE FUNCTION nda_set_tsv();
+    """
+).execute_if(dialect='postgresql')
+
+_nda_tsv_drop_trigger = DDL(
+    "DROP TRIGGER IF EXISTS nda_tsv_trg ON nda_records;"
+).execute_if(dialect='postgresql')
+
+_nda_tsv_drop_function = DDL(
+    "DROP FUNCTION IF EXISTS nda_set_tsv();"
+).execute_if(dialect='postgresql')
+
+event.listen(NDARecord.__table__, 'after_create', _nda_tsv_function)
+event.listen(NDARecord.__table__, 'after_create', _nda_tsv_trigger)
+event.listen(NDARecord.__table__, 'before_drop', _nda_tsv_drop_trigger)
+event.listen(NDARecord.__table__, 'after_drop', _nda_tsv_drop_function)

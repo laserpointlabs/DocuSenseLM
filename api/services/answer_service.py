@@ -7,51 +7,134 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from llm.llm_factory import get_llm_client
 from llm.llm_client import Chunk, Citation, Answer
-from api.services.search_service import search_service
+from api.services.search_service import get_search_service_instance
+from api.services.metadata_service import metadata_service
+from api.services.query_service import query_service
+from api.services.answer_evaluator import answer_evaluator
+from api.services.document_finder import document_finder
 
 
 class AnswerService:
     """Service for generating answers with citations"""
 
     def __init__(self):
-        self.search = search_service
         self.llm_client = None  # Lazy load
+
+    @property
+    def search(self):
+        # Resolve via service registry each time to respect overrides
+        return get_search_service_instance()
 
     async def generate_answer(
         self,
         question: str,
         filters: Optional[Dict] = None,
-        max_context_chunks: int = 10
+        max_context_chunks: int = 30
     ) -> Answer:
         """
-        Generate answer using hybrid search + LLM
+        Generate answer using metadata-first approach for structured questions,
+        then falling back to hybrid search + LLM for complex questions
 
         Args:
             question: User question
-            filters: Optional filters
+            filters: Optional filters (may include document_id)
             max_context_chunks: Maximum chunks to use as context
 
         Returns:
             Answer with citations
         """
-        # 1. Run hybrid search
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"=== Answer Service Start ===")
-        logger.info(f"Question: {question}")
-        logger.info(f"max_context_chunks: {max_context_chunks}")
-        logger.info(f"filters: {filters}")
-
-        search_results = self.search.hybrid_search(
-            query=question,
-            k=max_context_chunks * 3,  # Get more results for better context (removed 20 limit)
-            filters=filters
-        )
+        
+        logger.info(f"Question: {question}, max_context_chunks: {max_context_chunks}, filters: {filters}")
+        
+        # Phase 4: Query Understanding and Transformation
+        query_info = query_service.understand_query(question)
+        logger.info(f"Query understanding: type={query_info['question_type']}, metadata={query_info['metadata']}")
+        logger.info(f"Original: {query_info['original_query']}")
+        logger.info(f"Transformed: {query_info['transformed_query']}")
+        
+        # Use transformed query for better retrieval
+        retrieval_query = query_info['transformed_query']
+        
+        # Phase 5: Date Range Query Detection
+        date_range = query_info['metadata'].get('date_range')
+        if date_range and query_info['question_type'] == 'date_range':
+            logger.info(f"Detected date range query: {date_range}")
+            # Add date range to filters
+            if filters is None:
+                filters = {}
+            filters['date_range'] = date_range
+        
+        # Phase 6: Cross-Document Detection
+        is_cross_document = query_info['metadata'].get('is_cross_document', False)
+        if is_cross_document:
+            logger.info("Detected cross-document query, using cross-document synthesis")
+            return await self._handle_cross_document_query(question, filters, max_context_chunks, query_info, logger)
+        
+        # Phase 1: Metadata-First Retrieval for Structured Fields
+        # Check if this is a structured question that can be answered from metadata
+        structured_answer = None
+        
+        # Try to find document_id if not provided but company name is in query
+        # IMPORTANT: Always try to find document by company name, not just for structured questions
+        # This enables flexible queries like "What date does the Faunc NDA expire?"
+        document_id = None
+        if filters and filters.get('document_id'):
+            document_id = filters.get('document_id')
+        else:
+            # Try to find document by company name from query (for ALL queries, not just structured)
+            found_doc_id = document_finder.find_best_document_match(question, use_fuzzy=True)
+            if found_doc_id:
+                document_id = found_doc_id
+                logger.info(f"Found document by company name: {document_id[:8]}...")
+                # Update filters for downstream use
+                if filters is None:
+                    filters = {}
+                filters['document_id'] = document_id
+        
+        # If we have a document_id and it's a structured question, try metadata first
+        if document_id and query_info['metadata'].get('is_structured'):
+            structured_answer = self._try_metadata_answer(question, document_id, logger)
+            if structured_answer:
+                logger.info(f"✅ Answered from metadata: {structured_answer.text[:100]}")
+                # Set high confidence for metadata answers
+                structured_answer.confidence = 0.95
+                structured_answer.evaluation_reasoning = "Answer retrieved from structured metadata"
+                return structured_answer
+            else:
+                logger.info("Metadata answer not available, falling back to chunk retrieval")
+        
+        # Phase 2: Fall back to hybrid search + LLM for complex questions
+        # Determine strategy from environment variable
+        rag_strategy = os.getenv("RAG_STRATEGY", "single_query").lower()
+        logger.info(f"Using {rag_strategy} strategy for chunk retrieval")
+        
+        # Run search based on strategy (use transformed query for better retrieval)
+        if rag_strategy == "two_query":
+            search_results = self._two_query_search(retrieval_query, filters, max_context_chunks, logger)
+        else:
+            # Default: single_query
+            search_results = self._single_query_search(retrieval_query, filters, max_context_chunks, logger)
+        
         logger.info(f"Search returned {len(search_results)} results")
-        if search_results:
-            logger.info(f"First search result: doc_id={search_results[0].get('doc_id')}, score={search_results[0].get('score')}, text_length={len(search_results[0].get('text', ''))}")
 
-        # 2. Deduplicate by doc_id + page_num + clause_number, then take top chunks
+        # 2. For clause questions, boost chunks with matching clause titles
+        clause_name = query_info['metadata'].get('clause_name')
+        if clause_name and query_info['question_type'] == 'clause':
+            logger.info(f"Clause question detected, clause_name: {clause_name}")
+            clause_name_lower = clause_name.lower()
+            for result in search_results:
+                result_clause_title = result.get('clause_title', '').lower() if result.get('clause_title') else ''
+                if result_clause_title:
+                    # Boost score if clause title matches
+                    if clause_name_lower in result_clause_title or result_clause_title in clause_name_lower:
+                        result['score'] = result.get('score', 0) * 1.5  # 50% boost
+                        logger.info(f"Boosted chunk with matching clause title: {result.get('clause_title')}")
+                    elif any(word in result_clause_title for word in clause_name_lower.split() if len(word) > 3):
+                        result['score'] = result.get('score', 0) * 1.2  # 20% boost
+        
+        # 3. Deduplicate by doc_id + page_num + clause_number, then take top chunks
         seen_chunks = {}
         for result in search_results:
             key = (result.get('doc_id'), result.get('page_num'), result.get('clause_number'))
@@ -59,12 +142,48 @@ class AnswerService:
             if key not in seen_chunks or result.get('score', 0) > seen_chunks[key].get('score', 0):
                 seen_chunks[key] = result
 
-        # Convert back to list and sort by score
+        # Convert back to list and sort
         deduplicated_results = list(seen_chunks.values())
-        deduplicated_results.sort(key=lambda x: x.get('score', 0), reverse=True)
-        top_chunks = deduplicated_results[:max_context_chunks]
+        
+        # Sort: prioritize chunks with matching clause titles, then clauses over metadata, then by score
+        if clause_name:
+            clause_name_lower = clause_name.lower()
+            deduplicated_results.sort(
+                key=lambda x: (
+                    (x.get('clause_title') or '').lower() == clause_name_lower,  # Exact match first
+                    clause_name_lower in ((x.get('clause_title') or '').lower()),  # Partial match
+                    x.get('clause_number') is not None,  # Clauses over metadata  
+                    x.get('score', 0)  # Then by score
+                ),
+                reverse=True
+            )
+        else:
+            # Sort: prioritize clauses over metadata, then by score
+            deduplicated_results.sort(
+                key=lambda x: (
+                    x.get('clause_number') is not None,  # Clauses over metadata  
+                    x.get('score', 0)  # Then by score
+                ),
+                reverse=True
+            )
+        
+        # Phase 6: Chunk Quality Assessment
+        # Score chunks for relevance, completeness, and answer presence
+        scored_chunks = self._assess_chunk_quality(deduplicated_results, question, logger)
+        
+        # Filter low-quality chunks and take top chunks
+        quality_threshold = float(os.getenv("CHUNK_QUALITY_THRESHOLD", "0.3"))
+        high_quality_chunks = [c for c in scored_chunks if c.get('quality_score', 0) >= quality_threshold]
+        
+        if high_quality_chunks:
+            top_chunks = high_quality_chunks[:max_context_chunks]
+            logger.info(f"After quality assessment: {len(top_chunks)} high-quality chunks (threshold: {quality_threshold})")
+        else:
+            # Fallback: use top chunks even if below threshold
+            top_chunks = scored_chunks[:max_context_chunks]
+            logger.warning(f"No chunks above quality threshold, using top {len(top_chunks)} chunks anyway")
 
-        logger.info(f"After deduplication: {len(top_chunks)} top chunks")
+        logger.info(f"After deduplication and quality assessment: {len(top_chunks)} top chunks")
         if top_chunks:
             logger.info(f"Top chunk details: doc_id={top_chunks[0].get('doc_id')}, page={top_chunks[0].get('page_num')}, clause={top_chunks[0].get('clause_number')}, has_text={bool(top_chunks[0].get('text'))}, text_length={len(top_chunks[0].get('text', ''))}")
 
@@ -83,26 +202,29 @@ class AnswerService:
         if context_chunks:
             logger.info(f"First context_chunk: doc_id={context_chunks[0].doc_id}, clause={context_chunks[0].clause_number}, page={context_chunks[0].page_num}, text_length={len(context_chunks[0].text)}")
 
-        # 4. Build citations - use ALL top chunks (not limited to 5 docs) since we deduplicated already
+        # 4. Build citations - only from chunks actually sent to LLM
         citations = []
+        # Map context_chunks back to original results for citation metadata
+        chunk_to_result = {}
         for result in top_chunks:
-            doc_id = result.get('doc_id')
-            page_num = result.get('page_num', 0)
-            clause_number = result.get('clause_number')
-            span_start = result.get('span_start', 0)
-            span_end = result.get('span_end', 0)
-            source_uri = result.get('source_uri', '')
-
-            citation = Citation(
-                doc_id=doc_id or '',
-                clause_number=clause_number,
-                page_num=page_num if page_num is not None else 0,
-                span_start=span_start if span_start is not None else 0,
-                span_end=span_end if span_end is not None else 0,
-                source_uri=source_uri or '',
-                excerpt=result.get('text', '')  # No truncation - use full text for excerpt
-            )
-            citations.append(citation)
+            key = (result.get('doc_id'), result.get('page_num'), result.get('clause_number'))
+            chunk_to_result[key] = result
+        
+        # Build citations only from context_chunks that were actually used
+        for chunk in context_chunks:
+            key = (chunk.doc_id, chunk.page_num, chunk.clause_number)
+            result = chunk_to_result.get(key)
+            if result:
+                citation = Citation(
+                    doc_id=chunk.doc_id or '',
+                    clause_number=chunk.clause_number,
+                    page_num=chunk.page_num if chunk.page_num is not None else 0,
+                    span_start=chunk.span_start if chunk.span_start is not None else 0,
+                    span_end=chunk.span_end if chunk.span_end is not None else 0,
+                    source_uri=chunk.source_uri or '',
+                    excerpt=chunk.text  # Use chunk text (already has full text)
+                )
+                citations.append(citation)
 
         logger.info(f"Built {len(citations)} citations from {len(top_chunks)} top chunks")
         for i, cit in enumerate(citations[:5]):
@@ -113,9 +235,12 @@ class AnswerService:
             self.llm_client = get_llm_client()
 
         logger.info(f"Calling LLM with {len(context_chunks)} context chunks and {len(citations)} citations")
+        
+        # Use original question for LLM (not transformed query which was only for retrieval)
+        original_question = query_info.get('original_query', question)
 
         answer = await self.llm_client.generate_answer(
-            query=question,
+            query=original_question,
             context_chunks=context_chunks,
             citations=citations
         )
@@ -171,7 +296,379 @@ class AnswerService:
             answer.text = answer.text.strip() if answer.text else ""
             logger.info(f"Answer after cleanup: {answer.text}")
 
+        # 8. Calculate confidence score for the answer
+        # For metadata answers, confidence is already set above
+        if not structured_answer:
+            # Use LLM-based evaluation for chunk-based answers
+            try:
+                eval_result = await answer_evaluator.evaluate_answer_quality(
+                    question=original_question,
+                    answer=answer.text,
+                    context_chunks=context_chunks
+                )
+                answer.confidence = eval_result.get("confidence", 0.7)
+                answer.evaluation_reasoning = eval_result.get("reasoning", "")
+                logger.info(f"Answer confidence: {answer.confidence:.2f} - {answer.evaluation_reasoning}")
+            except Exception as e:
+                logger.warning(f"Failed to evaluate answer confidence: {e}")
+                # Fallback confidence based on answer quality heuristics
+                if answer.text and len(answer.text) > 10 and "cannot find" not in answer.text.lower():
+                    answer.confidence = 0.7
+                    answer.evaluation_reasoning = "Confidence evaluation unavailable, using heuristic"
+                else:
+                    answer.confidence = 0.3
+                    answer.evaluation_reasoning = "Answer appears incomplete or missing"
+
         return answer
+
+    def _try_metadata_answer(self, question: str, document_id: str, logger) -> Optional[Answer]:
+        """
+        Try to answer question from structured metadata
+        
+        Args:
+            question: User question
+            document_id: Document UUID
+            logger: Logger instance
+            
+        Returns:
+            Answer if metadata can answer, None otherwise
+        """
+        # Normalize question first to fix typos like "effective data" -> "effective date"
+        from api.services.query_normalizer import query_normalizer
+        normalized_question = query_normalizer.normalize_query(question)
+        question_lower = normalized_question.lower()
+        
+        # Use more specific detection to avoid false matches
+        # Order matters: check most specific patterns first
+        # IMPORTANT: Check parties and clause questions BEFORE term to avoid false matches
+        
+        # Check for parties FIRST (before term which might match "party to")
+        if any(phrase in question_lower for phrase in ['who are the parties', 'parties to', 'party to the', 'between']):
+            logger.info("Detected parties question, trying metadata")
+            return metadata_service.answer_parties(document_id)
+        
+        # Check for clause questions - these should NOT use metadata, return None to fall back to chunks
+        if any(phrase in question_lower for phrase in ['what does the', 'clause specify', 'clause state', 'clause say']):
+            logger.info("Detected clause question, skipping metadata (will use chunk retrieval)")
+            return None
+        
+        # Check for mutual/unilateral (before "term" which might match "mutual term")
+        # Make sure it's actually asking about mutual/unilateral, not just containing the word
+        if any(phrase in question_lower for phrase in ['is the', 'is this', 'is it', 'type of', 'mutual or', 'unilateral or']) and \
+           any(term in question_lower for term in ['mutual', 'unilateral']):
+            logger.info("Detected mutual/unilateral question, trying metadata")
+            return metadata_service.answer_is_mutual(document_id)
+        
+        # Check for expiration/expiry date FIRST (before effective date, as "expire" might match "effective")
+        if any(term in question_lower for term in ['expire', 'expiration date', 'expiry date', 'expires', 'when does it expire']):
+            logger.info("Detected expiration_date question, trying metadata")
+            return metadata_service.answer_expiration_date(document_id)
+        
+        # Check for effective date
+        if any(term in question_lower for term in ['effective date', 'date of agreement', 'signed date', 'when was', 'when did']):
+            logger.info("Detected effective_date question, trying metadata")
+            return metadata_service.answer_effective_date(document_id)
+        
+        # Check for governing law
+        if any(term in question_lower for term in ['governing law', 'governing state', 'jurisdiction', 'law applies', 'what law']):
+            logger.info("Detected governing_law question, trying metadata")
+            return metadata_service.answer_governing_law(document_id)
+        
+        # Check for term (but exclude survival, mutual mentions, and clause questions)
+        # Only match if "term" or "duration" appears AND it's not a clause question
+        if not any(phrase in question_lower for phrase in ['clause', 'what does', 'specify', 'state', 'say']) and \
+           any(term in question_lower for term in ['term', 'duration', 'how long', 'expires', 'expiration', 'length']):
+            # Exclude survival-related questions
+            if 'survival' not in question_lower and 'after' not in question_lower:
+                # Exclude if asking about mutual term (should be handled by mutual check above)
+                if not ('mutual' in question_lower and 'term' in question_lower):
+                    logger.info("Detected term question, trying metadata")
+                    return metadata_service.answer_term(document_id, question)
+        
+        # Not a structured question or metadata not available
+        return None
+
+    async def _handle_cross_document_query(
+        self,
+        question: str,
+        filters: Optional[Dict],
+        max_context_chunks: int,
+        query_info: Dict,
+        logger
+    ) -> Answer:
+        """
+        Handle cross-document queries by retrieving from multiple documents and synthesizing
+        
+        Args:
+            question: User question
+            filters: Optional filters (may be None for cross-doc queries)
+            max_context_chunks: Maximum chunks per document
+            query_info: Query understanding information
+            logger: Logger instance
+            
+        Returns:
+            Answer with citations from multiple documents
+        """
+        # For cross-document queries, don't filter by document_id
+        # Retrieve chunks from multiple documents
+        retrieval_query = query_info['transformed_query']
+        
+        # Get more chunks for cross-document synthesis
+        search_results = self.search.hybrid_search(
+            query=retrieval_query,
+            k=max_context_chunks * 3,  # Get more chunks for cross-doc
+            filters=None  # No document filter for cross-doc queries
+        )
+        
+        logger.info(f"Cross-document search returned {len(search_results)} results from multiple documents")
+        
+        # Group results by document
+        docs_results = {}
+        for result in search_results:
+            doc_id = result.get('doc_id')
+            if doc_id not in docs_results:
+                docs_results[doc_id] = []
+            docs_results[doc_id].append(result)
+        
+        logger.info(f"Found chunks from {len(docs_results)} different documents")
+        
+        # Take top chunks from each document (balanced approach)
+        chunks_per_doc = max(1, max_context_chunks // len(docs_results)) if docs_results else max_context_chunks
+        top_chunks = []
+        for doc_id, doc_results in docs_results.items():
+            # Sort by score and take top chunks from this document
+            doc_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+            top_chunks.extend(doc_results[:chunks_per_doc])
+        
+        # Sort all chunks by score
+        top_chunks.sort(key=lambda x: x.get('score', 0), reverse=True)
+        top_chunks = top_chunks[:max_context_chunks]
+        
+        logger.info(f"Selected {len(top_chunks)} chunks from {len(docs_results)} documents for cross-document synthesis")
+        
+        # Convert to Chunk objects
+        context_chunks = self.search.get_chunks_for_answer(top_chunks)
+        
+        # Build citations
+        citations = []
+        for chunk in context_chunks:
+            citation = Citation(
+                doc_id=chunk.doc_id or '',
+                clause_number=chunk.clause_number,
+                page_num=chunk.page_num if chunk.page_num is not None else 0,
+                span_start=chunk.span_start if chunk.span_start is not None else 0,
+                span_end=chunk.span_end if chunk.span_end is not None else 0,
+                source_uri=chunk.source_uri or '',
+                excerpt=chunk.text
+            )
+            citations.append(citation)
+        
+        # Call LLM with cross-document prompt
+        if self.llm_client is None:
+            self.llm_client = get_llm_client()
+        
+        logger.info(f"Calling LLM for cross-document synthesis with {len(context_chunks)} chunks from {len(docs_results)} documents")
+        
+        answer = await self.llm_client.generate_answer(
+            query=question,  # Use original question
+            context_chunks=context_chunks,
+            citations=citations
+        )
+        
+        logger.info(f"Cross-document answer: {answer.text[:200]}")
+        return answer
+
+    def _assess_chunk_quality(self, chunks: List[Dict], question: str, logger) -> List[Dict]:
+        """
+        Assess chunk quality: relevance, completeness, answer presence
+        
+        Args:
+            chunks: List of chunk dicts
+            question: User question
+            logger: Logger instance
+            
+        Returns:
+            List of chunks with quality_score added
+        """
+        import re
+        question_lower = question.lower()
+        question_terms = set([t.lower() for t in question.split() if len(t) > 2])
+        
+        scored_chunks = []
+        for chunk in chunks:
+            chunk_text = chunk.get('text', '').lower()
+            score = chunk.get('score', 0)
+            
+            # Quality factors
+            relevance_score = 0.0
+            completeness_score = 0.0
+            answer_presence_score = 0.0
+            
+            # 1. Relevance: How many question terms appear in chunk?
+            if question_terms and chunk_text:
+                matching_terms = sum(1 for term in question_terms if term in chunk_text)
+                relevance_score = matching_terms / len(question_terms) if question_terms else 0.0
+            
+            # 2. Completeness: Is chunk substantial enough?
+            text_length = len(chunk.get('text', ''))
+            if text_length >= 100:
+                completeness_score = min(1.0, text_length / 500.0)  # Normalize to 500 chars
+            else:
+                completeness_score = text_length / 100.0  # Penalize very short chunks
+            
+            # 3. Answer presence: Does chunk contain answer indicators?
+            # Check for structured answer patterns
+            if any(term in question_lower for term in ['date', 'effective']):
+                # Look for date patterns
+                if re.search(r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b', chunk_text):
+                    answer_presence_score = 1.0
+            elif any(term in question_lower for term in ['governing law', 'jurisdiction']):
+                # Look for state names
+                if any(state in chunk_text for state in ['delaware', 'california', 'new york', 'texas', 'florida']):
+                    answer_presence_score = 0.8
+            elif any(term in question_lower for term in ['term', 'duration']):
+                # Look for duration patterns
+                if re.search(r'\b\d+\s+(years?|months?)\b', chunk_text):
+                    answer_presence_score = 0.8
+            elif any(term in question_lower for term in ['mutual', 'unilateral']):
+                # Look for type indicators
+                if 'mutual' in chunk_text or 'unilateral' in chunk_text:
+                    answer_presence_score = 0.8
+            elif any(term in question_lower for term in ['parties', 'party']):
+                # Look for company names
+                if any(term in chunk_text for term in ['inc', 'llc', 'corp', 'company', 'corporation']):
+                    answer_presence_score = 0.6
+            elif any(term in question_lower for term in ['clause', 'specify']):
+                # For clause questions, boost chunks that match the clause title
+                chunk_clause_title = chunk.get('clause_title', '').lower() if chunk.get('clause_title') else ''
+                if chunk_clause_title:
+                    # Extract clause name from question
+                    import re
+                    clause_match = re.search(r'the\s+([^c]+?)\s+clause', question_lower)
+                    if clause_match:
+                        question_clause = clause_match.group(1).strip().lower()
+                        # Check if chunk clause title matches or contains question clause
+                        if question_clause in chunk_clause_title or chunk_clause_title in question_clause:
+                            answer_presence_score = 1.0  # Strong match
+                        elif any(word in chunk_clause_title for word in question_clause.split() if len(word) > 3):
+                            answer_presence_score = 0.7  # Partial match
+                    # Also boost if chunk has clause_number (it's a clause chunk)
+                    if chunk.get('clause_number'):
+                        answer_presence_score = max(answer_presence_score, 0.5)
+            
+            # Combine scores: weighted average
+            # Original retrieval score (40%), relevance (30%), completeness (20%), answer presence (10%)
+            quality_score = (
+                0.4 * min(1.0, score) +  # Normalize score to [0, 1]
+                0.3 * relevance_score +
+                0.2 * completeness_score +
+                0.1 * answer_presence_score
+            )
+            
+            chunk['quality_score'] = quality_score
+            chunk['relevance_score'] = relevance_score
+            chunk['completeness_score'] = completeness_score
+            chunk['answer_presence_score'] = answer_presence_score
+            scored_chunks.append(chunk)
+        
+        # Sort by quality score (descending)
+        scored_chunks.sort(key=lambda x: x.get('quality_score', 0), reverse=True)
+        
+        if scored_chunks:
+            logger.info(f"Chunk quality assessment: top chunk quality={scored_chunks[0].get('quality_score', 0):.3f}, "
+                       f"relevance={scored_chunks[0].get('relevance_score', 0):.3f}, "
+                       f"completeness={scored_chunks[0].get('completeness_score', 0):.3f}")
+        
+        return scored_chunks
+
+    def _single_query_search(
+        self,
+        question: str,
+        filters: Optional[Dict],
+        max_context_chunks: int,
+        logger
+    ) -> List[Dict]:
+        """Single query strategy: one hybrid search with larger k"""
+        search_results = self.search.hybrid_search(
+            query=question,
+            k=max_context_chunks * 5,  # Get more candidates for better context
+            filters=filters
+        )
+        logger.info(f"Single query strategy: retrieved {len(search_results)} results")
+        return search_results
+
+    def _two_query_search(
+        self,
+        question: str,
+        filters: Optional[Dict],
+        max_context_chunks: int,
+        logger
+    ) -> List[Dict]:
+        """Two-query strategy: find document, then find answer chunks"""
+        # Query 1: Full question (finds relevant document)
+        doc_results = self.search.hybrid_search(
+            query=question,
+            k=max_context_chunks * 2,
+            filters=filters
+        )
+        
+        # Identify top document from first query
+        top_doc_id = None
+        if doc_results:
+            top_doc_id = doc_results[0].get('doc_id')
+            logger.info(f"Top document from query: {top_doc_id[:8]}...")
+        
+        # Query 2: Extract answer topic and search for answer chunks FROM TOP DOCUMENT ONLY
+        answer_topic = self._extract_answer_topic(question)
+        if answer_topic and top_doc_id:
+            logger.info(f"Answer topic: {answer_topic}, searching in top document {top_doc_id[:8]}...")
+            # Search for answer topic (finds chunks across all docs)
+            answer_results = self.search.hybrid_search(
+                query=answer_topic,
+                k=max_context_chunks * 3,  # Get more to ensure we find chunks from top doc
+                filters=filters
+            )
+            # Filter to only chunks from top document
+            top_doc_answer_chunks = [r for r in answer_results if r.get('doc_id') == top_doc_id]
+            top_doc_doc_chunks = [r for r in doc_results if r.get('doc_id') == top_doc_id]
+            logger.info(f"Found {len(top_doc_answer_chunks)} answer chunks and {len(top_doc_doc_chunks)} doc chunks in top document")
+            
+            # Combine: answer chunks from top doc + document chunks from top doc only
+            # Deduplicate by chunk_id
+            combined = {}
+            for r in top_doc_answer_chunks + top_doc_doc_chunks:
+                chunk_id = r.get('chunk_id')
+                if chunk_id and (chunk_id not in combined or r.get('score', 0) > combined[chunk_id].get('score', 0)):
+                    combined[chunk_id] = r
+            
+            search_results = list(combined.values())
+            search_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        else:
+            # Fallback to single query
+            search_results = doc_results
+        
+        logger.info(f"Two query strategy: retrieved {len(search_results)} results")
+        return search_results
+
+    def _extract_answer_topic(self, question: str) -> str:
+        """Extract the answer topic from question (e.g., 'governing law', 'term', 'effective date')"""
+        question_lower = question.lower()
+        
+        # Map question patterns to answer topics
+        if any(term in question_lower for term in ['governing law', 'governing state', 'jurisdiction', 'law applies']):
+            return "governing law"
+        elif any(term in question_lower for term in ['term', 'duration', 'how long', 'expires', 'expiration']):
+            return "term duration"
+        elif any(term in question_lower for term in ['effective date', 'date of agreement', 'signed date']):
+            return "effective date"
+        elif any(term in question_lower for term in ['mutual', 'unilateral']):
+            return "mutual unilateral"
+        elif any(term in question_lower for term in ['parties', 'party to', 'who are']):
+            return "parties"
+        elif any(term in question_lower for term in ['confidential', 'confidentiality']):
+            return "confidentiality"
+        
+        return None
 
     def _extract_structured_answer(self, question: str, answer_text: str) -> str:
         """

@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 from api.models.responses import DocumentResponse, DocumentListResponse
 from api.services.db_service import db_service
-from api.services.storage_service import storage_service
+from api.services.service_registry import get_storage_service
 from api.db import get_db_session
 from io import BytesIO
 
@@ -154,7 +154,8 @@ async def get_document_file(document_id: str):
             object_name = f"{str(doc.id)}/{doc.filename}"
 
         try:
-            file_data = storage_service.download_file("nda-raw", object_name)
+            storage = get_storage_service()
+            file_data = storage.download_file("nda-raw", object_name)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to retrieve file: {str(e)}")
 
@@ -216,9 +217,22 @@ async def delete_document(document_id: str):
     """
     Delete a document and all associated data
     """
+    from uuid import UUID
+
     from ingest.indexer_opensearch import opensearch_indexer
     from ingest.indexer_qdrant import qdrant_indexer
-    from api.db.schema import Document, DocumentChunk, Party, DocumentMetadata
+    from api.db.schema import (
+        Document,
+        DocumentChunk,
+        Party,
+        DocumentMetadata,
+        CompetencyQuestion,
+        QuestionGroundTruth,
+        TestRun,
+        TestFeedback,
+        NDARecord,
+        NDAEvent,
+    )
 
     db = get_db_session()
     try:
@@ -302,24 +316,55 @@ async def delete_document(document_id: str):
                     bucket = "nda-raw"
                     object_name = f"{document_id}/{filename}"
 
-                storage_service.delete_file(bucket, object_name)
+                storage = get_storage_service()
+                storage.delete_file(bucket, object_name)
             except Exception as e:
                 print(f"Warning: Failed to delete file from storage: {e}")
 
         # Delete processed file from storage
         try:
-            storage_service.delete_file("nda-processed", f"{document_id}/nda_record.json")
+            storage = get_storage_service()
+            storage.delete_file("nda-processed", f"{document_id}/nda_record.json")
         except Exception as e:
             # Processed file might not exist, that's okay
             pass
 
         # Delete from database - delete related records first due to foreign key constraints
         # Delete chunks
-        db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+        db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete(synchronize_session=False)
         # Delete parties
-        db.query(Party).filter(Party.document_id == document_id).delete()
+        db.query(Party).filter(Party.document_id == document_id).delete(synchronize_session=False)
         # Delete metadata
-        db.query(DocumentMetadata).filter(DocumentMetadata.document_id == document_id).delete()
+        db.query(DocumentMetadata).filter(DocumentMetadata.document_id == document_id).delete(synchronize_session=False)
+
+        # Delete competency/testing artifacts referencing this document
+        question_ids = [
+            q.id for q in db.query(CompetencyQuestion.id).filter(CompetencyQuestion.document_id == document_id)
+        ]
+        if question_ids:
+            run_ids = [
+                r.id for r in db.query(TestRun.id).filter(TestRun.question_id.in_(question_ids))
+            ]
+            if run_ids:
+                db.query(TestFeedback).filter(TestFeedback.test_run_id.in_(run_ids)).delete(synchronize_session=False)
+            db.query(TestRun).filter(TestRun.question_id.in_(question_ids)).delete(synchronize_session=False)
+            db.query(QuestionGroundTruth).filter(QuestionGroundTruth.question_id.in_(question_ids)).delete(synchronize_session=False)
+            db.query(CompetencyQuestion).filter(CompetencyQuestion.id.in_(question_ids)).delete(synchronize_session=False)
+
+        # Delete NDA registry records associated with this document
+        try:
+            doc_uuid = UUID(str(document_id))
+        except ValueError:
+            doc_uuid = None
+        if doc_uuid:
+            record_ids = [
+                rec.id
+                for rec in db.query(NDARecord.id).filter(NDARecord.document_id == doc_uuid)
+            ]
+            if record_ids:
+                db.query(NDAEvent).filter(NDAEvent.nda_id.in_(record_ids)).delete(synchronize_session=False)
+                db.query(NDARecord).filter(NDARecord.id.in_(record_ids)).delete(synchronize_session=False)
+
         # Finally delete the document
         db.delete(doc)
         db.commit()

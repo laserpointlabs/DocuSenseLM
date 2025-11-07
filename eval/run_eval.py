@@ -14,7 +14,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.services.search_service import search_service
+from api.services.search_service import get_search_service_instance
 from eval.metrics import EvaluationMetrics
 
 # Load QA pairs
@@ -60,7 +60,8 @@ def run_evaluation(
         # Run search
         start_time = time.time()
         try:
-            results = search_service.hybrid_search(query=question, k=k)
+            service = get_search_service_instance()
+            results = service.hybrid_search(query=question, k=k)
             latency_ms = (time.time() - start_time) * 1000
         except Exception as e:
             print(f"Error processing question {question_id}: {e}")

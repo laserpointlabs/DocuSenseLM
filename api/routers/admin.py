@@ -56,7 +56,7 @@ async def reindex_document(document_id: str):
     """
     from ingest.worker import worker
     from api.db.schema import Document, DocumentStatus
-    from api.services.storage_service import storage_service
+    from api.services.service_registry import get_storage_service
     import tempfile
     import os
 
@@ -80,7 +80,8 @@ async def reindex_document(document_id: str):
                 bucket = "nda-raw"
                 object_name = f"{document_id}/{doc.filename}"
 
-            file_data = storage_service.download_file(bucket, object_name)
+            storage = get_storage_service()
+            file_data = storage.download_file(bucket, object_name)
 
             # Save to temp file
             suffix = os.path.splitext(doc.filename)[1]

@@ -19,6 +19,14 @@ export default function DocumentPage() {
     }
   }, [documentId]);
 
+  // Log query params for debugging
+  useEffect(() => {
+    const page = searchParams.get('page');
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
+    console.log('Document page query params:', { page, start, end });
+  }, [searchParams]);
+
   const loadDocument = async () => {
     setLoading(true);
     setError(null);
@@ -53,9 +61,11 @@ export default function DocumentPage() {
     );
   }
 
-  const highlightPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : undefined;
-  const highlightStart = searchParams.get('start') ? parseInt(searchParams.get('start')!) : undefined;
-  const highlightEnd = searchParams.get('end') ? parseInt(searchParams.get('end')!) : undefined;
+    const highlightPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : undefined;
+    const highlightStart = searchParams.get('start') ? parseInt(searchParams.get('start')!) : undefined;
+    const highlightEnd = searchParams.get('end') ? parseInt(searchParams.get('end')!) : undefined;
+    const highlightText = searchParams.get('text') || undefined;
+    const highlightClause = searchParams.get('clause') || undefined; // Get clause number from URL
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -66,12 +76,14 @@ export default function DocumentPage() {
         </p>
       </div>
 
-      <DocumentViewer
-        documentId={documentId}
-        highlightPage={highlightPage}
-        highlightStart={highlightStart}
-        highlightEnd={highlightEnd}
-      />
+        <DocumentViewer
+          documentId={documentId}
+          highlightPage={highlightPage}
+          highlightStart={highlightStart}
+          highlightEnd={highlightEnd}
+          highlightText={highlightText}
+          highlightClause={highlightClause}
+        />
     </div>
   );
 }

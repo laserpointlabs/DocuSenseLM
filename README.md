@@ -9,6 +9,7 @@ A single-tenant NDA Dashboard for ingesting, searching, and analyzing Non-Disclo
 - **Clause-Level Retrieval**: Chunk documents at clause level with precise citations
 - **Competency Question System**: Build and test questions to validate system effectiveness
 - **Ontology-Driven**: Structured knowledge model for NDA domain concepts
+- **Deterministic NDA Registry**: Track signed agreements, run lifecycle checks, and emit expiring/expired events
 - **Local-First**: All services run locally via Docker Compose (no AWS required for MVP)
 
 ## Architecture
@@ -64,6 +65,11 @@ This starts:
 - FastAPI API (port 8000)
 - Next.js UI (port 3000)
 
+> **Note on model downloads**
+> The first ingestion run downloads the sentence-transformers model (~438 MB).
+> A shared cache is mounted at `./.cache/huggingface`, so subsequent rebuilds reuse the model.
+> Keep this folder if you want faster restarts.
+
 ### 3. Initialize Database
 
 ```bash
@@ -107,6 +113,12 @@ USE_TEXTRACT=false                  # true for AWS Textract, false for Tesseract
 2. Click "Choose File" and select a PDF or DOCX file
 3. Upload starts processing in the background
 
+> ℹ️ **LLM Refinement (optional)**
+> By default the pipeline relies on the heuristic extractor. Set `ENABLE_LLM_REFINEMENT=true`
+> (and expose `LLM_ENDPOINT`, e.g. `http://host.docker.internal:11434`) if you want a local
+> Ollama model to fill in missing party addresses or other metadata. Ensure Ollama is started with
+> `OLLAMA_HOST=0.0.0.0` (listening on all interfaces) so the Docker containers can reach it.
+
 ### Search Documents
 
 1. Go to Search page: http://localhost:3000/search
@@ -119,12 +131,45 @@ USE_TEXTRACT=false                  # true for AWS Textract, false for Tesseract
 2. Enter your question
 3. Get AI-generated answer with citations
 
+### Reset & Reseed the Stack
+
+When you need a clean slate (fresh databases, storage, and sample docs):
+
+```bash
+python scripts/reset_environment.py
+```
+
+The script tears everything down, recreates containers, runs migrations, and re-ingests the sample PDFs from `data/`. Use `--skip-build` to reuse existing images, `--docs-dir` to point at a different corpus, and `--load-competency` to auto-populate competency questions.
+
+### Faster Docker Builds
+
+BuildKit caching is enabled in the Dockerfiles. For noticeably faster rebuilds (especially after small code changes), use:
+
+```bash
+DOCKER_BUILDKIT=1 docker compose build --parallel
+```
+
+This reuses cached apt/pip/npm layers across services instead of reinstalling every time.
+
 ### Competency Testing
 
 1. Go to Competency → Builder: Create test questions
 2. Go to Competency → Tester: Run tests and view metrics
 
 ## API Examples
+
+### Registry
+
+```bash
+# Check if an NDA is active for a counterparty
+curl "http://localhost:8000/registry/check?domain=acme.com"
+
+# Search the structured NDA registry
+curl "http://localhost:8000/registry/search?query=Delaware"
+
+# List NDAs expiring in the next 60 days
+curl "http://localhost:8000/registry/expiring?window_days=60"
+```
 
 ### Search
 
@@ -163,11 +208,23 @@ Run the evaluation harness:
 docker-compose exec api python eval/run_eval.py --verbose
 ```
 
+Compare reranker strategies (baseline vs RRF) and write summary metrics:
+
+```bash
+docker-compose exec api python eval/compare_rag.py --output /tmp/rerank_summary.json
+```
+
 This runs 30 QA pairs and calculates:
 - Hit Rate @ 10
 - Mean Reciprocal Rank (MRR)
 - Precision/Recall @ 10
 - Latency percentiles (P50, P95, P99)
+
+Example (write metrics to JSON for benchmarking):
+
+```bash
+docker-compose exec api python eval/run_eval.py --k 20 --output /tmp/rag_eval.json
+```
 
 ## Scripts
 
@@ -193,6 +250,16 @@ python scripts/reindex.py --document-id <uuid>
 python scripts/seed_data.py --docs-dir docs
 ```
 
+### RAG Audit & Retrieval Benchmarks
+
+```bash
+# Summarize chunk/metadata statistics stored in the DB
+python scripts/rag_audit.py --output /tmp/rag_stats.json
+
+# Compare reranker strategies (e.g., none vs RRF) and export metrics
+docker-compose exec api python eval/compare_rag.py --output /tmp/rerank_summary.json
+```
+
 ## Development
 
 ### Running Locally (without Docker)
@@ -214,6 +281,11 @@ python scripts/seed_data.py --docs-dir docs
    cd ui
    npm install
    npm run dev
+   ```
+
+4. **Run Tests**:
+   ```bash
+   pytest
    ```
 
 ## Project Structure

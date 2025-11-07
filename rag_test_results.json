@@ -1,0 +1,32 @@
+[
+  {
+    "question": "What is the governing state of Vallen Distribution, Inc.?",
+    "answer": "Delaware.",
+    "expected_answer": "Delaware",
+    "answer_correct": true,
+    "correct_doc_found": true,
+    "chunks_with_answer": 1,
+    "chunks_without_answer": 4,
+    "total_chunks": 5
+  },
+  {
+    "question": "What is the governing state of Vallen?",
+    "answer": "Delaware.",
+    "expected_answer": "Delaware",
+    "answer_correct": true,
+    "correct_doc_found": true,
+    "chunks_with_answer": 1,
+    "chunks_without_answer": 3,
+    "total_chunks": 4
+  },
+  {
+    "question": "What is the term of the NDA for KGS Fire & Security B.V.?",
+    "answer": "Three years.",
+    "expected_answer": "3 years",
+    "answer_correct": true,
+    "correct_doc_found": true,
+    "chunks_with_answer": 1,
+    "chunks_without_answer": 3,
+    "total_chunks": 4
+  }
+]

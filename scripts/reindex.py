@@ -14,7 +14,6 @@ from api.db.schema import Document, DocumentChunk, DocumentStatus
 from ingest.indexer_opensearch import opensearch_indexer
 from ingest.indexer_qdrant import qdrant_indexer
 from ingest.embedder import get_embedder
-from api.services.storage_service import storage_service
 
 
 def reindex_document(document_id: str):

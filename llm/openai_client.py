@@ -5,6 +5,7 @@ import os
 from typing import List, Optional
 from openai import AsyncOpenAI
 from .llm_client import LLMClient, Chunk, Citation, Answer
+from .prompts import build_system_prompt, build_user_prompt, build_cross_document_prompt, detect_question_type
 
 
 class OpenAIClient(LLMClient):
@@ -16,14 +17,16 @@ class OpenAIClient(LLMClient):
 
         Args:
             api_key: OpenAI API key (default from env)
-            model: Model name (default "gpt-3.5-turbo")
+            model: Model name (must be provided or set via OPENAI_MODEL env var)
         """
         api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
 
         self.client = AsyncOpenAI(api_key=api_key)
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        self.model = model or os.getenv("OPENAI_MODEL")
+        if not self.model:
+            raise ValueError("OPENAI_MODEL environment variable must be set")
 
     async def generate_answer(
         self,
@@ -33,94 +36,45 @@ class OpenAIClient(LLMClient):
     ) -> Answer:
         """Generate answer using OpenAI"""
 
-        # Build context from chunks
-        context_text = "\n\n".join([
-            f"[Document {chunk.doc_id}, Clause {chunk.clause_number}, Page {chunk.page_num}]\n{chunk.text}"
-            for chunk in context_chunks
-        ])
-
-        # Log context for debugging
+        # Use centralized prompts from prompts.py
         import logging
         logger = logging.getLogger(__name__)
+        
         logger.info(f"=== OpenAI Answer Generation ===")
         logger.info(f"Query: {query}")
         logger.info(f"Number of context chunks: {len(context_chunks)}")
-        logger.info(f"Context text length: {len(context_text)} characters")
         logger.info(f"Number of citations: {len(citations)}")
 
         # Log each chunk individually
         if context_chunks:
             logger.info(f"=== Context Chunks Details ===")
-            for i, chunk in enumerate(context_chunks):
+            for i, chunk in enumerate(context_chunks[:5]):  # Log first 5 chunks
                 logger.info(f"Chunk {i+1}: doc_id={chunk.doc_id[:8]}..., clause={chunk.clause_number}, page={chunk.page_num}, text_length={len(chunk.text)}")
-                logger.info(f"  Chunk {i+1} text (full): {chunk.text}")
+                logger.info(f"  Text preview: {chunk.text[:200]}...")
+            if len(context_chunks) > 5:
+                logger.info(f"... and {len(context_chunks) - 5} more chunks")
+            logger.info(f"=== End Context Chunks ===")
         else:
             logger.warning("⚠️  NO CONTEXT CHUNKS PROVIDED!")
 
-        logger.info(f"=== Full Context Text (for prompt) ===")
-        logger.info(f"Context text length: {len(context_text)} characters")
-        logger.info(f"Context text:\n{context_text}")
-        logger.info(f"=== End Context Text ===")
+        # Detect question type and build appropriate prompts
+        question_type = detect_question_type(query)
+        logger.info(f"Detected question type: {question_type}")
+        
+        system_prompt = build_system_prompt()
+        
+        if question_type == "cross_document":
+            user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+        else:
+            user_prompt = build_user_prompt(query, context_chunks, citations)
+        
+        logger.info(f"=== System Prompt ===")
+        logger.info(f"{system_prompt[:500]}...")  # Log first 500 chars
+        logger.info(f"=== End System Prompt ===")
 
-        # Also log the user prompt that will be sent
-        user_prompt = f"""Based on the following context from NDA documents, answer this question:
-
-{context_text}
-
-Question: {query}
-
-IMPORTANT: Only use information from the context provided above. If the context does not contain the answer, respond with "I cannot find this information in the provided documents".
-
-Return your answer in the format shown in the system instructions. Answer ONLY (no explanations, no context, no additional text):"""
-
-        logger.info(f"=== User Prompt (what LLM will see) ===")
-        logger.info(f"{user_prompt}")
+        logger.info(f"=== User Prompt ===")
+        logger.info(f"{user_prompt[:500]}...")  # Log first 500 chars
         logger.info(f"=== End User Prompt ===")
-
-        system_prompt = """You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
-Your answers will be displayed directly to users in the Ask Question tab. Provide clear, concise responses in the exact formats specified below.
-
-CRITICAL FORMAT RULES - Return answers EXACTLY like these examples:
-
-For DATE questions:
-  Question: "What is the effective date of the NDA?"
-  CORRECT Answer: "September 5, 2025"
-  WRONG Answer: "The effective date of the NDA is September 5, 2025. This date was specified..."
-
-For DURATION/TERM questions:
-  Question: "What is the term of the NDA?"
-  CORRECT Answer: "3 years" or "36 months"
-  WRONG Answer: "The term is three years from the effective date..."
-
-For GOVERNING LAW questions:
-  Question: "What is the governing law for the NDA?"
-  CORRECT Answer: "State of Delaware"
-  WRONG Answer: "The governing law clause specifies that the laws of the State of Delaware..."
-
-For MUTUAL/UNILATERAL questions:
-  Question: "Is the NDA mutual or unilateral?"
-  CORRECT Answer: "mutual"
-  WRONG Answer: "This is a mutual agreement, meaning both parties..."
-
-For PARTY NAME questions:
-  Question: "Who are the parties to the NDA?"
-  CORRECT Answer: "Norris Cylinder Company and Acme Corporation"
-  WRONG Answer: "The parties include Norris Cylinder Company and Acme Corporation as mentioned..."
-
-For GENERAL questions (if not covered above):
-  Provide a brief, direct answer (1-2 sentences maximum). Do NOT repeat the question or add unnecessary context.
-
-CRITICAL: If the context provided does NOT contain the information needed to answer the question, you MUST respond with "I cannot find this information in the provided documents" or "This information is not available in the provided context". Do NOT make up or guess answers."""
-
-        user_prompt = f"""Based on the following context from NDA documents, answer this question:
-
-{context_text}
-
-Question: {query}
-
-IMPORTANT: Only use information from the context provided above. If the context does not contain the answer, respond with "I cannot find this information in the provided documents".
-
-Return your answer in the format shown in the system instructions. Answer ONLY (no explanations, no context, no additional text):"""
 
         try:
             response = await self.client.chat.completions.create(

@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.db import get_db_session
 from api.db.schema import Document, DocumentChunk, Party, DocumentMetadata
-from api.services.storage_service import storage_service
+from api.services.service_registry import get_storage_service
 
 def clean_all_documents():
     """Delete all documents from database and storage"""
@@ -38,7 +38,8 @@ def clean_all_documents():
 
                     # Try to delete from storage
                     try:
-                        storage_service.delete_file(bucket, object_name)
+                        storage = get_storage_service()
+                        storage.delete_file(bucket, object_name)
                         print(f"  - Deleted from storage: {bucket}/{object_name}")
                     except Exception as e:
                         print(f"  - Warning: Could not delete from storage: {e}")

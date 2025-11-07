@@ -13,7 +13,7 @@ from api.db import get_db_session
 from api.db.schema import Document, DocumentMetadata, DocumentStatus
 from ingest.clause_extractor import clause_extractor
 from ingest.parser import DocumentParser
-from api.services.storage_service import storage_service
+from api.services.service_registry import get_storage_service
 
 
 def re_extract_metadata():
@@ -40,7 +40,8 @@ def re_extract_metadata():
                 bucket = parts[0]
                 object_name = parts[1]
 
-                file_data = storage_service.download_file(bucket, object_name)
+                storage = get_storage_service()
+                file_data = storage.download_file(bucket, object_name)
 
                 # Save to temp file
                 suffix = os.path.splitext(doc.filename)[1]

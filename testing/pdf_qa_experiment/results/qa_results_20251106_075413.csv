@@ -1,0 +1,23 @@
+question_id,question,category,expected_value,answer,correct,match_score,duration,confidence,evaluation_reason
+q1,What is the effective date of this NDA?,metadata,2025-06-16,"The effective date of this NDA is June 16, 2025.",False,0.0,3.61245059967041,4.8,Date does not match
+q2,What is the expiration date of this NDA?,metadata,2028-06-16,"The expiration date of this NDA is three (3) years after the date it was entered into, which is June 16, 2025. Therefore, the expiration date would be:
+
+June 16, 2028",False,0.0,0.8350260257720947,16.6,Date does not match
+q3,Who are the parties to this NDA?,parties,"['Fanuc America Corporation', 'Kidde-Fenwal, LLC']","The parties to this Non-Disclosure Agreement (NDA) are:
+
+1. Fanuc America Corporation
+2. Kidde-Fenwal, LLC",True,1.0,0.6529617309570312,10.6,Found 2/2 parties
+q4,Is this a mutual or unilateral NDA?,metadata,True,"This is a mutual NDA. The agreement states that both parties, Fanuc America Corporation and Kidde-Fenwal, LLC, are entering into it together, indicating a reciprocal relationship where both parties ha",True,1.0,0.8321366310119629,25.1,Correctly identified as mutual
+q5,What is the term or duration of this NDA in months?,term,36,"The term of this NDA is 3 years, which is equivalent to 36 months (not just 3 months). This is stated in provision 8 of the agreement, which states that ""This Agreement and the confidentiality obligat",False,0.0,1.043799877166748,30.2,Number mismatch: 3 vs 36
+q6,What is the governing law for this NDA?,metadata,None,"The governing law for this NDA is the State of California, with exceptions of conflicts of law principles excluded.",False,0.0,0.542839527130127,11.5,Should indicate not found
+q7,What is the address of Fanuc America Corporation?,parties,"3900 West Hamlin Road, Rochester Hills, MI 48309-3253, USA","The address of Fanuc America Corporation is:
+
+3900 West Hamlin Road
+Rochester Hills, MI 48309-3253
+USA",False,0.0,0.6289138793945312,10.2,Value not found
+q8,"What is the address of Kidde-Fenwal, LLC?",parties,"400 Main Street, Ashland, MA 01721, USA","The address of Kidde-Fenwal, LLC is:
+
+400 Main Street,
+Ashland, MA 01721, USA",False,0.0,0.6136519908905029,7.7,Value not found
+q9,What is the confidentiality period or term of this agreement?,term,36,"The confidentiality period of this agreement is 3 years from the date of execution, provided that any obligation of confidentiality with respect to trade secret information will survive as long as it ",False,0.0,0.7222745418548584,21.9,Number mismatch: 3 vs 36
+q10,When does this NDA expire?,metadata,2028-06-16,"This NDA expires 3 years after the date of execution, specifically on June 20, 2028. However, confidentiality obligations related to trade secrets will survive for as long as that information remains ",False,0.0,0.8260786533355713,23.2,Date does not match

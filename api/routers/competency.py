@@ -8,10 +8,15 @@ from api.models.requests import (
 )
 from api.services.db_service import db_service
 from api.services.answer_service import answer_service
+from api.services.answer_evaluator import answer_evaluator
 from api.db import get_db_session
 from api.db.schema import CompetencyQuestion, TestRun, TestFeedback
 from datetime import datetime
 import uuid
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/competency", tags=["competency"])
 
@@ -195,24 +200,91 @@ async def run_test(request: TestRunRequest):
 
         response_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-        # Calculate accuracy by comparing to expected answer
+        # Calculate accuracy using LLM-based evaluation
         accuracy_score = None
-        if question.expected_answer_text:
-            expected = question.expected_answer_text.lower().strip()
-            actual = answer_obj.text.lower().strip() if answer_obj.text else ""
+        llm_confidence = None
+        llm_correctness = None
+        evaluation_reasoning = None
+        
+        if question.expected_answer_text and answer_obj.text:
+            # Use LLM-based evaluator for semantic comparison
+            try:
+                # Build context chunks from citations for better evaluation
+                context_chunks = []
+                if answer_obj.citations:
+                    context_chunks = [
+                        {
+                            "text": c.excerpt or "",
+                            "doc_id": c.doc_id,
+                            "clause_number": c.clause_number,
+                            "page_num": c.page_num
+                        }
+                        for c in answer_obj.citations
+                    ]
+                
+                eval_result = await answer_evaluator.evaluate_answer(
+                    question=question.question_text,
+                    actual_answer=answer_obj.text,
+                    expected_answer=question.expected_answer_text,
+                    context_chunks=context_chunks
+                )
+                
+                llm_confidence = eval_result.get("confidence", 0.0)
+                llm_correctness = eval_result.get("correctness", False)
+                evaluation_reasoning = eval_result.get("reasoning", "")
+                
+                # Use LLM confidence as accuracy score
+                accuracy_score = llm_confidence
+                
+            except Exception as e:
+                logger.error(f"Error evaluating answer with LLM: {e}")
+                # Fallback to simple string matching if LLM evaluation fails
+                expected = question.expected_answer_text.lower().strip()
+                actual = answer_obj.text.lower().strip()
 
-            # Simple similarity check
-            if expected in actual or actual in expected:
-                accuracy_score = 0.9
-            elif expected and actual:
-                # Calculate word overlap
-                expected_words = set(expected.split())
-                actual_words = set(actual.split())
-                if expected_words and actual_words:
-                    overlap = len(expected_words & actual_words)
-                    accuracy_score = overlap / max(len(expected_words), len(actual_words))
+                if expected in actual or actual in expected:
+                    accuracy_score = 0.9
+                elif expected and actual:
+                    expected_words = set(expected.split())
+                    actual_words = set(actual.split())
+                    if expected_words and actual_words:
+                        overlap = len(expected_words & actual_words)
+                        accuracy_score = overlap / max(len(expected_words), len(actual_words))
+        elif answer_obj.text:
+            # No expected answer, evaluate quality only
+            try:
+                context_chunks = []
+                if answer_obj.citations:
+                    context_chunks = [
+                        {
+                            "text": c.excerpt or "",
+                            "doc_id": c.doc_id,
+                            "clause_number": c.clause_number,
+                            "page_num": c.page_num
+                        }
+                        for c in answer_obj.citations
+                    ]
+                
+                eval_result = await answer_evaluator.evaluate_answer_quality(
+                    question=question.question_text,
+                    answer=answer_obj.text,
+                    context_chunks=context_chunks
+                )
+                
+                llm_confidence = eval_result.get("confidence", 0.0)
+                llm_correctness = eval_result.get("correctness", False)
+                evaluation_reasoning = eval_result.get("reasoning", "")
+                accuracy_score = llm_confidence
+                
+            except Exception as e:
+                logger.error(f"Error evaluating answer quality with LLM: {e}")
+                # Fallback: basic heuristic
+                if answer_obj.text and len(answer_obj.text) > 10 and "cannot find" not in answer_obj.text.lower():
+                    accuracy_score = 0.6
+                else:
+                    accuracy_score = 0.2
 
-        # Store test run with full citations
+        # Store test run with full citations and model configuration
         citations_data = [
             {
                 "doc_id": c.doc_id,
@@ -225,6 +297,17 @@ async def run_test(request: TestRunRequest):
             }
             for c in answer_obj.citations
         ]
+
+        # Store model configuration for debugging
+        model_config = {
+            "llm_provider": os.getenv("LLM_PROVIDER", "unknown"),
+            "llm_model": os.getenv("OLLAMA_MODEL") or os.getenv("OPENAI_MODEL", "unknown"),
+            "context_length": os.getenv("OLLAMA_CONTEXT_LENGTH", "unknown"),
+            "evaluation_method": "llm_based" if llm_confidence is not None else "fallback",
+            "llm_confidence": llm_confidence,
+            "llm_correctness": llm_correctness,
+            "evaluation_reasoning": evaluation_reasoning
+        }
 
         test_run = TestRun(
             question_id=request.question_id,
@@ -243,6 +326,10 @@ async def run_test(request: TestRunRequest):
             "question_id": request.question_id,
             "answer": answer_obj.text,
             "accuracy_score": accuracy_score,
+            "llm_confidence": llm_confidence,
+            "llm_correctness": llm_correctness,
+            "evaluation_reasoning": evaluation_reasoning,
+            "model_config": model_config,
             "citations": [
                 {
                     "doc_id": c.doc_id,
@@ -436,20 +523,89 @@ async def run_all_tests():
 
                 response_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-                # Calculate accuracy score
+                # Calculate accuracy using LLM-based evaluation
                 accuracy_score = None
-                if question.expected_answer_text:
-                    expected = question.expected_answer_text.lower().strip()
-                    actual = answer_obj.text.lower().strip() if answer_obj.text else ""
+                llm_confidence = None
+                llm_correctness = None
+                evaluation_reasoning = None
+                
+                if question.expected_answer_text and answer_obj.text:
+                    # Use LLM-based evaluator for semantic comparison
+                    try:
+                        # Build context chunks from citations for better evaluation
+                        context_chunks = []
+                        if answer_obj.citations:
+                            context_chunks = [
+                                {
+                                    "text": c.excerpt or "",
+                                    "doc_id": c.doc_id,
+                                    "clause_number": c.clause_number,
+                                    "page_num": c.page_num
+                                }
+                                for c in answer_obj.citations
+                            ]
+                        
+                        eval_result = await answer_evaluator.evaluate_answer(
+                            question=question.question_text,
+                            actual_answer=answer_obj.text,
+                            expected_answer=question.expected_answer_text,
+                            context_chunks=context_chunks
+                        )
+                        
+                        llm_confidence = eval_result.get("confidence", 0.0)
+                        llm_correctness = eval_result.get("correctness", False)
+                        evaluation_reasoning = eval_result.get("reasoning", "")
+                        
+                        # Use LLM confidence as accuracy score
+                        accuracy_score = llm_confidence
+                        
+                    except Exception as e:
+                        logger.error(f"Error evaluating answer with LLM: {e}")
+                        # Fallback to simple string matching if LLM evaluation fails
+                        expected = question.expected_answer_text.lower().strip()
+                        actual = answer_obj.text.lower().strip()
 
-                    if expected in actual or actual in expected:
-                        accuracy_score = 0.9
-                    elif expected and actual:
-                        expected_words = set(expected.split())
-                        actual_words = set(actual.split())
-                        if expected_words and actual_words:
-                            overlap = len(expected_words & actual_words)
-                            accuracy_score = overlap / max(len(expected_words), len(actual_words))
+                        if expected in actual or actual in expected:
+                            accuracy_score = 0.9
+                        elif expected and actual:
+                            expected_words = set(expected.split())
+                            actual_words = set(actual.split())
+                            if expected_words and actual_words:
+                                overlap = len(expected_words & actual_words)
+                                accuracy_score = overlap / max(len(expected_words), len(actual_words))
+                elif answer_obj.text:
+                    # No expected answer, evaluate quality only
+                    try:
+                        context_chunks = []
+                        if answer_obj.citations:
+                            context_chunks = [
+                                {
+                                    "text": c.excerpt or "",
+                                    "doc_id": c.doc_id,
+                                    "clause_number": c.clause_number,
+                                    "page_num": c.page_num
+                                }
+                                for c in answer_obj.citations
+                            ]
+                        
+                        eval_result = await answer_evaluator.evaluate_answer_quality(
+                            question=question.question_text,
+                            answer=answer_obj.text,
+                            context_chunks=context_chunks
+                        )
+                        
+                        llm_confidence = eval_result.get("confidence", 0.0)
+                        llm_correctness = eval_result.get("correctness", False)
+                        evaluation_reasoning = eval_result.get("reasoning", "")
+                        accuracy_score = llm_confidence
+                        
+                    except Exception as e:
+                        logger.error(f"Error evaluating answer quality with LLM: {e}")
+                        # Fallback: basic heuristic
+                        if answer_obj.text and len(answer_obj.text) > 10 and "cannot find" not in answer_obj.text.lower():
+                            accuracy_score = 0.6
+                        else:
+                            accuracy_score = 0.2
 
                 # Check if test passed (has answer, reasonable response time, and meets confidence threshold)
                 # Use confidence threshold from the question, default to 0.7
@@ -505,6 +661,14 @@ async def run_all_tests():
                     "answer": answer_obj.text,
                     "actual_answer": answer_obj.text,
                     "accuracy_score": accuracy_score,
+                    "llm_confidence": llm_confidence,
+                    "llm_correctness": llm_correctness,
+                    "evaluation_reasoning": evaluation_reasoning,
+                    "model_config": {
+                        "llm_provider": os.getenv("LLM_PROVIDER", "unknown"),
+                        "llm_model": os.getenv("OLLAMA_MODEL") or os.getenv("OPENAI_MODEL", "unknown"),
+                        "context_length": os.getenv("OLLAMA_CONTEXT_LENGTH", "unknown")
+                    },
                     "citations": citations,
                     "citations_count": len(answer_obj.citations),
                     "response_time_ms": response_time_ms,

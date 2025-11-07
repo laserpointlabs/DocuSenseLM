@@ -35,6 +35,8 @@ class Answer:
     """LLM-generated answer with citations"""
     text: str
     citations: List[Citation]
+    confidence: Optional[float] = None  # Confidence score (0.0 to 1.0)
+    evaluation_reasoning: Optional[str] = None  # Optional reasoning for confidence score
 
 
 class LLMClient(ABC):

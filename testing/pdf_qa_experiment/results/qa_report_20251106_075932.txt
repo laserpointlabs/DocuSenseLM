@@ -1,0 +1,276 @@
+================================================================================
+PDF Q&A Evaluation Report
+================================================================================
+Generated: 2025-11-06 08:00:08
+PDF: extracted_text.txt
+Context Window: 16384 tokens
+
+EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Accuracy: 6/10 (60.0%)
+  Average Match Score: 0.61
+  Average Response Time: 0.83 seconds
+  Average Confidence: 16.2
+
+llama3.2:3b:
+  Accuracy: 9/10 (90.0%)
+  Average Match Score: 0.85
+  Average Response Time: 0.68 seconds
+  Average Confidence: 15.4
+
+================================================================================
+DETAILED RESULTS
+================================================================================
+
+Question q1: What is the effective date of this NDA?
+Category: metadata
+Expected: 2025-06-16
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✓ CORRECT
+  Match Score: 0.80
+  Response Time: 3.08s
+  Confidence: 7.5
+  Evaluation: Year 2025 matches
+  Answer: The effective date of this Non-Disclosure Agreement (NDA) is June 16, 2025.
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 0.80
+  Response Time: 0.71s
+  Confidence: 14.2
+  Evaluation: Year 2025 matches
+  Answer: The effective date of this NDA is June 16, 2025, as indicated on Page 1 of the document under the section where the Agreement is entered into.
+
+
+Question q2: What is the expiration date of this NDA?
+Category: metadata
+Expected: 2028-06-16
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✓ CORRECT
+  Match Score: 0.80
+  Response Time: 0.50s
+  Confidence: 10.5
+  Evaluation: Year 2028 matches
+  Answer: The expiration date of this NDA is three years from the date it was signed, which would be June 23, 2028.
+
+llama3.2:3b:
+  Status: ✗ INCORRECT
+  Match Score: 0.00
+  Response Time: 0.56s
+  Confidence: 13.1
+  Evaluation: Date does not match
+  Answer: The term of this Agreement and the confidentiality obligations shall automatically terminate three (3) years after the date hereof.
+
+
+Question q3: Who are the parties to this NDA?
+Category: parties
+Expected: ['Fanuc America Corporation', 'Kidde-Fenwal, LLC']
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✗ INCORRECT
+  Match Score: 0.50
+  Response Time: 0.54s
+  Confidence: 10.7
+  Evaluation: Found 1/2 parties
+  Answer: The parties to this Non-Disclosure Agreement (NDA) are:
+
+1. Fanuc America Corporation
+2. Kidde -Fenwal, LLC
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.58s
+  Confidence: 7.9
+  Evaluation: Found 2/2 parties
+  Answer: The parties to this NDA are:
+
+1. Fanuc America Corporation
+2. Kidde-Fenwal, LLC
+
+
+Question q4: Is this a mutual or unilateral NDA?
+Category: metadata
+Expected: True
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.49s
+  Confidence: 11.5
+  Evaluation: Correctly identified as mutual
+  Answer: This is a unilateral NDA. I cannot find any information in the provided document that indicates it is a mutual NDA.
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 1.06s
+  Confidence: 35.1
+  Evaluation: Correctly identified as mutual
+  Answer: This is a mutual Non-Disclosure Agreement (NDA). The language used in Section 1 of the agreement indicates that the parties are both disclosing and receiving confidential information, suggesting a rec
+           ... (truncated, full length: 351 chars)
+
+
+Question q5: What is the term or duration of this NDA in months?
+Category: term
+Expected: 36
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.43s
+  Confidence: 7.2
+  Evaluation: Found 3 years = 36 months
+  Answer: The term or duration of this NDA is 3 years from the date it was signed.
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.42s
+  Confidence: 3.2
+  Evaluation: Found 3 years = 36 months
+  Answer: The term of this NDA is 3 years.
+
+
+Question q6: What is the governing law for this NDA?
+Category: metadata
+Expected: State of California
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✗ INCORRECT
+  Match Score: 0.00
+  Response Time: 0.82s
+  Confidence: 35.8
+  Evaluation: Value not found in answer
+  Answer: The governing law for this Non-Disclosure Agreement (NDA) appears to be California state law, excluding conflicts of law principles.
+
+I couldn't find this information in the provided document. However
+           ... (truncated, full length: 358 chars)
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.60s
+  Confidence: 12.6
+  Evaluation: Value found in answer
+  Answer: The governing law for this NDA is the State of California, as stated in section 9, which excludes conflicts of law principles.
+
+
+Question q7: What is the address of Fanuc America Corporation?
+Category: parties
+Expected: 3900 West Hamlin Road, Rochester Hills, MI 48309-3253, USA
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✗ INCORRECT
+  Match Score: 0.00
+  Response Time: 0.49s
+  Confidence: 9.9
+  Evaluation: Value not found
+  Answer: The address of Fanuc America Corporation is 3900 West Hamlin Road, Rochester Hills, MI 48309 -3253.
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.63s
+  Confidence: 10.3
+  Evaluation: Value found in answer
+  Answer: The address of Fanuc America Corporation is 3900 West Hamlin Road, Rochester Hills, MI 48309-3253, USA.
+
+
+Question q8: What is the address of Kidde-Fenwal, LLC?
+Category: parties
+Expected: 400 Main Street, Ashland, MA 01721, USA
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.49s
+  Confidence: 7.6
+  Evaluation: Value found in answer
+  Answer: The address of Kidde-Fenwal, LLC is 400 Main Street, Ashland, MA 01721, USA.
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 0.90
+  Response Time: 0.59s
+  Confidence: 7.6
+  Evaluation: Value found (normalized)
+  Answer: The address of Kidde-Fenwal, LLC is:
+
+400 Main Street
+Ashland, MA 01721, USA
+
+
+Question q9: What is the confidentiality period or term of this agreement?
+Category: term
+Expected: 36
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.87s
+  Confidence: 38.6
+  Evaluation: Found 3 years = 36 months
+  Answer: The confidentiality period or term of this agreement is 3 years from the date it is executed. This can be found on page 8 of the document, specifically under point 9, where it states that any obligati
+           ... (truncated, full length: 386 chars)
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 1.00
+  Response Time: 0.81s
+  Confidence: 24.8
+  Evaluation: Found 3 years = 36 months
+  Answer: The confidentiality period or term of this agreement is 3 years from the date of the agreement. However, it's noted that certain trade secret information will survive beyond this period as long as it 
+           ... (truncated, full length: 248 chars)
+
+
+Question q10: When does this NDA expire?
+Category: metadata
+Expected: 2028-06-16
+--------------------------------------------------------------------------------
+
+llama3.2:1b:
+  Status: ✗ INCORRECT
+  Match Score: 0.00
+  Response Time: 0.61s
+  Confidence: 22.5
+  Evaluation: Date does not match
+  Answer: The NDA expires three years after the date of execution. However, it also states that any obligation of confidentiality with respect to trade secrets will survive for as long as the trade secret is cl
+           ... (truncated, full length: 225 chars)
+
+llama3.2:3b:
+  Status: ✓ CORRECT
+  Match Score: 0.80
+  Response Time: 0.85s
+  Confidence: 25.1
+  Evaluation: Year 2028 matches
+  Answer: This NDA expires 3 years after its effective date, specifically on June 16, 2028. Additionally, trade secret confidentiality obligations may survive for as long as the confidential information remains
+           ... (truncated, full length: 251 chars)
+
+
+================================================================================
+MODEL COMPARISON
+================================================================================
+
+Performance Comparison:
+  Accuracy: llama3.2:1b = 60.0% vs llama3.2:3b = 90.0%
+  Speed: llama3.2:1b = 0.83s vs llama3.2:3b = 0.68s
+  → llama3.2:3b is 1.2x faster
+  → llama3.2:3b has 30.0% higher accuracy
+
+================================================================================
+END OF REPORT
+================================================================================

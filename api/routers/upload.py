@@ -10,7 +10,7 @@ import uuid
 from api.models.responses import UploadResponse
 from api.db import get_db_session
 from api.db.schema import Document, DocumentStatus
-from api.services.storage_service import storage_service
+from api.services.service_registry import get_storage_service
 from ingest.worker import worker
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -53,14 +53,14 @@ async def upload_files(
                 ))
                 continue
 
-            # Create document record
+            # Create document record and mark as processing immediately
             document_id = str(uuid.uuid4())
             db = get_db_session()
             try:
                 doc = Document(
                     id=document_id,
                     filename=file.filename,
-                    status=DocumentStatus.UPLOADED,
+                    status=DocumentStatus.PROCESSING,
                     s3_path=None,
                     metadata_json={}
                 )
@@ -84,7 +84,8 @@ async def upload_files(
                     with open(temp_file, 'rb') as f:
                         file_data = f.read()
 
-                    s3_path = storage_service.upload_file(
+                    storage = get_storage_service()
+                    s3_path = storage.upload_file(
                         bucket="nda-raw",
                         object_name=f"{document_id}/{file.filename}",
                         file_data=file_data,

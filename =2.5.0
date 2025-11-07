@@ -1,0 +1,25 @@
+Collecting pydantic
+  Downloading pydantic-2.12.4-py3-none-any.whl.metadata (89 kB)
+Collecting pydantic-settings
+  Downloading pydantic_settings-2.11.0-py3-none-any.whl.metadata (3.4 kB)
+Collecting annotated-types>=0.6.0 (from pydantic)
+  Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.41.5 (from pydantic)
+  Downloading pydantic_core-2.41.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+Collecting typing-extensions>=4.14.1 (from pydantic)
+  Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting typing-inspection>=0.4.2 (from pydantic)
+  Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+Collecting python-dotenv>=0.21.0 (from pydantic-settings)
+  Downloading python_dotenv-1.2.1-py3-none-any.whl.metadata (25 kB)
+Downloading pydantic-2.12.4-py3-none-any.whl (463 kB)
+Downloading pydantic_core-2.41.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+[?25l   [38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m0.0/2.1 MB[0m [31m?[0m eta [36m-:--:--[0m[2K   [38;5;197m━━━━━━━━━━━━━━━━━━━━[0m[38;5;237m╺[0m[38;5;237m━━━━━━━━━━━━━━━━━━━[0m [32m1.0/2.1 MB[0m [31m5.9 MB/s[0m eta [36m0:00:01[0m[2K   [38;5;70m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m2.1/2.1 MB[0m [31m5.9 MB/s[0m  [33m0:00:00[0m
+[?25hDownloading pydantic_settings-2.11.0-py3-none-any.whl (48 kB)
+Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Downloading python_dotenv-1.2.1-py3-none-any.whl (21 kB)
+Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Installing collected packages: typing-extensions, python-dotenv, annotated-types, typing-inspection, pydantic-core, pydantic, pydantic-settings
+[?25l[2K   [38;5;197m━━━━━━━━━━━━━━━━━━━━━━[0m[38;5;197m╸[0m[38;5;237m━━━━━━━━━━━━━━━━━[0m [32m4/7[0m [pydantic-core][2K   [38;5;197m━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;5;197m╸[0m[38;5;237m━━━━━━━━━━━[0m [32m5/7[0m [pydantic][2K   [38;5;197m━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;5;197m╸[0m[38;5;237m━━━━━━━━━━━[0m [32m5/7[0m [pydantic][2K   [38;5;197m━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;5;197m╸[0m[38;5;237m━━━━━━━━━━━[0m [32m5/7[0m [pydantic][2K   [38;5;70m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m7/7[0m [pydantic-settings]
+[?25h[1A[2KSuccessfully installed annotated-types-0.7.0 pydantic-2.12.4 pydantic-core-2.41.5 pydantic-settings-2.11.0 python-dotenv-1.2.1 typing-extensions-4.15.0 typing-inspection-0.4.2

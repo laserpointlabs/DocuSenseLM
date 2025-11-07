@@ -2,9 +2,15 @@
 768-dim embedding generation using sentence-transformers/all-mpnet-base-v2
 """
 from typing import List
-from sentence_transformers import SentenceTransformer
 import os
+
+from sentence_transformers import SentenceTransformer
 import torch
+
+from api.services.service_registry import (
+    get_embedder_service,
+    register_embedder_service,
+)
 
 
 class Embedder:
@@ -68,13 +74,20 @@ class Embedder:
         return self.dimension
 
 
-# Global embedder instance (lazy initialization)
-_embedder = None
+# Singleton embedder instance
+_embedder_instance = None
+
+def _embedder_factory() -> Embedder:
+    global _embedder_instance
+    if _embedder_instance is None:
+        model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
+        _embedder_instance = Embedder(model_name)
+    return _embedder_instance
+
+
+register_embedder_service(_embedder_factory)
+
 
 def get_embedder() -> Embedder:
-    """Get or create embedder instance"""
-    global _embedder
-    if _embedder is None:
-        model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
-        _embedder = Embedder(model_name)
-    return _embedder
+    """Resolve the active embedder implementation through the service registry."""
+    return get_embedder_service()

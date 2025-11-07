@@ -5,22 +5,67 @@ import os
 import httpx
 from typing import List, Dict, Optional
 from .llm_client import LLMClient, Chunk, Citation, Answer
+from .prompts import build_system_prompt, build_user_prompt, build_cross_document_prompt, detect_question_type
 
 
 class OllamaClient(LLMClient):
     """Ollama API client"""
 
-    def __init__(self, endpoint: str = None, model: str = None):
+    def __init__(self, endpoint: str = None, model: str = None, enable_thinking: bool = False):
         """
         Initialize Ollama client
 
         Args:
             endpoint: Ollama API endpoint (default from env)
-            model: Model name to use (default from env or "llama2")
+            model: Model name to use (must be provided or set via OLLAMA_MODEL env var)
+            enable_thinking: Enable thinking mode for models that support it (e.g., Granite)
         """
         self.endpoint = endpoint or os.getenv("LLM_ENDPOINT", "http://localhost:11434")
-        self.model = model or os.getenv("OLLAMA_MODEL", "llama2")
-        self.client = httpx.AsyncClient(timeout=120.0)
+        self.model = model or os.getenv("OLLAMA_MODEL")
+        if not self.model:
+            raise ValueError("OLLAMA_MODEL environment variable must be set. No hardcoded defaults allowed.")
+        
+        # Enable thinking mode for Granite models if not explicitly set
+        self.enable_thinking = enable_thinking or os.getenv("ENABLE_THINKING", "false").lower() == "true"
+        if "granite" in self.model.lower() and not enable_thinking:
+            # Auto-enable thinking for Granite models
+            self.enable_thinking = True
+        
+        # Configure timeouts: 10s connect, 120s read (for generation with context)
+        # Note: First request may take 30s+ to load model, then generation can take 60s+ with large context
+        timeout = httpx.Timeout(10.0, read=120.0)
+        self.client = httpx.AsyncClient(timeout=timeout)
+        
+        # Log configuration
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"OllamaClient initialized: endpoint={self.endpoint}, model={self.model}, thinking={self.enable_thinking}")
+        
+        # Warn if using host.docker.internal when running in Docker (should use 'ollama' service name)
+        if "host.docker.internal" in self.endpoint:
+            logger.warning(
+                f"⚠️  Using host.docker.internal endpoint. If running in Docker Compose, "
+                f"consider using 'http://ollama:11434' instead for better performance and reliability."
+            )
+        
+
+    async def _health_check(self) -> bool:
+        """Check if Ollama endpoint is accessible"""
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            response = await self.client.get(f"{self.endpoint}/api/tags", timeout=5.0)
+            if response.status_code == 200:
+                logger.info(f"✅ Ollama health check passed: {self.endpoint}")
+                return True
+            else:
+                logger.warning(f"⚠️  Ollama health check failed: status {response.status_code}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Ollama health check failed: {e}")
+            logger.error(f"   Endpoint: {self.endpoint}")
+            logger.error(f"   Make sure Ollama is running and accessible at this endpoint")
+            return False
 
     async def generate_answer(
         self,
@@ -30,81 +75,88 @@ class OllamaClient(LLMClient):
     ) -> Answer:
         """Generate answer using Ollama"""
 
-        # Build context from chunks
-        context_text = "\n\n".join([
-            f"[Document {chunk.doc_id}, Clause {chunk.clause_number}, Page {chunk.page_num}]\n{chunk.text}"
-            for chunk in context_chunks
-        ])
-
-        # Log context for debugging
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"=== Ollama Answer Generation ===")
-        logger.info(f"Query: {query}")
-        logger.info(f"Number of context chunks: {len(context_chunks)}")
-        logger.info(f"Context text length: {len(context_text)} characters")
-        logger.info(f"Number of citations: {len(citations)}")
+        
 
-        # Log each chunk individually
-        if context_chunks:
-            logger.info(f"=== Context Chunks Details ===")
-            for i, chunk in enumerate(context_chunks):
-                logger.info(f"Chunk {i+1}: doc_id={chunk.doc_id[:8]}..., clause={chunk.clause_number}, page={chunk.page_num}, text_length={len(chunk.text)}")
-                logger.info(f"  Chunk {i+1} text (full): {chunk.text}")
+        # Build context from chunks
+        # Context length comes from environment variable (no hardcoded defaults)
+        context_length = os.getenv("OLLAMA_CONTEXT_LENGTH")
+        if not context_length:
+            raise ValueError("OLLAMA_CONTEXT_LENGTH environment variable must be set. No hardcoded defaults allowed.")
+        context_length = int(context_length)
+        max_tokens = int(context_length * 0.75)  # Use 75% of context window
+        MAX_CONTEXT_CHARS = max_tokens * 4  # ~4 chars/token
+        
+        context_parts = []
+        total_chars = 0
+        
+        for chunk in context_chunks:
+            chunk_text = f"[Document {chunk.doc_id}, Clause {chunk.clause_number}, Page {chunk.page_num}]\n{chunk.text}"
+            chunk_chars = len(chunk_text)
+            
+            # If adding this chunk would exceed limit, truncate it
+            if total_chars + chunk_chars > MAX_CONTEXT_CHARS:
+                remaining = MAX_CONTEXT_CHARS - total_chars
+                if remaining > 100:  # Only add if we have meaningful space left
+                    # Truncate the chunk text to fit
+                    truncated_text = chunk.text[:remaining - 100]  # Leave room for metadata
+                    chunk_text = f"[Document {chunk.doc_id}, Clause {chunk.clause_number}, Page {chunk.page_num}]\n{truncated_text}..."
+                    context_parts.append(chunk_text)
+                    logger.warning(f"Truncated chunk to fit context limit. Original: {chunk_chars} chars, Used: {len(chunk_text)} chars")
+                break
+            
+            context_parts.append(chunk_text)
+            total_chars += chunk_chars + 2  # +2 for "\n\n" separator
+        
+        context_text = "\n\n".join(context_parts)
+        
+        # Log token estimate
+        estimated_tokens = len(context_text) // 4
+        logger.info(f"Context token estimate: ~{estimated_tokens} tokens ({len(context_text)} chars)")
+
+        # Minimal logging for performance
+        logger.debug(f"Ollama request: {len(context_chunks)} chunks, {len(context_text)} chars, model={self.model}")
+
+        # Use enhanced prompts with structured format rules
+        question_type = detect_question_type(query)
+        logger.info(f"Detected question type: {question_type}")
+        
+        if question_type == "cross_document":
+            user_prompt = build_cross_document_prompt(query, context_chunks, citations)
         else:
-            logger.warning("⚠️  NO CONTEXT CHUNKS PROVIDED!")
-
-        logger.info(f"=== Full Context Text (for prompt) ===")
-        logger.info(f"Context text length: {len(context_text)} characters")
-        logger.info(f"Context text:\n{context_text}")
-        logger.info(f"=== End Context Text ===")
-
-        # Build prompt with explicit format examples
-        prompt = f"""You are an expert legal assistant analyzing Non-Disclosure Agreements (NDAs).
-
-Based on the following context from NDA documents, answer the user's question. Your answer will be displayed directly to users in the Ask Question tab, so provide clear, concise responses.
-
-CRITICAL FORMAT RULES - Return answers EXACTLY like these examples:
-
-For DATE questions:
-  Question: "What is the effective date of the NDA?"
-  CORRECT Answer: "September 5, 2025"
-  WRONG Answer: "The effective date of the NDA is September 5, 2025. This date was specified in the agreement..."
-
-For DURATION/TERM questions:
-  Question: "What is the term of the NDA?"
-  CORRECT Answer: "3 years"
-  Alternative: "36 months"
-  WRONG Answer: "The term is three years from the effective date..."
-
-For GOVERNING LAW questions:
-  Question: "What is the governing law for the NDA?"
-  CORRECT Answer: "State of Delaware"
-  WRONG Answer: "The governing law clause specifies that the laws of the State of Delaware apply..."
-
-For MUTUAL/UNILATERAL questions:
-  Question: "Is the NDA mutual or unilateral?"
-  CORRECT Answer: "mutual"
-  WRONG Answer: "This is a mutual agreement, meaning both parties have obligations..."
-
-For PARTY NAME questions:
-  Question: "Who are the parties to the NDA?"
-  CORRECT Answer: "Norris Cylinder Company and Acme Corporation"
-  WRONG Answer: "The parties include Norris Cylinder Company and Acme Corporation as mentioned in..."
-
-For GENERAL questions (if not covered above):
-  Provide a brief, direct answer (1-2 sentences maximum). Do NOT repeat the question or add unnecessary context.
-
-Context from NDA documents:
-{context_text}
-
-User Question: {query}
-
-IMPORTANT: Only use information from the context provided above. If the context does not contain the answer, respond with "I cannot find this information in the provided documents".
-
-Return your answer in the format shown in the examples above. Answer ONLY (no explanations, no context, no additional text):"""
-
+            user_prompt = build_user_prompt(query, context_chunks, citations)
+        
+        # Use chat API with thinking mode for Granite, otherwise use generate API
+        system_prompt = build_system_prompt()
+        
         try:
+            if self.enable_thinking and "granite" in self.model.lower():
+                # Use chat API with thinking mode
+                messages = [
+                    {"role": "control", "content": "thinking"},
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+                
+                response = await self.client.post(
+                    f"{self.endpoint}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "stream": False
+                    }
+                )
+                response.raise_for_status()
+                result = response.json()
+                answer_text = result.get("message", {}).get("content", "").strip()
+                logger.info(f"Used chat API with thinking mode for Granite")
+            else:
+                # Use generate API (standard Ollama format)
+                prompt = f"""{system_prompt}
+
+{user_prompt}"""
+                
             response = await self.client.post(
                 f"{self.endpoint}/api/generate",
                 json={
@@ -115,20 +167,33 @@ Return your answer in the format shown in the examples above. Answer ONLY (no ex
             )
             response.raise_for_status()
             result = response.json()
+            answer_text = result.get("response", "").strip()
 
-            answer_text = result.get("response", "")
+            if not answer_text:
+                answer_text = "I cannot find this information in the provided documents"
 
-            logger.info(f"=== LLM Response ===")
-            logger.info(f"Raw LLM answer: {answer_text}")
-            logger.info(f"Answer length: {len(answer_text)} characters")
-            logger.info(f"=== End LLM Response ===")
+            logger.debug(f"Ollama response: {len(answer_text)} chars (thinking={self.enable_thinking})")
 
             return Answer(
                 text=answer_text,
                 citations=citations
             )
+        except httpx.ConnectError as e:
+            error_msg = f"Cannot connect to Ollama at {self.endpoint}. Is Ollama running? Error: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except httpx.TimeoutException as e:
+            error_msg = f"Request to Ollama timed out after 120s. Endpoint: {self.endpoint}, Model: {self.model}. The model may need to be loaded first (takes ~30s), or the context may be too large."
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Ollama API returned error {e.response.status_code}: {e.response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
         except Exception as e:
-            raise Exception(f"Ollama API error: {e}")
+            error_msg = f"Ollama API error: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
     async def generate_question_suggestions(
         self,
@@ -182,6 +247,10 @@ Format as a numbered list of questions."""
                         questions.append(question)
 
             return questions[:10]  # Return up to 10 questions
+        except httpx.ConnectError as e:
+            raise Exception(f"Cannot connect to Ollama at {self.endpoint}. Is Ollama running? Error: {e}")
+        except httpx.TimeoutException as e:
+            raise Exception(f"Request to Ollama timed out. Endpoint: {self.endpoint}, Model: {self.model}")
         except Exception as e:
             raise Exception(f"Ollama API error: {e}")
 

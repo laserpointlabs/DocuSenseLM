@@ -171,7 +171,7 @@ def generate_questions_with_answers(document_id: str, filename: str) -> List[Dic
 
 def create_question_with_answer(question_text: str, expected_answer: str, document_id: str,
                                 verification_hint: str = None, expected_clause: str = None,
-                                expected_page: int = None) -> str:
+                                expected_page: int = None, auto_generated: bool = False) -> str:
     """Create a competency question with expected answer"""
     db = get_db_session()
     try:
@@ -183,7 +183,7 @@ def create_question_with_answer(question_text: str, expected_answer: str, docume
             expected_clause=expected_clause,
             expected_page=expected_page,
             expected_answer_text=expected_answer,
-            created_by="script"
+            created_by="auto_generator" if auto_generated else "script"
         )
         db.add(question)
         db.commit()

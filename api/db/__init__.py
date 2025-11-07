@@ -2,18 +2,27 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 import os
+from sqlalchemy.pool import StaticPool
 
 from .schema import Base
 
 # Database URL from environment
-DATABASE_URL = os.getenv("POSTGRES_URL", "postgresql://nda_user:nda_password@localhost:5432/nda_db")
+DATABASE_URL = os.getenv("POSTGRES_URL", "postgresql+psycopg://nda_user:nda_password@localhost:5432/nda_db")
 
-# Create engine
+# Create engine with sensible defaults for Postgres and SQLite
+engine_kwargs = {
+    "pool_pre_ping": True,
+}
+
+if DATABASE_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+    engine_kwargs["poolclass"] = StaticPool
+else:
+    engine_kwargs.update({"pool_size": 10, "max_overflow": 20})
+
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20
+    **engine_kwargs,
 )
 
 # Session factory
