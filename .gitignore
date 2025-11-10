@@ -141,3 +141,7 @@ test_documents/
 temp/
 tmp/
 .specstory/
+
+# Cloudflare Tunnel credentials
+cloudflare/credentials.json
+*.cfargotunnel.com

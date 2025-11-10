@@ -3,7 +3,12 @@
  */
 import axios, { AxiosInstance } from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Support both HTTP and HTTPS URLs for Cloudflare Tunnel
+const API_URL = process.env.NEXT_PUBLIC_API_URL 
+  ? (process.env.NEXT_PUBLIC_API_URL.startsWith('http') 
+      ? process.env.NEXT_PUBLIC_API_URL 
+      : `https://${process.env.NEXT_PUBLIC_API_URL}`)
+  : 'http://localhost:8000';
 const DEBUG_ENABLED =
   process.env.NEXT_PUBLIC_DEBUG_API === 'true' ||
   process.env.NODE_ENV !== 'production';

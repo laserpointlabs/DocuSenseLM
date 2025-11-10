@@ -1,0 +1,14 @@
+tunnel: f146869d-e718-46be-aef3-1887b0e2ddce
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # UI - Main frontend
+  - hostname: kidde-nda-ui.laserpointlabs.com
+    service: http://ui:3000
+  
+  # API - Backend API
+  - hostname: kidde-nda-api.laserpointlabs.com
+    service: http://api:8000
+  
+  # Catch-all rule (must be last)
+  - service: http_status:404

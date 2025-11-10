@@ -192,7 +192,9 @@ services:
       dockerfile: Dockerfile
     container_name: nda-ui
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Use Cloudflare tunnel API domain if set, otherwise fallback to localhost
+      # The UI code will prepend https:// if the domain doesn't start with http
+      - NEXT_PUBLIC_API_URL=${CLOUDFLARE_DOMAIN_API:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:
@@ -202,6 +204,26 @@ services:
       - /app/node_modules
       - /app/.next
     command: npm run dev
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: nda-cloudflared
+    # Using config file for ingress rules (CLI control)
+    # Alternative: use token-based auth by changing command to: tunnel run
+    # and uncommenting TUNNEL_TOKEN environment variable
+    command: tunnel --config /etc/cloudflared/config.yml run
+    depends_on:
+      - ui
+      - api
+    restart: unless-stopped
+    networks:
+      - default
+    volumes:
+      - ./cloudflare/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflare/credentials.json:/etc/cloudflared/credentials.json:ro
+    # Uncomment below if using token-based auth instead of config file:
+    # environment:
+    #   - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
 
 volumes:
   ollama_data:

@@ -88,6 +88,34 @@ docker-compose exec api python scripts/seed_data.py
 - **API Docs**: http://localhost:8000/docs
 - **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
 
+### 6. Expose via Cloudflare Tunnel (Optional)
+
+To host this application from home and make it accessible from the internet:
+
+1. **Run the setup script**:
+   ```bash
+   ./scripts/setup_cloudflare_tunnel.sh
+   ```
+   This will guide you through creating a Cloudflare Tunnel and configuring DNS.
+
+2. **Or manually configure**:
+   - See [cloudflare/README.md](cloudflare/README.md) for detailed instructions
+   - Add Cloudflare Tunnel environment variables to your `.env` file:
+     ```bash
+     CLOUDFLARE_TUNNEL_TOKEN=<your-tunnel-token>
+     CLOUDFLARE_DOMAIN_UI=ui.yourdomain.com
+     CLOUDFLARE_DOMAIN_API=api.yourdomain.com
+     ```
+
+3. **Start services** (the cloudflared service will start automatically):
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Access via your domain**:
+   - **UI**: https://ui.yourdomain.com
+   - **API**: https://api.yourdomain.com
+
 ## Configuration
 
 Key environment variables (see `.env.example`):
@@ -103,6 +131,11 @@ EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2  # 768-dim
 
 # OCR Configuration
 USE_TEXTRACT=false                  # true for AWS Textract, false for Tesseract
+
+# Cloudflare Tunnel (optional)
+CLOUDFLARE_TUNNEL_TOKEN=            # Tunnel token from Cloudflare Dashboard
+CLOUDFLARE_DOMAIN_UI=ui.yourdomain.com
+CLOUDFLARE_DOMAIN_API=api.yourdomain.com
 ```
 
 ## Usage
