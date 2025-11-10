@@ -272,6 +272,29 @@ class NDAEvent(Base):
     )
 
 
+# User Management Tables
+
+class User(Base):
+    """
+    User accounts for authentication and authorization.
+    """
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(100), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)  # bcrypt hash
+    role = Column(String(20), nullable=False, default="user")  # "admin", "usermgt", "user"
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_users_username', 'username'),
+        Index('idx_users_role', 'role'),
+        Index('idx_users_active', 'is_active'),
+    )
+
+
 # ---------- Postgres helpers: extensions, triggers ----------
 
 # pgcrypto and pg_trgm extensions are created in migrations.

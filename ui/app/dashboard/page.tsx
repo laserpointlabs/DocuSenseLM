@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { documentAPI } from '@/lib/api';
 import Link from 'next/link';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 interface Document {
   id: string;
@@ -24,7 +25,7 @@ interface DocumentWithMetadata extends Document {
   expiration_status?: 'active' | 'expiring_soon' | 'expiring_very_soon' | 'expired';
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [documents, setDocuments] = useState<DocumentWithMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'expiring_soon' | 'expired'>('all');
@@ -500,5 +501,13 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }
