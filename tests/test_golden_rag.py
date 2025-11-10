@@ -7,7 +7,7 @@ import asyncio
 import json
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.services.answer_service import answer_service
 from api.db import get_db_session
@@ -161,9 +161,10 @@ async def main():
     print(f"Chunk quality: {chunks_with_answer}/{total_chunks} chunks contain answer ({100*chunks_with_answer/total_chunks:.1f}%)")
     
     # Save results
-    with open("rag_test_results.json", "w") as f:
+    results_path = Path(__file__).parent.parent / "testing" / "rag_test_results.json"
+    with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nResults saved to: rag_test_results.json")
+    print(f"\nResults saved to: {results_path}")
 
 if __name__ == "__main__":
     asyncio.run(main())

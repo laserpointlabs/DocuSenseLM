@@ -249,7 +249,7 @@ async def run_all_tests():
         print(f"    Quality: {quality.get('quality_score', 0):.1%} ({quality.get('chunks_with_answer', 0)}/{quality.get('total_chunks', 0)} chunks)")
     
     # Save results
-    output_file = Path(__file__).parent / "rag_test_results.json"
+    output_file = Path(__file__).parent.parent.parent / "testing" / "rag_test_results.json"
     with open(output_file, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nResults saved to: {output_file}")
