@@ -73,22 +73,38 @@ This starts:
 ### 3. Initialize Database
 
 ```bash
-docker-compose exec api python api/db/migrations/001_init_schema.py
+# Tables are created automatically, but you can also run:
+docker compose exec -T api python -c "from api.db import init_db; init_db()"
 ```
 
-### 4. Seed Sample Data (Optional)
+### 4. Create Initial Users
+
+```bash
+# Create default admin and usermgt users
+docker compose exec -T api python scripts/create_users.py
+```
+
+**Default Credentials:**
+- Admin: `admin` / `Admin2024!Secure`
+- UserMgt: `usermgt` / `UserMgt2024!Secure`
+
+**⚠️ Important**: Change these passwords immediately after first setup!
+
+See [User Management Guide](docs/USER_MANAGEMENT.md) for detailed user management instructions.
+
+### 5. Seed Sample Data (Optional)
 
 ```bash
 docker-compose exec api python scripts/seed_data.py
 ```
 
-### 5. Access the Application
+### 6. Access the Application
 
 - **UI**: http://localhost:3000
 - **API Docs**: http://localhost:8000/docs
 - **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
 
-### 6. Expose via Cloudflare Tunnel (Optional)
+### 7. Expose via Cloudflare Tunnel (Optional)
 
 To host this application from home and make it accessible from the internet:
 
@@ -139,6 +155,16 @@ CLOUDFLARE_DOMAIN_API=api.yourdomain.com
 ```
 
 ## Usage
+
+### Authentication
+
+The NDA Dashboard requires authentication to access. After starting the services:
+
+1. Navigate to `http://localhost:3000`
+2. You'll be redirected to the login page
+3. Log in with your credentials (default: `admin` / `Admin2024!Secure`)
+
+For user management, password updates, and account administration, see the [User Management Guide](docs/USER_MANAGEMENT.md).
 
 ### Upload Documents
 

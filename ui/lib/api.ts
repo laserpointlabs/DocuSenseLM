@@ -20,6 +20,33 @@ const api = axios.create({
   },
 });
 
+// Add auth token interceptor
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
+});
+
+// Handle 401 errors (unauthorized)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      // Clear token and redirect to login
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 const summarisePayload = (data: unknown) => {
   if (typeof FormData !== 'undefined' && data instanceof FormData) {
     try {
@@ -271,6 +298,37 @@ export const adminAPI = {
       return api.post(`/admin/reindex/${documentId}`);
     }
     return api.post('/admin/reindex/all');
+  },
+};
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  username: string;
+  role: string;
+}
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export const authAPI = {
+  login: async (request: LoginRequest): Promise<LoginResponse> => {
+    const response = await api.post<LoginResponse>('/auth/login', request);
+    return response.data;
+  },
+  getMe: async (): Promise<UserInfo> => {
+    const response = await api.get<UserInfo>('/auth/me');
+    return response.data;
   },
 };
 

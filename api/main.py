@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.routers import (
-    search, answer, upload, documents, admin, health, competency, registry
+    search, answer, upload, documents, admin, health, competency, registry, auth
 )
 from api.services.bootstrap import configure_services_from_env
 from contextlib import asynccontextmanager
@@ -231,6 +231,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(search.router)
 app.include_router(answer.router)
 app.include_router(upload.router)

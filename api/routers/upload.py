@@ -1,7 +1,7 @@
 """
 Upload router
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from typing import List
 import os
@@ -9,7 +9,8 @@ import tempfile
 import uuid
 from api.models.responses import UploadResponse
 from api.db import get_db_session
-from api.db.schema import Document, DocumentStatus
+from api.db.schema import Document, DocumentStatus, User
+from api.middleware.auth import get_current_user
 from api.services.service_registry import get_storage_service
 from ingest.worker import worker
 
@@ -19,7 +20,8 @@ router = APIRouter(prefix="/upload", tags=["upload"])
 @router.post("", response_model=List[UploadResponse])
 async def upload_files(
     background_tasks: BackgroundTasks,
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Upload and ingest one or more documents
@@ -153,7 +155,8 @@ async def upload_files(
 @router.post("/single", response_model=UploadResponse)
 async def upload_file(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Upload and ingest a single document (legacy endpoint for backward compatibility)
