@@ -1,10 +1,12 @@
-.PHONY: help setup up down logs clean seed reindex eval
+.PHONY: help setup up down logs clean seed reindex eval restart restart-clean
 
 help:
 	@echo "Available commands:"
 	@echo "  make setup      - Initial setup (copy .env, init DB)"
 	@echo "  make up         - Start all services"
 	@echo "  make down       - Stop all services"
+	@echo "  make restart    - Restart services (keeps data)"
+	@echo "  make restart-clean - Clean restart (removes all data)"
 	@echo "  make logs       - Show logs"
 	@echo "  make clean      - Clean volumes and containers"
 	@echo "  make seed       - Seed sample documents"
@@ -14,39 +16,42 @@ help:
 	@echo "  make test-questions - Run tests for loaded questions"
 	@echo "  make load-and-test - Load questions and run tests"
 
+# Detect docker compose command
+DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null || echo "docker compose")
+
 setup:
 	@if [ ! -f .env ]; then cp .env.example .env; fi
 	@echo "✓ Created .env file"
-	@docker-compose up -d postgres
+	@$(DOCKER_COMPOSE) up -d postgres
 	@sleep 5
-	@docker-compose exec -T api python api/db/migrations/001_init_schema.py || echo "Waiting for services..."
+	@$(DOCKER_COMPOSE) exec -T api python -m api.db.migrations.001_init_schema || echo "Waiting for services..."
 	@echo "✓ Database initialized"
 
 up:
-	docker-compose up -d
+	$(DOCKER_COMPOSE) up -d
 	@echo "✓ Services started"
 	@echo "  UI: http://localhost:3000"
 	@echo "  API: http://localhost:8000"
 	@echo "  API Docs: http://localhost:8000/docs"
 
 down:
-	docker-compose down
+	$(DOCKER_COMPOSE) down
 
 logs:
-	docker-compose logs -f
+	$(DOCKER_COMPOSE) logs -f
 
 clean:
-	docker-compose down -v
+	$(DOCKER_COMPOSE) down -v
 	@echo "✓ Volumes cleaned"
 
 seed:
-	docker-compose exec api python scripts/seed_data.py
+	$(DOCKER_COMPOSE) exec api python scripts/seed_data.py
 
 reindex:
-	docker-compose exec api python scripts/reindex.py --all
+	$(DOCKER_COMPOSE) exec api python scripts/reindex.py --all
 
 eval:
-	docker-compose exec api python eval/run_eval.py --verbose
+	$(DOCKER_COMPOSE) exec api python eval/run_eval.py --verbose
 
 load-questions:
 	@echo "Loading competency questions from eval/qa_pairs.json..."
@@ -74,16 +79,22 @@ generate-doc-questions:
 
 generate-questions-with-answers:
 	@echo "Generating questions with expected answers from documents..."
-	@docker-compose exec api python3 /app/scripts/generate_sample_questions.py
+	@$(DOCKER_COMPOSE) exec api python3 /app/scripts/generate_sample_questions.py
 
 review-and-test:
 	@echo "Reviewing and testing all competency questions..."
-	@docker-compose exec api python /app/scripts/review_and_test_questions.py || docker-compose exec api bash -c "cd /app && python scripts/review_and_test_questions.py"
+	@$(DOCKER_COMPOSE) exec api python /app/scripts/review_and_test_questions.py || $(DOCKER_COMPOSE) exec api bash -c "cd /app && python scripts/review_and_test_questions.py"
 
 build-and-validate-questions:
 	@echo "Building competency questions with answers and validating..."
-	@docker-compose exec api python3 /app/scripts/build_and_validate_questions.py || docker-compose exec api bash -c "cd /app && python3 scripts/build_and_validate_questions.py"
+	@$(DOCKER_COMPOSE) exec api python3 /app/scripts/build_and_validate_questions.py || $(DOCKER_COMPOSE) exec api bash -c "cd /app && python3 scripts/build_and_validate_questions.py"
 
 recalculate-expirations:
 	@echo "Recalculating expiration dates from filenames..."
 	@python3 scripts/recalculate_expirations.py
+
+restart:
+	@./ndatool.sh restart
+
+restart-clean:
+	@./ndatool.sh restart-clean
