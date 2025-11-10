@@ -24,9 +24,9 @@ export default function SearchPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Search NDA Documents</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Explore NDAs</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Find information across your NDA collection using hybrid search
+          Browse document chunks to explore your NDA collection. For AI-powered answers, use Ask Question.
         </p>
       </div>
 
@@ -36,7 +36,10 @@ export default function SearchPage() {
       />
 
       <div className="mt-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Or ask a question</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Need an answer instead?</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Get AI-powered answers with citations from your NDAs
+        </p>
         <div className="mt-4">
           <a
             href="/answer"
