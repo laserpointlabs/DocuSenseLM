@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - codex/**
+      - feat/**
   pull_request:
     branches:
       - main
@@ -68,6 +69,7 @@ jobs:
         continue-on-error: true
         run: |
           # Skip tests that require external services
+          # Includes reindex tests (test_admin_reindex.py)
           pytest tests/ -v --tb=short --maxfail=10 \
             --ignore=tests/test_quick_verify.py \
             --ignore=tests/test_model_context_performance.py \
@@ -201,7 +203,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "All checks completed!" >> $GITHUB_STEP_SUMMARY
           echo "- ✓ Syntax check" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Backend tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Backend tests (includes reindex tests)" >> $GITHUB_STEP_SUMMARY
           echo "- ✓ Import tests" >> $GITHUB_STEP_SUMMARY
           echo "- ✓ Lint check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
