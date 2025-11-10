@@ -250,6 +250,14 @@ class QdrantVectorBackend(VectorBackend):
                     )
                 )
 
+            if filters.get("document_id"):
+                must_clauses.append(
+                    FieldCondition(
+                        key="doc_id",
+                        match=MatchValue(value=filters["document_id"]),
+                    )
+                )
+
             if must_clauses:
                 query_filter = Filter(must=must_clauses)
 

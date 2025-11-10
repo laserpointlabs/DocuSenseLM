@@ -195,6 +195,13 @@ export const documentAPI = {
     const response = await api.get(`/documents/${id}/chunks`);
     return response.data;
   },
+  findTextMatch: async (id: string, chunkText: string, pdfTextItems: Array<{str: string, index?: number}>): Promise<{indices: number[]}> => {
+    const response = await api.post(`/documents/${id}/find-text-match`, {
+      chunk_text: chunkText,
+      pdf_text_items: pdfTextItems.map((item, idx) => ({ str: item.str, index: item.index ?? idx }))
+    });
+    return response.data;
+  },
   upload: async (file: File): Promise<{ document_id: string; filename: string; status: string }> => {
     const formData = new FormData();
     formData.append('files', file);
@@ -236,9 +243,22 @@ export const documentAPI = {
   },
 };
 
+export interface ReindexProgress {
+  is_running: boolean;
+  total: number;
+  completed: number;
+  current: string | null;
+  errors: number;
+  progress_percent: number;
+}
+
 export const adminAPI = {
   getStats: async () => {
     const response = await api.get('/admin/stats');
+    return response.data;
+  },
+  getReindexProgress: async (): Promise<ReindexProgress> => {
+    const response = await api.get('/admin/reindex/progress');
     return response.data;
   },
   reindex: async (documentId?: string) => {

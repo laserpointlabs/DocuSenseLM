@@ -8,6 +8,7 @@ from api.models.responses import DocumentResponse, DocumentListResponse
 from api.services.db_service import db_service
 from api.services.service_registry import get_storage_service
 from api.db import get_db_session
+from api.db.schema import Document
 from io import BytesIO
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -76,18 +77,28 @@ async def list_documents(
     """
     db = get_db_session()
     try:
+        # Get document IDs first
         documents, total = db_service.list_documents(db, skip=skip, limit=limit)
-
+        
+        # CRITICAL: Expire all cached objects to force fresh reads from database
+        # This ensures we see real-time status updates during reindexing
+        db.expire_all()
+        
+        # Re-query each document fresh to get latest status
         doc_responses = []
         for doc in documents:
+            # Force fresh query to get latest status from database
+            fresh_doc = db.query(Document).filter(Document.id == doc.id).first()
+            if not fresh_doc:
+                continue
             # Get document metadata
-            doc_metadata = db_service.get_document_metadata(db, str(doc.id))
+            doc_metadata = db_service.get_document_metadata(db, str(fresh_doc.id))
 
             # Get parties
-            parties = db_service.get_parties(db, str(doc.id))
+            parties = db_service.get_parties(db, str(fresh_doc.id))
 
             # Build comprehensive metadata
-            metadata = doc.metadata_json or {}
+            metadata = fresh_doc.metadata_json or {}
             if doc_metadata:
                 metadata.update({
                     'effective_date': doc_metadata.effective_date.isoformat() if doc_metadata.effective_date else None,
@@ -108,10 +119,10 @@ async def list_documents(
 
             doc_responses.append(
                 DocumentResponse(
-                    id=str(doc.id),
-                    filename=doc.filename,
-                    upload_date=doc.upload_date,
-                    status=doc.status.value if hasattr(doc.status, 'value') else str(doc.status),
+                    id=str(fresh_doc.id),
+                    filename=fresh_doc.filename,
+                    upload_date=fresh_doc.upload_date,
+                    status=fresh_doc.status.value if hasattr(fresh_doc.status, 'value') else str(fresh_doc.status),
                     metadata=metadata
                 )
             )
@@ -210,6 +221,124 @@ async def get_document_chunks(document_id: str):
         return {"chunks": chunk_list}
     finally:
         db.close()
+
+
+@router.post("/{document_id}/find-text-match")
+async def find_text_match(document_id: str, request: dict):
+    """
+    Use LLM to find which PDF text items match a given chunk text.
+    This helps with accurate highlighting when PDF text is split differently than chunk text.
+    """
+    from llm.llm_factory import get_llm_client
+    from llm.llm_client import Chunk, Citation
+    import json
+    import re
+    
+    chunk_text = request.get("chunk_text", "")
+    pdf_text_items = request.get("pdf_text_items", [])  # List of {"str": "...", "index": N}
+    
+    if not chunk_text or not pdf_text_items:
+        raise HTTPException(status_code=400, detail="chunk_text and pdf_text_items required")
+    
+    # Build a readable version of PDF text with indices
+    # Show first 100 items with context
+    pdf_text_with_indices = "\n".join([
+        f"[{item.get('index', i)}] '{item.get('str', '')}'"
+        for i, item in enumerate(pdf_text_items[:100])  # Limit to first 100 items
+    ])
+    
+    # Also show what the text looks like when concatenated (for context)
+    concatenated_text = "".join([item.get('str', '') for item in pdf_text_items[:100]])
+    
+    # Create prompt for LLM
+    prompt = f"""You are helping to match text from a document chunk with text items extracted from a PDF.
+
+CHUNK TEXT (what we're looking for - match THIS EXACTLY):
+"{chunk_text[:500]}"
+
+IMPORTANT: The PDF text is split into individual items. When concatenated, these items form the full text.
+For example, if the chunk text is "June 16, 2025", it might be split across multiple items like:
+  [45] 'June'
+  [46] '  '  (two spaces)
+  [47] '16,'
+  [48] ' '
+  [49] '202'
+  [50] ' '
+  [51] '5'
+
+So to match "June 16, 2025", you would return: [45, 46, 47, 48, 49, 50, 51]
+
+PDF TEXT ITEMS (with indices - first 100 items):
+{pdf_text_with_indices[:2000]}
+
+CONCATENATED TEXT (for reference - this is what the items above form when joined):
+"{concatenated_text[:300]}"
+
+Your task: Find which PDF text items (by index) contain text that EXACTLY matches the chunk text.
+The PDF text may be split differently - numbers and words may be split across multiple items.
+
+CRITICAL REQUIREMENTS:
+1. You must match the COMPLETE chunk text, not just part of it
+2. If chunk text is "June 16, 2025", find ALL items that together form "June 16, 2025"
+3. Do NOT match just "June" if the chunk is "June 16, 2025" - you need the full date
+4. The indices you return should form a complete match when concatenated
+5. Ignore partial matches - only return indices if they form the complete chunk text
+6. Pay attention to how numbers are split - "2025" might be split as "202" and "5"
+7. Pay attention to spaces - there might be multiple spaces between words
+
+EXAMPLE:
+If chunk text is "June 16, 2025" and PDF items are:
+  [45] 'June'
+  [46] '  '
+  [47] '16,'
+  [48] ' '
+  [49] '202'
+  [50] ' '
+  [51] '5'
+Then return: [45, 46, 47, 48, 49, 50, 51]
+
+Return ONLY a JSON array of indices that form the complete match, like: [45, 46, 47, 48, 49, 50, 51]
+Include ONLY the items needed to form the complete chunk text match.
+
+JSON array only, no other text:"""
+
+    try:
+        llm_client = get_llm_client()
+        
+        # Create a dummy chunk with the prompt
+        dummy_chunk = Chunk(
+            text=prompt,
+            doc_id=document_id,
+            clause_number=None,
+            page_num=0,
+            span_start=0,
+            span_end=0,
+            source_uri="matching"
+        )
+        
+        result = await llm_client.generate_answer(
+            query="Find matching text indices",
+            context_chunks=[dummy_chunk],
+            citations=[]
+        )
+        
+        # Extract JSON array from response
+        json_match = re.search(r'\[[\d\s,]+\]', result.text)
+        if json_match:
+            indices = json.loads(json_match.group())
+            return {"indices": indices}
+        else:
+            # Fallback: try to find numbers in response
+            numbers = re.findall(r'\d+', result.text)
+            indices = [int(n) for n in numbers[:50]]  # Limit to 50 indices
+            return {"indices": indices}
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in LLM text matching: {e}")
+        # Fallback: return empty (frontend will use regular matching)
+        return {"indices": []}
 
 
 @router.delete("/{document_id}")

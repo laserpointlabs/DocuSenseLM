@@ -27,6 +27,10 @@ class DBService:
         limit: int = 100
     ) -> tuple[List[Document], int]:
         """List documents with pagination"""
+        # Expire all cached objects to ensure we get fresh data from the database
+        # This is important for seeing real-time status updates during reindexing
+        db.expire_all()
+        
         total = db.query(func.count(Document.id)).scalar()
         documents = db.query(Document).offset(skip).limit(limit).all()
         return documents, total

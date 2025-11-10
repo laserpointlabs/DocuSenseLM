@@ -87,11 +87,14 @@ class AnswerService:
             found_doc_id = document_finder.find_best_document_match(question, use_fuzzy=True)
             if found_doc_id:
                 document_id = found_doc_id
-                logger.info(f"Found document by company name: {document_id[:8]}...")
+                logger.info(f"✅ Found document by company name: {document_id[:8]}...")
                 # Update filters for downstream use
                 if filters is None:
                     filters = {}
                 filters['document_id'] = document_id
+                logger.info(f"✅ Added document_id filter: {filters.get('document_id')[:8]}...")
+            else:
+                logger.warning(f"⚠️  Could not find document by company name from query: {question}")
         
         # If we have a document_id and it's a structured question, try metadata first
         if document_id and query_info['metadata'].get('is_structured'):
@@ -211,10 +214,16 @@ class AnswerService:
             chunk_to_result[key] = result
         
         # Build citations only from context_chunks that were actually used
+        # Deduplicate: only one citation per (doc_id, clause_number, page_num) combination
+        seen_citation_keys = set()
         for chunk in context_chunks:
             key = (chunk.doc_id, chunk.page_num, chunk.clause_number)
             result = chunk_to_result.get(key)
             if result:
+                # Create citation key for deduplication
+                citation_key = (chunk.doc_id, chunk.clause_number, chunk.page_num)
+                if citation_key not in seen_citation_keys:
+                    seen_citation_keys.add(citation_key)
                 citation = Citation(
                     doc_id=chunk.doc_id or '',
                     clause_number=chunk.clause_number,

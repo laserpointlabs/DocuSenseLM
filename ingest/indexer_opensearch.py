@@ -299,6 +299,11 @@ class OpenSearchBM25Backend(BM25Backend):
                     }
                 })
 
+            if filters.get("document_id"):
+                bool_query["filter"].append({
+                    "term": {"doc_id": filters["document_id"]}
+                })
+
         response = self.client.search(index=self.index_name, body=search_body)
 
         results = []

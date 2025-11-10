@@ -46,6 +46,7 @@ export default function DocumentViewer({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlightRects, setHighlightRects] = useState<Array<{ x: number; y: number; width: number; height: number }>>([]);
+  const [viewportSize, setViewportSize] = useState<{ width: number; height: number } | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,185 +101,168 @@ export default function DocumentViewer({
   };
 
   const onPageLoadSuccess = async (page: any) => {
-    // Only highlight if we're on the highlight page
     if (highlightPage && page.pageNumber === highlightPage) {
-      console.log('Attempting to highlight on page:', highlightPage);
-      try {
-        // Get text content from the page
-        const textContent = await page.getTextContent();
-        console.log('Text content items:', textContent.items.length);
-        
-        // Get viewport for coordinate conversion
-        const viewport = page.getViewport({ scale: 1.5 });
-        
-        // Strategy: Find matching text items directly by content, not character positions
-        let highlightItems: any[] = [];
-        
-        // Get the text we want to highlight
-        let searchText = '';
-        if (highlightClause) {
-          // Use exact chunk text if we have clause number
-          const exactChunk = clauses.find(c => 
-            c.page_num === highlightPage && 
-            c.clause_number === highlightClause
-          );
-          if (exactChunk && exactChunk.text) {
-            searchText = exactChunk.text;
-            console.log(`Using exact chunk text for clause ${highlightClause}`);
-          }
-        }
-        
-        // Fallback to highlightText if no chunk found
-        if (!searchText && highlightText) {
-          // Extract key text from highlightText (remove metadata prefixes)
-          searchText = highlightText
-            .replace(/^(term|effective date|governing law|expiration date|parties?):\s*/i, '')
-            .replace(/\s*\([^)]*\)/g, '')
-            .trim();
-          
-          // If it's a date, extract just the date
-          const dateMatch = searchText.match(/(\w+\s+\d{1,2},?\s+\d{4})/i);
-          if (dateMatch) {
-            searchText = dateMatch[1];
-          }
-        }
-        
-        if (searchText) {
-          const searchTextLower = searchText.toLowerCase();
-          console.log('Searching for text:', searchText.substring(0, 50));
-          
-          // Find text items that contain the search text
-          // Build text progressively to find matches
-          let accumulatedText = '';
-          let startIndex = -1;
-          
-          for (let i = 0; i < textContent.items.length; i++) {
-            const item = textContent.items[i];
-            const itemText = item.str || '';
-            accumulatedText += itemText;
-            
-            // Check if accumulated text contains our search text
-            const accumulatedLower = accumulatedText.toLowerCase();
-            const foundIndex = accumulatedLower.indexOf(searchTextLower);
-            
-            if (foundIndex >= 0 && startIndex === -1) {
-              // Found the start - now find all items that are part of this match
-              startIndex = i;
-              
-              // Calculate which items are part of the match
-              let charCount = 0;
-              for (let j = 0; j <= i; j++) {
-                const prevItem = textContent.items[j];
-                const prevText = prevItem.str || '';
-                charCount += prevText.length;
-              }
-              
-              // Now find items that overlap with the match
-              let matchCharStart = foundIndex;
-              let matchCharEnd = foundIndex + searchText.length;
-              let currentCharPos = 0;
-              
-              for (let j = 0; j < textContent.items.length; j++) {
-                const item = textContent.items[j];
-                const itemText = item.str || '';
-                const itemStart = currentCharPos;
-                const itemEnd = currentCharPos + itemText.length;
-                
-                // Check if this item overlaps with our match
-                if (itemEnd > matchCharStart && itemStart < matchCharEnd) {
-                  highlightItems.push(item);
-                }
-                
-                currentCharPos = itemEnd;
-                
-                // Stop if we've passed the match
-                if (itemStart >= matchCharEnd) {
-                  break;
-                }
-              }
-              
-              break; // Found match, stop searching
+      console.log('=== HIGHLIGHTING PAGE ===', highlightPage);
+      
+      // Wait for text layer to render
+      setTimeout(async () => {
+        try {
+          // Get text to match
+          let chunkText = '';
+          if (highlightClause) {
+            const chunks = await documentAPI.getChunks(documentId);
+            const clauses = chunks.chunks || [];
+            const targetChunk = clauses.find((c: Chunk) =>
+              c.page_num === highlightPage && c.clause_number === highlightClause
+            );
+            if (!targetChunk) {
+              setHighlightRects([]);
+              return;
             }
-            
-            // Limit accumulated text to avoid memory issues
-            if (accumulatedText.length > 500) {
-              accumulatedText = accumulatedText.substring(accumulatedText.length - 200);
-            }
+            chunkText = targetChunk.text;
+          } else if (highlightText) {
+            chunkText = highlightText.replace(/^(Effective Date|Governing Law|Term|Parties):\s*/i, '').trim();
+          } else {
+            setHighlightRects([]);
+            return;
           }
           
-          console.log(`Found ${highlightItems.length} text items matching "${searchText.substring(0, 30)}"`);
-        }
-        
-        console.log('Found highlight items:', highlightItems.length);
-        
-        if (highlightItems.length > 0) {
-          console.log('Creating highlight rectangles from', highlightItems.length, 'text items');
+          // Get text content
+          const textContent = await page.getTextContent();
           
-          // Group items by Y position (same line) - use transform[5] rounded to group
-          const lineGroups: { [key: number]: any[] } = {};
-          highlightItems.forEach((item: any) => {
-            // Round Y to 0.1 precision to group items on same line
-            const yPos = Math.round(item.transform[5] * 10) / 10;
-            if (!lineGroups[yPos]) {
-              lineGroups[yPos] = [];
-            }
-            lineGroups[yPos].push(item);
+          // Direct text matching - search for the exact text in PDF items
+          const searchText = chunkText.toLowerCase().trim();
+          // Normalize: remove extra spaces, keep punctuation for dates
+          const searchNormalized = searchText.replace(/\s+/g, ' ').trim();
+          let matchedIndices: number[] = [];
+          
+          // Build a normalized version of all PDF text for searching
+          const pdfTextNormalized = textContent.items.map((item: any) => {
+            const str = (item.str || '').toLowerCase();
+            return str;
           });
           
-          const rects: Array<{ x: number; y: number; width: number; height: number }> = [];
+          // Find where the search text appears in the normalized PDF text
+          // Try different window sizes to account for text splitting
+          for (let windowSize = 2; windowSize <= 10; windowSize++) {
+            for (let start = 0; start <= pdfTextNormalized.length - windowSize; start++) {
+              const window = pdfTextNormalized.slice(start, start + windowSize);
+              const combined = window.join('').replace(/\s+/g, ' ').trim();
+              
+              // Check if this window contains our search text (normalized)
+              const searchNoSpaces = searchNormalized.replace(/\s+/g, '');
+              const combinedNoSpaces = combined.replace(/\s+/g, '');
+              
+              if (combinedNoSpaces.includes(searchNoSpaces)) {
+                // Found a potential match - verify it's the right one
+                // Check if the combined text ends with or contains our search text
+                const searchWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+                const combinedWords = combined.split(/\s+/).filter(w => w.length > 0);
+                
+                // Try to find where searchWords appear in combinedWords
+                for (let wordStart = 0; wordStart <= combinedWords.length - searchWords.length; wordStart++) {
+                  const windowWords = combinedWords.slice(wordStart, wordStart + searchWords.length);
+                  const windowText = windowWords.join(' ');
+                  
+                  if (windowText === searchNormalized || 
+                      windowText.replace(/[^\w\s]/g, '') === searchNormalized.replace(/[^\w\s]/g, '')) {
+                    // Found exact match - calculate which PDF items correspond to these words
+                    // This is approximate - we'll use the window indices
+                    matchedIndices = Array.from({ length: windowSize }, (_, idx) => start + idx);
+                    console.log(`Found exact match at indices ${matchedIndices[0]}-${matchedIndices[matchedIndices.length - 1]}`);
+                    break;
+                  }
+                }
+                
+                if (matchedIndices.length > 0) break;
+              }
+            }
+            if (matchedIndices.length > 0) break;
+          }
           
-          // Create one rectangle per line
-          Object.entries(lineGroups).forEach(([yPosStr, items]) => {
-            // Sort items by X position
-            items.sort((a, b) => a.transform[4] - b.transform[4]);
+          // If direct match failed, try LLM
+          if (matchedIndices.length === 0) {
+            console.log('Direct match failed, trying LLM...');
+            const pdfItemsForLLM = textContent.items.slice(0, 200).map((item: any, idx: number) => ({
+              str: item.str || '',
+              index: idx
+            }));
             
-            const firstItem = items[0];
-            const lastItem = items[items.length - 1];
-            
-            // Get X bounds
-            const minX = firstItem.transform[4];
-            // Calculate width: last item X + its width (transform[0] is horizontal scale)
-            const lastItemWidth = Math.abs(lastItem.transform[0]) * (lastItem.str?.length || 0) || 50;
-            const maxX = lastItem.transform[4] + lastItemWidth;
-            
-            // Convert Y from PDF coordinate system (bottom-left origin) to CSS (top-left origin)
-            // transform[5] is Y from bottom, transform[3] is height (can be negative)
-            const yFromBottom = parseFloat(yPosStr);
-            const height = Math.abs(firstItem.transform[3] || 12);
-            
-            // PDF.js coordinate conversion: y = viewport.height - transform[5] - height
-            const y = viewport.height - yFromBottom - height;
-            
-            rects.push({
-              x: minX,
-              y: y,
-              width: maxX - minX,
-              height: Math.max(height, 12),
-            });
-            
-            const textPreview = items.map((i: any) => i.str).join('').substring(0, 50);
-            console.log(`Line rect: x=${minX.toFixed(1)}, y=${y.toFixed(1)}, yFromBottom=${yFromBottom.toFixed(1)}, height=${height.toFixed(1)}, text="${textPreview}..."`);
+            try {
+              const matchResult = await documentAPI.findTextMatch(documentId, chunkText, pdfItemsForLLM);
+              matchedIndices = matchResult.indices || [];
+            } catch (err) {
+              console.error('LLM matching failed:', err);
+            }
+          }
+          
+          if (matchedIndices.length === 0) {
+            console.warn('No matches found for:', chunkText);
+            setHighlightRects([]);
+            return;
+          }
+          
+          const llmIndices = matchedIndices;
+          
+          // Find the Page component wrapper (react-pdf renders it)
+          const pageWrapper = pageRef.current?.querySelector('.react-pdf__Page') as HTMLElement;
+          const textLayer = pageWrapper?.querySelector('.react-pdf__Page__textContent') as HTMLElement;
+          
+          if (!pageWrapper || !textLayer) {
+            setTimeout(() => onPageLoadSuccess(page), 500);
+            return;
+          }
+          
+          const textSpans = Array.from(textLayer.querySelectorAll('span')) as HTMLElement[];
+          if (textSpans.length === 0) {
+            setTimeout(() => onPageLoadSuccess(page), 500);
+            return;
+          }
+          
+          // Highlight spans directly with CSS - much simpler and more reliable!
+          // Based on article: "Highlighting source spans in PDFs" - use DOM directly
+          const validIndices = llmIndices.filter(idx => idx >= 0 && idx < textSpans.length).sort((a, b) => a - b);
+          
+          if (validIndices.length === 0) {
+            setHighlightRects([]);
+            return;
+          }
+          
+          // Clear any existing highlights first
+          textSpans.forEach(span => {
+            (span as HTMLElement).style.backgroundColor = '';
+            (span as HTMLElement).style.borderRadius = '';
           });
           
-          console.log('Created', rects.length, 'highlight rectangles');
-          setHighlightRects(rects);
-        } else {
-          console.warn('No highlight items found - using fallback highlight');
-          // Fallback: highlight a general area
-          const viewport = page.getViewport({ scale: 1.5 });
-          setHighlightRects([{
-            x: 50,
-            y: 100,
-            width: viewport.width - 100,
-            height: 150,
-          }]);
+          // Highlight matched spans directly - PDF.js text layer spans
+          const highlightedTexts: string[] = [];
+          validIndices.forEach((idx: number) => {
+            const span = textSpans[idx] as HTMLElement;
+            const spanText = span.textContent || '';
+            highlightedTexts.push(spanText);
+            span.style.backgroundColor = 'rgba(255, 255, 0, 0.4)'; // Yellow highlight
+            span.style.borderRadius = '2px';
+            span.style.padding = '1px 2px';
+          });
+          
+          console.log(`✅ Highlighted ${validIndices.length} text spans:`, validIndices);
+          console.log(`Highlighted text: "${highlightedTexts.join('')}"`);
+          
+          // Clear overlay rects since we're using direct CSS highlighting
+          setHighlightRects([]);
+          
+          const scale = 1.5;
+          const viewport = page.getViewport({ scale });
+          setViewportSize({ width: viewport.width, height: viewport.height });
+          
+        } catch (err) {
+          console.error('Highlighting failed:', err);
+          setHighlightRects([]);
         }
-      } catch (err) {
-        console.error('Failed to calculate highlight positions:', err);
-        setHighlightRects([]);
-      }
+      }, 500);
     } else {
       setHighlightRects([]);
+      setViewportSize(null);
     }
   };
 
@@ -330,7 +314,7 @@ export default function DocumentViewer({
           <p className="text-sm text-gray-600">No clauses available. Document may still be processing.</p>
         ) : (
           <nav className="space-y-1">
-            {clauses.map((clause) => {
+            {clauses.map((clause: Chunk) => {
               // Simple display - use clause_title if available, otherwise clause_number or section_type
               let displayText = clause.clause_title || clause.clause_number || clause.section_type || 'Untitled Clause';
 
@@ -419,33 +403,6 @@ export default function DocumentViewer({
                   onLoadSuccess={onPageLoadSuccess}
                   scale={1.5}
                 />
-                {/* Highlight overlay - positioned relative to Page component */}
-                {highlightRects.length > 0 && pageNumber === highlightPage && (
-                  <div 
-                    className="absolute top-0 left-0 pointer-events-none z-10"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                    }}
-                  >
-                    {highlightRects.map((rect, idx) => {
-                      console.log('Rendering highlight rect:', rect);
-                      return (
-                        <div
-                          key={idx}
-                          className="absolute bg-yellow-300 bg-opacity-60 border border-yellow-500 rounded-sm"
-                          style={{
-                            left: `${rect.x}px`,
-                            top: `${rect.y}px`,
-                            width: `${rect.width}px`,
-                            height: `${rect.height}px`,
-                          }}
-                          title="Citation location"
-                        />
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             </Document>
           </div>

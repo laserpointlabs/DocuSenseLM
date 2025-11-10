@@ -60,9 +60,12 @@ class SearchService:
             raise RuntimeError("Search backends are not configured")
 
         # BM25 search
+        logger.info(f"🔍 BM25 search with filters: {filters}")
         bm25_results = self.bm25_backend.search(query, k=k, filters=filters)
         logger.info(f"BM25 search returned {len(bm25_results)} results")
         if bm25_results:
+            unique_docs = set(r.get('doc_id') for r in bm25_results if r.get('doc_id'))
+            logger.info(f"BM25 results from {len(unique_docs)} unique documents: {[d[:8] + '...' for d in list(unique_docs)[:5]]}")
             logger.info(f"Top BM25 result: doc_id={bm25_results[0].get('doc_id')[:8]}..., clause={bm25_results[0].get('clause_number')}, page={bm25_results[0].get('page_num')}, score={bm25_results[0].get('score'):.3f}")
             logger.info(f"  Text preview: {bm25_results[0].get('text', '')[:200]}")
         
@@ -74,9 +77,12 @@ class SearchService:
             self._embedder = self._embedder_provider()
 
         query_vector = self._embedder.embed_text(query)
+        logger.info(f"🔍 Vector search with filters: {filters}")
         vector_results = self.vector_backend.search(query_vector, k=k, filters=filters)
         logger.info(f"Vector search returned {len(vector_results)} results")
         if vector_results:
+            unique_docs = set(r.get('doc_id') for r in vector_results if r.get('doc_id'))
+            logger.info(f"Vector results from {len(unique_docs)} unique documents: {[d[:8] + '...' for d in list(unique_docs)[:5]]}")
             logger.info(f"Top vector result: doc_id={vector_results[0].get('doc_id')[:8]}..., clause={vector_results[0].get('clause_number')}, page={vector_results[0].get('page_num')}, score={vector_results[0].get('score'):.3f}")
             logger.info(f"  Text preview: {vector_results[0].get('text', '')[:200]}")
         

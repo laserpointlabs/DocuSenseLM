@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { documentAPI, adminAPI } from '@/lib/api';
 import { Document } from '@/lib/api';
+import Toast from '@/components/Toast';
 
 export default function AdminPanel() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -11,6 +12,21 @@ export default function AdminPanel() {
   const [uploading, setUploading] = useState(false);
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexMessage, setReindexMessage] = useState<string | null>(null);
+  const [reindexProgress, setReindexProgress] = useState<{
+    is_running: boolean;
+    total: number;
+    completed: number;
+    current: string | null;
+    errors: number;
+    progress_percent: number;
+  } | null>(null);
+  const [toast, setToast] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({ show: false, message: '', type: 'info' });
 
   useEffect(() => {
     loadDocuments();
@@ -24,6 +40,19 @@ export default function AdminPanel() {
     try {
       const response = await documentAPI.list();
       setDocuments(response.documents);
+      
+      // Debug: Log status changes during reindexing
+      if (reindexing) {
+        const processingDocs = response.documents.filter(doc => 
+          doc.status?.toLowerCase() === 'processing'
+        );
+        if (processingDocs.length > 0) {
+          console.log(`[Reindex] Found ${processingDocs.length} documents with status "processing":`, 
+            processingDocs.map(d => ({ id: d.id, filename: d.filename, status: d.status }))
+          );
+        }
+      }
+      
       setSelectedDocuments((prev) =>
         prev.filter((id) => response.documents.some((doc) => doc.id === id))
       );
@@ -232,8 +261,126 @@ export default function AdminPanel() {
     }
   };
 
+  const handleReindexAll = async () => {
+    if (!confirm('Re-index all documents? This will rebuild search indexes for all processed documents. This may take a few minutes.')) {
+      return;
+    }
+
+    setReindexing(true);
+    setReindexMessage(null);
+    // Initialize progress immediately so the progress bar shows right away
+    setReindexProgress({
+      is_running: true,
+      total: 0,
+      completed: 0,
+      current: 'Initializing...',
+      errors: 0,
+      progress_percent: 0
+    });
+    
+    // Start polling progress endpoint AND refresh documents to show status changes
+    const progressInterval = setInterval(async () => {
+      try {
+        const progress = await adminAPI.getReindexProgress();
+        setReindexProgress(progress);
+        
+        // ALSO refresh the documents list (don't await - let it run in background)
+        // This ensures the polling loop isn't blocked by slow document queries
+        loadDocuments(false).catch(err => console.error('Failed to load documents:', err));
+        
+        // Stop polling if reindexing is complete
+        if (!progress.is_running) {
+          clearInterval(progressInterval);
+          // Do final refresh
+          await loadDocuments();
+          await loadStats();
+          setReindexing(false);
+          setReindexProgress(null);
+          
+          // Show completion toast
+          const hasErrors = progress.errors > 0;
+          const completionMessage = hasErrors 
+            ? `Re-indexing completed with ${progress.errors} error(s). ${progress.completed} document(s) successfully processed.`
+            : `Re-indexing completed successfully! All ${progress.completed} document(s) processed.`;
+          
+          setToast({
+            show: true,
+            message: completionMessage,
+            type: hasErrors ? 'info' : 'success'
+          });
+        }
+      } catch (error) {
+        console.error('Failed to get reindex progress:', error);
+      }
+    }, 500); // Poll every 500ms
+    
+    // Fire-and-forget the reindex API call - don't wait for it
+    // The polling interval will continue and stop naturally when is_running becomes false
+    adminAPI.reindex()
+      .catch(error => {
+        // Only show error toast if the initial API call fails
+        // (not the reindexing process itself, which is monitored by polling)
+        const errorMessage = error.response?.data?.detail || error.message || 'Failed to start re-indexing';
+        
+        setToast({
+          show: true,
+          message: errorMessage,
+          type: 'error'
+        });
+        
+        setReindexMessage(`Error: ${errorMessage}`);
+        console.error('Failed to start re-indexing:', error);
+        
+        // Clean up on error
+        setReindexing(false);
+        setReindexProgress(null);
+      });
+    
+    // Note: Polling will continue until progress.is_running becomes false
+    // Final refresh will happen when polling stops naturally (see lines 286-293)
+  };
+
   return (
     <div className="space-y-6">
+      {/* Reindexing Progress Bar - Prominent at top */}
+      {reindexProgress && reindexProgress.is_running && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-lg font-semibold text-blue-900">
+                Re-indexing Documents in Progress
+              </span>
+            </div>
+            <span className="text-lg font-bold text-blue-700">
+              {reindexProgress.completed} / {reindexProgress.total} ({reindexProgress.progress_percent.toFixed(0)}%)
+            </span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-4 mb-3 shadow-inner">
+            <div 
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 h-4 rounded-full transition-all duration-500 shadow-sm"
+              style={{ width: `${reindexProgress.progress_percent}%` }}
+            />
+          </div>
+          {reindexProgress.current && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-blue-800">Currently processing:</span>
+              <span className="text-sm text-blue-700 font-mono bg-white px-2 py-1 rounded border border-blue-200">
+                {reindexProgress.current}
+              </span>
+            </div>
+          )}
+          {reindexProgress.errors > 0 && (
+            <div className="mt-2 text-sm text-orange-700 font-medium">
+              ⚠️ {reindexProgress.errors} error(s) occurred
+            </div>
+          )}
+        </div>
+      )}
+      
       {/* Statistics */}
       {stats && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -257,6 +404,7 @@ export default function AdminPanel() {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-600">OpenSearch:</span>
               <span className={`text-sm font-medium ${stats.opensearch_status === 'healthy' ? 'text-green-600' : 'text-red-600'}`}>
@@ -267,6 +415,38 @@ export default function AdminPanel() {
                 {stats.qdrant_status}
               </span>
             </div>
+              <button
+                type="button"
+                onClick={handleReindexAll}
+                disabled={reindexing}
+                className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm ${
+                  reindexing
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {reindexing ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Re-indexing...
+                  </>
+                ) : (
+                  'Re-index All Documents'
+                )}
+              </button>
+            </div>
+            {reindexMessage && (
+              <div className={`mt-3 p-3 rounded-md text-sm ${
+                reindexMessage.startsWith('Error') 
+                  ? 'bg-red-50 text-red-800 border border-red-200' 
+                  : 'bg-green-50 text-green-800 border border-green-200'
+              }`}>
+                {reindexMessage}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -385,6 +565,16 @@ export default function AdminPanel() {
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <Toast
+          key={toast.message}
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ show: false, message: '', type: 'info' })}
+        />
+      )}
     </div>
   );
 }

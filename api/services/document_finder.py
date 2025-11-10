@@ -158,9 +158,12 @@ class DocumentFinder:
                      'clause', 'effective', 'duration', 'how', 'long', 'expires', 'expiration'}
         
         # Pattern 1: "of X" or "for X" where X is a company name
+        # Also handle "X NDA" pattern directly (e.g., "Fanuc NDA")
         patterns = [
+            r'(?:of|for|with)\s+the\s+([A-Z][A-Za-z&\-\s]+?)\s+(?:NDA|agreement)',  # "of the Fanuc NDA" -> "Fanuc"
             r'(?:of|for|with)\s+([A-Z][A-Za-z&\-\s]+?(?:\s+(?:Industries|Distribution|Corporation|Company|LLC|Inc\.|Ltd\.|Limited|Corp))?)',
             r'(?:of|for|with)\s+([A-Z][A-Za-z&\-\s]{3,})(?:\s+(?:NDA|agreement|clause))?',
+            r'([A-Z][A-Za-z]{2,})\s+(?:NDA|agreement)',  # "Fanuc NDA" -> "Fanuc"
             r'(?:of|for|with)\s+([A-Z][A-Za-z]{2,})',  # Simple pattern: "of Vallen" -> "Vallen"
         ]
         

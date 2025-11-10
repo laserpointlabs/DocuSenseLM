@@ -106,6 +106,22 @@ docker exec -i nda-postgres psql -U nda_user nda_db < backup_YYYYMMDD.sql
    docker exec nda-postgres psql -U nda_user -d nda_db -c "\dt"
    ```
 
+## Auto-Reindexing on Startup
+
+To prevent search indexes from being empty after container restarts, you can enable automatic reindexing:
+
+```bash
+# In your .env file
+AUTO_REINDEX_ON_STARTUP=true
+```
+
+When enabled, the API will:
+1. Check if documents exist in the database
+2. Check if search indexes (OpenSearch/Qdrant) are empty
+3. Automatically reindex all documents if indexes are empty
+
+**Note**: This will slow down API startup if reindexing is needed, but ensures search always works.
+
 ## Best Practices
 
 1. **Always use `docker compose restart`** instead of `down` + `up` for quick restarts
@@ -113,6 +129,7 @@ docker exec -i nda-postgres psql -U nda_user nda_db < backup_YYYYMMDD.sql
 3. **Never use `-v` flag** with `docker compose down` unless you want to delete all data
 4. **Create backups** before major changes or updates
 5. **Use version control** for configuration files (docker-compose.yml, .env.example)
+6. **Enable AUTO_REINDEX_ON_STARTUP** to prevent empty search indexes after restarts
 
 ## Current Data Status
 

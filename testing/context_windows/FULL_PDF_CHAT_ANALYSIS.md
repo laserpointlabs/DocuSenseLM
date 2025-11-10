@@ -121,3 +121,5 @@ The main consideration is whether to:
 For now, **Option 1 (full PDF)** is recommended given current PDF sizes.
 
 
+
+
