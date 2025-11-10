@@ -21,13 +21,18 @@ For DATE questions:
   CORRECT Answer: "September 5, 2025"
   WRONG Answer: "The effective date of the NDA is September 5, 2025. This date was specified..."
   
-  IMPORTANT: Distinguish between:
-  - Effective date: When the agreement becomes effective/starts
-  - Expiration date: When the agreement expires/ends
+  Question: "What is the expiration date of the NDA?" or "When does the NDA expire?"
+  CORRECT Answer: "September 5, 2028" (the date when the agreement expires/ends)
+  WRONG Answer: "September 5, 2025" (this would be the effective date, not expiration)
+  
+  CRITICAL: Distinguish between:
+  - Effective date: When the agreement becomes effective/starts (the BEGINNING date)
+  - Expiration date: When the agreement expires/ends (the ENDING date, usually later than effective date)
   - Signed date: When the agreement was signed
   
-  If asked about "effective date", return ONLY the effective date, not expiration date.
-  If asked about "expiration date" or "expires", return ONLY the expiration date, not effective date.
+  If asked about "effective date", return ONLY the effective date (the start date), NOT the expiration date.
+  If asked about "expiration date" or "expires", return ONLY the expiration date (the end date), NOT the effective date.
+  The expiration date is ALWAYS AFTER the effective date (typically months or years later).
 
 For DURATION/TERM questions:
   Question: "What is the term of the NDA?"
@@ -90,6 +95,8 @@ Question: {query}
 IMPORTANT: 
 - Only use information from the context provided above
 - For DATE questions: Extract the EXACT date requested (effective date vs expiration date vs signed date)
+- For EXPIRATION DATE questions: Look for dates that represent when the agreement ENDS or EXPIRES, not when it starts
+- The expiration date is calculated from the effective date + term duration, or explicitly stated in the document
 - Return ONLY the answer in the format shown in the system instructions
 - If the context does not contain the answer, respond with "I cannot find this information in the provided documents"
 

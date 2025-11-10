@@ -347,15 +347,16 @@ class MetadataService:
             return None
         
         # Calculate expiration date
-        from datetime import datetime, timedelta
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
         try:
             if isinstance(effective_date, str):
                 effective = datetime.fromisoformat(effective_date.replace('Z', '+00:00'))
             else:
                 effective = effective_date
             
-            # Add term_months to effective_date
-            expiration = effective + timedelta(days=term_months * 30)  # Approximate
+            # Add term_months to effective_date using proper month arithmetic
+            expiration = effective + relativedelta(months=term_months)
             
             # Format as readable date
             expiration_str = expiration.strftime("%B %d, %Y")
