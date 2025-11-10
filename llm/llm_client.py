@@ -47,7 +47,9 @@ class LLMClient(ABC):
         self,
         query: str,
         context_chunks: List[Chunk],
-        citations: List[Citation]
+        citations: List[Citation],
+        use_conversational: bool = False,
+        additional_info: str = ""
     ) -> Answer:
         """
         Generate an answer from query and context
@@ -56,6 +58,8 @@ class LLMClient(ABC):
             query: User question
             context_chunks: Retrieved context chunks
             citations: Citation information
+            use_conversational: Whether to use conversational mode (auto-detected if False)
+            additional_info: Optional additional information (e.g., calculated days/months)
 
         Returns:
             Answer with text and citations

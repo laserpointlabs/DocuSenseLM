@@ -284,7 +284,7 @@ export const competencyAPI = {
     });
     return response.data;
   },
-  listQuestions: async (categoryId?: string, skip = 0, limit = 100) => {
+  listQuestions: async (categoryId?: string, skip = 0, limit = 500) => {
     const response = await api.get('/competency/questions', {
       params: { category_id: categoryId, skip, limit },
     });
@@ -319,8 +319,32 @@ export const competencyAPI = {
     const response = await api.get('/competency/test/results/latest');
     return response.data;
   },
+  getTestProgress: async () => {
+    const response = await api.get('/competency/test/progress');
+    return response.data;
+  },
+  getGlobalThreshold: async () => {
+    const response = await api.get('/competency/threshold/global');
+    return response.data;
+  },
+  setGlobalThreshold: async (threshold: number) => {
+    const response = await api.put('/competency/threshold/global', null, {
+      params: { threshold: threshold.toString() },
+    });
+    return response.data;
+  },
   deleteQuestion: async (questionId: string) => {
     const response = await api.delete(`/competency/questions/${questionId}`);
+    return response.data;
+  },
+  deleteAllQuestions: async () => {
+    const response = await api.delete('/competency/questions/all');
+    return response.data;
+  },
+  loadQuestionsFromJson: async (clearExisting: boolean = false) => {
+    const response = await api.post('/competency/questions/load-from-json', null, {
+      params: { clear_existing: clearExisting },
+    });
     return response.data;
   },
 };

@@ -30,6 +30,13 @@ export default function CompetencyPage() {
   // Global threshold
   const [globalThreshold, setGlobalThreshold] = useState(0.7);
   const [updatingGlobalThreshold, setUpdatingGlobalThreshold] = useState(false);
+  
+  // Loading/Clearing
+  const [loadingFromJson, setLoadingFromJson] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
+  
+  // Test Progress
+  const [testProgress, setTestProgress] = useState<any | null>(null);
 
   useEffect(() => {
     loadQuestions();
@@ -298,6 +305,40 @@ export default function CompetencyPage() {
     }
   };
 
+  const handleLoadFromJson = async () => {
+    const clearFirst = confirm('Clear existing questions before loading? (Click OK to clear, Cancel to add to existing)');
+    
+    setLoadingFromJson(true);
+    try {
+      const result = await competencyAPI.loadQuestionsFromJson(clearFirst);
+      await loadQuestions();
+      alert(`Successfully loaded ${result.loaded_count} questions from JSON file${result.errors ? `\n\nErrors: ${result.errors.length}` : ''}`);
+    } catch (error: any) {
+      alert(`Failed to load questions from JSON: ${error.message}`);
+    } finally {
+      setLoadingFromJson(false);
+    }
+  };
+
+  const handleClearAllQuestions = async () => {
+    if (!confirm(`⚠️  This will delete ALL ${questions.length} questions and all test data. This cannot be undone. Continue?`)) {
+      return;
+    }
+
+    setClearingAll(true);
+    try {
+      const result = await competencyAPI.deleteAllQuestions();
+      await loadQuestions();
+      setAllTestResults(null);
+      setDetailedResults({});
+      alert(`Successfully deleted ${result.questions_deleted} questions, ${result.test_runs_deleted} test runs, and ${result.feedback_deleted} feedback records.`);
+    } catch (error: any) {
+      alert(`Failed to clear questions: ${error.message}`);
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   const runAllTests = async () => {
     if (questions.length === 0) {
       alert('No questions available to test');
@@ -311,9 +352,24 @@ export default function CompetencyPage() {
     setTestingAll(true);
     setAllTestResults(null);
     setDetailedResults({});
+    setTestProgress(null); // Reset progress before starting
+
+    // Start polling for progress
+    const progressInterval = setInterval(async () => {
+      try {
+        const progress = await competencyAPI.getTestProgress();
+        setTestProgress(progress);
+        if (!progress.is_running) {
+          clearInterval(progressInterval);
+        }
+      } catch (error) {
+        console.error('Failed to get test progress:', error);
+      }
+    }, 500); // Poll every 500ms
 
     try {
       const results = await competencyAPI.runAllTests();
+      clearInterval(progressInterval);
 
       const enhancedResults = results.results?.map((result: any) => {
         const question = questions.find(q => q.id === result.question_id);
@@ -350,7 +406,10 @@ export default function CompetencyPage() {
       // Reload test results from database to ensure we have the latest saved results
       await loadLatestTestResults();
       // They will persist and be loaded on refresh
+      setTestProgress(null); // Clear progress on completion
     } catch (error: any) {
+      clearInterval(progressInterval);
+      setTestProgress(null); // Clear progress on error
       alert(`Failed to run all tests: ${error.message}`);
     } finally {
       setTestingAll(false);
@@ -411,7 +470,16 @@ export default function CompetencyPage() {
 
       {/* Create Question Section */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Question</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Create New Question</h2>
+          <button
+            onClick={handleLoadFromJson}
+            disabled={loadingFromJson}
+            className="inline-flex items-center px-4 py-2 border border-primary-300 text-sm font-medium rounded-md text-primary-700 bg-primary-50 hover:bg-primary-100 disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            {loadingFromJson ? 'Loading...' : '📥 Load from JSON'}
+          </button>
+        </div>
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -468,9 +536,61 @@ export default function CompetencyPage() {
         </div>
       </div>
 
+      {/* Test Progress Bar */}
+      {testProgress && testProgress.is_running && (
+        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-lg font-semibold text-blue-900">
+                Testing Competency Questions in Progress
+              </span>
+            </div>
+            <span className="text-lg font-bold text-blue-700">
+              {testProgress.completed || 0} / {testProgress.total || 0} ({testProgress.progress_percent?.toFixed(0) || 0}%)
+            </span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-4 mb-3 shadow-inner">
+            <div 
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 h-4 rounded-full transition-all duration-500 shadow-sm"
+              style={{ width: `${testProgress.progress_percent || 0}%` }}
+            />
+          </div>
+          {testProgress.current && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-blue-800">Currently testing:</span>
+              <span className="text-sm text-blue-700 font-mono bg-white px-2 py-1 rounded border border-blue-200">
+                {testProgress.current}
+              </span>
+            </div>
+          )}
+          {testProgress.errors > 0 && (
+            <div className="mt-2 text-sm text-red-600">
+              ⚠️ {testProgress.errors} error(s) encountered
+            </div>
+          )}
+          <div className="mt-2 flex gap-4 text-sm">
+            <span className="text-green-600 font-medium">✅ Passed: {testProgress.passed || 0}</span>
+            <span className="text-red-600 font-medium">❌ Failed: {testProgress.failed || 0}</span>
+          </div>
+        </div>
+      )}
+
       {/* Test All Button and Summary */}
       {questions.length > 0 && (
         <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearAllQuestions}
+              disabled={clearingAll || testingAll}
+              className="inline-flex items-center px-4 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              {clearingAll ? 'Clearing...' : 'Clear All'}
+            </button>
+          </div>
           <div className="flex items-center gap-4">
             {allTestResults && (
               <div className="flex items-center gap-6 bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4">

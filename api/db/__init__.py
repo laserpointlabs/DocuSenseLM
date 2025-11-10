@@ -2,12 +2,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 import os
+import sys
 from sqlalchemy.pool import StaticPool
 
 from .schema import Base
 
 # Database URL from environment
-DATABASE_URL = os.getenv("POSTGRES_URL", "postgresql+psycopg://nda_user:nda_password@localhost:5432/nda_db")
+# Use psycopg2 for Python < 3.13, psycopg for Python >= 3.13
+_default_db_url = (
+    "postgresql+psycopg://nda_user:nda_password@localhost:5432/nda_db"
+    if sys.version_info >= (3, 13)
+    else "postgresql+psycopg2://nda_user:nda_password@localhost:5432/nda_db"
+)
+DATABASE_URL = os.getenv("POSTGRES_URL", _default_db_url)
 
 # Create engine with sensible defaults for Postgres and SQLite
 engine_kwargs = {

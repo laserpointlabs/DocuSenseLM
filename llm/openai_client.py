@@ -5,7 +5,15 @@ import os
 from typing import List, Optional
 from openai import AsyncOpenAI
 from .llm_client import LLMClient, Chunk, Citation, Answer
-from .prompts import build_system_prompt, build_user_prompt, build_cross_document_prompt, detect_question_type
+from .prompts import (
+    build_system_prompt, 
+    build_user_prompt, 
+    build_cross_document_prompt,
+    build_conversational_system_prompt,
+    build_conversational_prompt,
+    detect_question_type,
+    is_conversational_question
+)
 
 
 class OpenAIClient(LLMClient):
@@ -32,9 +40,20 @@ class OpenAIClient(LLMClient):
         self,
         query: str,
         context_chunks: List[Chunk],
-        citations: List[Citation]
+        citations: List[Citation],
+        use_conversational: bool = False,
+        additional_info: str = ""
     ) -> Answer:
-        """Generate answer using OpenAI"""
+        """
+        Generate answer using OpenAI
+        
+        Args:
+            query: User question
+            context_chunks: Retrieved document chunks
+            citations: Citation information
+            use_conversational: Whether to use conversational mode (auto-detected if False)
+            additional_info: Optional additional information (e.g., calculated days/months)
+        """
 
         # Use centralized prompts from prompts.py
         import logging
@@ -44,6 +63,12 @@ class OpenAIClient(LLMClient):
         logger.info(f"Query: {query}")
         logger.info(f"Number of context chunks: {len(context_chunks)}")
         logger.info(f"Number of citations: {len(citations)}")
+
+        # Auto-detect conversational questions if not explicitly set
+        if not use_conversational:
+            use_conversational = is_conversational_question(query)
+        
+        logger.info(f"Using {'conversational' if use_conversational else 'structured'} mode")
 
         # Log each chunk individually
         if context_chunks:
@@ -57,16 +82,26 @@ class OpenAIClient(LLMClient):
         else:
             logger.warning("⚠️  NO CONTEXT CHUNKS PROVIDED!")
 
-        # Detect question type and build appropriate prompts
-        question_type = detect_question_type(query)
-        logger.info(f"Detected question type: {question_type}")
-        
-        system_prompt = build_system_prompt()
-        
-        if question_type == "cross_document":
-            user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+        # Build prompts based on mode
+        if use_conversational:
+            # Use conversational prompts
+            system_prompt = build_conversational_system_prompt()
+            question_type = detect_question_type(query)
+            if question_type == "cross_document":
+                user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+            else:
+                user_prompt = build_conversational_prompt(query, context_chunks, citations, additional_info)
         else:
-            user_prompt = build_user_prompt(query, context_chunks, citations)
+            # Use structured prompts
+            question_type = detect_question_type(query)
+            logger.info(f"Detected question type: {question_type}")
+            
+            system_prompt = build_system_prompt()
+            
+            if question_type == "cross_document":
+                user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+            else:
+                user_prompt = build_user_prompt(query, context_chunks, citations)
         
         logger.info(f"=== System Prompt ===")
         logger.info(f"{system_prompt[:500]}...")  # Log first 500 chars

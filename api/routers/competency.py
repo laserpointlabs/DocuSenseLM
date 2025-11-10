@@ -15,10 +15,40 @@ from datetime import datetime
 import uuid
 import os
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/competency", tags=["competency"])
+
+# In-memory progress tracking for test runs
+_test_progress = {
+    "is_running": False,
+    "total": 0,
+    "completed": 0,
+    "current": None,
+    "errors": 0,
+    "passed": 0,
+    "failed": 0
+}
+_test_progress_lock = threading.Lock()
+
+
+@router.get("/test/progress")
+async def get_test_progress():
+    """Get current test run progress"""
+    with _test_progress_lock:
+        progress = {
+            "is_running": _test_progress["is_running"],
+            "total": _test_progress["total"],
+            "completed": _test_progress["completed"],
+            "current": _test_progress["current"],
+            "errors": _test_progress["errors"],
+            "passed": _test_progress["passed"],
+            "failed": _test_progress["failed"],
+            "progress_percent": int((_test_progress["completed"] / _test_progress["total"] * 100)) if _test_progress["total"] > 0 else 0
+        }
+        return progress
 
 
 @router.post("/questions")
@@ -133,6 +163,181 @@ async def update_question(question_id: str, request: CompetencyQuestionUpdate):
             "version": question.version,
             "created_at": question.created_at
         }
+    finally:
+        db.close()
+
+
+@router.post("/questions/load-from-json")
+async def load_questions_from_json(clear_existing: bool = Query(False, description="Clear existing questions before loading")):
+    """Load competency questions from eval/qa_pairs.json file"""
+    import json
+    from pathlib import Path
+    
+    db = get_db_session()
+    try:
+        # Find the qa_pairs.json file
+        # Try multiple possible locations
+        possible_paths = [
+            Path("/app/eval/qa_pairs.json"),
+            Path("eval/qa_pairs.json"),
+            Path(__file__).parent.parent.parent / "eval" / "qa_pairs.json",
+        ]
+        
+        qa_file = None
+        for path in possible_paths:
+            if path.exists():
+                qa_file = path
+                break
+        
+        if not qa_file:
+            raise HTTPException(
+                status_code=404,
+                detail=f"QA pairs file not found. Tried: {[str(p) for p in possible_paths]}"
+            )
+        
+        # Load JSON file
+        with open(qa_file, 'r') as f:
+            qa_pairs = json.load(f)
+        
+        # Clear existing questions if requested
+        if clear_existing:
+            db.query(TestFeedback).delete()
+            db.query(TestRun).delete()
+            db.query(CompetencyQuestion).delete()
+            db.commit()
+        
+        # Build company name to document ID mapping
+        from api.db.schema import Document, DocumentStatus
+        import re
+        
+        company_to_doc = {}
+        documents = db.query(Document).filter(Document.status == DocumentStatus.PROCESSED).all()
+        
+        for doc in documents:
+            filename = doc.filename
+            if '_Signed NDA' in filename:
+                company_full = filename.split('_Signed NDA')[0].strip()
+                company_lower = company_full.lower()
+                
+                # Map full company name
+                company_to_doc[company_lower] = str(doc.id)
+                
+                # Extract short name (remove Inc, Corp, LLC, etc.)
+                short_name = re.sub(r'\s+(inc|corp|corporation|llc|ltd|b\.v\.|sdn bhd|company)\.?$', '', company_lower, flags=re.IGNORECASE).strip()
+                if short_name and short_name != company_lower:
+                    company_to_doc[short_name] = str(doc.id)
+                
+                # Also map common variations (faunc -> fanuc, etc.)
+                if 'fanuc' in company_lower:
+                    company_to_doc['faunc'] = str(doc.id)  # Common misspelling
+                if 'norris' in company_lower:
+                    company_to_doc['norris'] = str(doc.id)
+                if 'central coating' in company_lower:
+                    company_to_doc['central coating'] = str(doc.id)
+                if 'vallen' in company_lower:
+                    company_to_doc['vallen'] = str(doc.id)
+                if 'kgs' in company_lower:
+                    company_to_doc['kgs'] = str(doc.id)
+                if 'mcgill' in company_lower:
+                    company_to_doc['mcgill'] = str(doc.id)
+                if 'unique fire' in company_lower:
+                    company_to_doc['unique fire'] = str(doc.id)
+                if 'boston green' in company_lower:
+                    company_to_doc['boston green'] = str(doc.id)
+                if 'shaoxing' in company_lower:
+                    company_to_doc['shaoxing'] = str(doc.id)
+        
+        # Load questions
+        loaded_count = 0
+        errors = []
+        
+        for qa in qa_pairs:
+            try:
+                question_text = qa.get("question", qa.get("question_text", ""))
+                if not question_text:
+                    continue
+                
+                # Try to find document_id by matching company names in question
+                document_id = None
+                question_lower = question_text.lower()
+                
+                # Check for company mentions
+                for company_key, doc_id in company_to_doc.items():
+                    if company_key in question_lower:
+                        document_id = doc_id
+                        break
+                
+                # Get expected answer - check multiple possible field names
+                expected_answer = (
+                    qa.get("expected_answer_text") or 
+                    qa.get("expected_answer") or 
+                    qa.get("answer") or
+                    None
+                )
+                
+                question = db_service.create_competency_question(
+                    db=db,
+                    question_text=question_text,
+                    category_id=None,  # Categories not set up yet
+                    document_id=document_id,  # Link to specific document if found
+                    expected_answer_text=expected_answer,  # Can be None - tests will still run
+                    confidence_threshold=0.7,
+                    created_by="api_load"
+                )
+                loaded_count += 1
+            except Exception as e:
+                errors.append(f"Error loading question '{qa.get('id', 'unknown')}': {str(e)}")
+        
+        db.commit()
+        
+        return {
+            "message": f"Loaded {loaded_count} questions from {qa_file}",
+            "loaded_count": loaded_count,
+            "total_in_file": len(qa_pairs),
+            "errors": errors if errors else None,
+            "cleared_existing": clear_existing
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON file: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error loading questions from JSON: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.delete("/questions/all")
+async def delete_all_questions():
+    """Delete all competency questions and related test data"""
+    db = get_db_session()
+    try:
+        # Delete test feedback first (foreign key constraint)
+        feedback_count = db.query(TestFeedback).count()
+        db.query(TestFeedback).delete()
+        
+        # Delete test runs
+        test_runs_count = db.query(TestRun).count()
+        db.query(TestRun).delete()
+        
+        # Delete questions
+        questions_count = db.query(CompetencyQuestion).count()
+        db.query(CompetencyQuestion).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Deleted {questions_count} questions, {test_runs_count} test runs, {feedback_count} feedback records",
+            "questions_deleted": questions_count,
+            "test_runs_deleted": test_runs_count,
+            "feedback_deleted": feedback_count
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting all questions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
@@ -503,11 +708,25 @@ async def run_all_tests():
                 "results": []
             }
 
+        # Initialize progress tracking
+        with _test_progress_lock:
+            _test_progress["is_running"] = True
+            _test_progress["total"] = len(questions)
+            _test_progress["completed"] = 0
+            _test_progress["current"] = None
+            _test_progress["errors"] = 0
+            _test_progress["passed"] = 0
+            _test_progress["failed"] = 0
+
         results = []
         total_passed = 0
         total_failed = 0
 
-        for question in questions:
+        for idx, question in enumerate(questions, 1):
+            # Update progress - currently processing this question
+            with _test_progress_lock:
+                _test_progress["current"] = question.question_text[:60] + "..." if len(question.question_text) > 60 else question.question_text
+                _test_progress["completed"] = idx - 1
             try:
                 # Run test for this question
                 filters = None
@@ -619,8 +838,16 @@ async def run_all_tests():
 
                 if passed:
                     total_passed += 1
+                    with _test_progress_lock:
+                        _test_progress["passed"] = total_passed
                 else:
                     total_failed += 1
+                    with _test_progress_lock:
+                        _test_progress["failed"] = total_failed
+                
+                # Update progress - question completed
+                with _test_progress_lock:
+                    _test_progress["completed"] = idx
 
                 # Store test run with full citations
                 citations_data = [
@@ -676,13 +903,25 @@ async def run_all_tests():
                 })
 
             except Exception as e:
+                logger.error(f"Error testing question {question.id} ({question.question_text[:50]}...): {e}", exc_info=True)
                 total_failed += 1
+                with _test_progress_lock:
+                    _test_progress["failed"] = total_failed
+                    _test_progress["errors"] += 1
+                    _test_progress["completed"] = idx
                 results.append({
                     "question_id": str(question.id),
                     "question_text": question.question_text,
+                    "expected_answer": question.expected_answer_text,
                     "passed": False,
-                    "error": str(e)
+                    "error": str(e),
+                    "accuracy_score": 0.0
                 })
+
+        # Reset progress tracking
+        with _test_progress_lock:
+            _test_progress["is_running"] = False
+            _test_progress["current"] = None
 
         return {
             "message": f"Completed testing {len(questions)} questions",

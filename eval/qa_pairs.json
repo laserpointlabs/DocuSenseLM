@@ -1,212 +1,82 @@
 [
   {
     "id": "qa_001",
-    "question": "What is the confidentiality period?",
-    "expected_clause_keywords": ["confidentiality", "period", "term", "duration"],
+    "question": "how long does the faunc nda last",
+    "expected_clause_keywords": ["term", "duration", "period", "months", "years"],
     "expected_answer_type": "duration",
-    "category": "term"
+    "category": "term",
+    "expected_answer_text": "The Faunc NDA lasts for 5 years from the effective date."
   },
   {
     "id": "qa_002",
-    "question": "What information is considered confidential?",
-    "expected_clause_keywords": ["confidential", "information", "definition", "scope"],
+    "question": "what's confidential in the central coating nda",
+    "expected_clause_keywords": ["confidential", "information", "definition", "includes"],
     "expected_answer_type": "definition",
-    "category": "confidentiality"
+    "category": "confidentiality",
+    "expected_answer_text": "Confidential information includes technical data, business plans, financial information, customer lists, and any proprietary information disclosed by the parties."
   },
   {
     "id": "qa_003",
-    "question": "What are the exceptions to confidentiality?",
-    "expected_clause_keywords": ["exception", "excluded", "not confidential"],
-    "expected_answer_type": "list",
-    "category": "exceptions"
+    "question": "is the vallen nda mutual or one way",
+    "expected_clause_keywords": ["mutual", "unilateral", "both parties", "one-way"],
+    "expected_answer_type": "boolean",
+    "category": "metadata",
+    "expected_answer_text": "The Vallen NDA is mutual, meaning both parties agree to keep each other's confidential information confidential."
   },
   {
     "id": "qa_004",
-    "question": "Is this a mutual or unilateral NDA?",
-    "expected_clause_keywords": ["mutual", "unilateral", "both parties"],
-    "expected_answer_type": "boolean",
-    "category": "metadata"
+    "question": "what state law applies to central coating",
+    "expected_clause_keywords": ["governing", "law", "jurisdiction", "state"],
+    "expected_answer_type": "location",
+    "category": "jurisdiction",
+    "expected_answer_text": "The Central Coating NDA is governed by the laws of California."
   },
   {
     "id": "qa_005",
-    "question": "What is the survival period after expiration?",
-    "expected_clause_keywords": ["survival", "expiration", "after", "period"],
-    "expected_answer_type": "duration",
-    "category": "survival"
+    "question": "who are the parties to the mcgill nda",
+    "expected_clause_keywords": ["party", "parties", "disclosing", "receiving"],
+    "expected_answer_type": "list",
+    "category": "parties",
+    "expected_answer_text": "The parties to the McGill NDA are McGill Hose and Coupling Inc. and Kidde-Fenwal LLC."
   },
   {
     "id": "qa_006",
-    "question": "What is the governing law?",
-    "expected_clause_keywords": ["governing", "law", "jurisdiction"],
-    "expected_answer_type": "location",
-    "category": "jurisdiction"
+    "question": "what are the obligations in the unique fire nda",
+    "expected_clause_keywords": ["obligation", "duty", "must", "required"],
+    "expected_answer_type": "list",
+    "category": "obligations",
+    "expected_answer_text": "The obligations include maintaining confidentiality, using information only for the permitted purpose, not disclosing to third parties, and returning or destroying confidential information upon request."
   },
   {
     "id": "qa_007",
-    "question": "Who are the parties to this agreement?",
-    "expected_clause_keywords": ["party", "parties", "disclosing", "receiving"],
-    "expected_answer_type": "list",
-    "category": "parties"
+    "question": "how many days until faunc expires",
+    "expected_clause_keywords": ["expire", "expiration", "days", "remaining"],
+    "expected_answer_type": "conversational",
+    "category": "term",
+    "expected_answer_text": "The Faunc NDA expires in approximately 1358 days."
   },
   {
     "id": "qa_008",
-    "question": "What are the obligations of the receiving party?",
-    "expected_clause_keywords": ["obligation", "receiving party", "duty"],
-    "expected_answer_type": "list",
-    "category": "obligations"
+    "question": "when does faunc expire",
+    "expected_clause_keywords": ["expire", "expiration", "date"],
+    "expected_answer_type": "conversational",
+    "category": "term",
+    "expected_answer_text": "The Faunc NDA expires on June 16, 2028."
   },
   {
     "id": "qa_009",
-    "question": "What happens if there is a breach of confidentiality?",
-    "expected_clause_keywords": ["breach", "remedy", "damages", "injunction"],
-    "expected_answer_type": "remedy",
-    "category": "remedies"
+    "question": "do faunc and norris expire same month",
+    "expected_clause_keywords": ["expire", "expiration", "month", "compare"],
+    "expected_answer_type": "conversational",
+    "category": "term",
+    "expected_answer_text": "No, Faunc and Norris expire in different months. Faunc expires in June 2028, while Norris expires in September 2028."
   },
   {
     "id": "qa_010",
-    "question": "When does the agreement become effective?",
-    "expected_clause_keywords": ["effective", "date", "execution"],
-    "expected_answer_type": "date",
-    "category": "term"
-  },
-  {
-    "id": "qa_011",
-    "question": "Can confidential information be shared with affiliates?",
-    "expected_clause_keywords": ["affiliate", "subsidiary", "share", "permitted"],
-    "expected_answer_type": "boolean",
-    "category": "disclosure"
-  },
-  {
-    "id": "qa_012",
-    "question": "What is the return or destruction requirement?",
-    "expected_clause_keywords": ["return", "destroy", "destruction", "deliver"],
-    "expected_answer_type": "procedure",
-    "category": "return"
-  },
-  {
-    "id": "qa_013",
-    "question": "Are there any carve-outs for publicly available information?",
-    "expected_clause_keywords": ["carve-out", "public", "available", "exception"],
-    "expected_answer_type": "boolean",
-    "category": "exceptions"
-  },
-  {
-    "id": "qa_014",
-    "question": "What is the term of the agreement in months?",
-    "expected_clause_keywords": ["term", "months", "duration", "period"],
-    "expected_answer_type": "number",
-    "category": "term"
-  },
-  {
-    "id": "qa_015",
-    "question": "What restrictions apply to the use of confidential information?",
-    "expected_clause_keywords": ["use", "restriction", "purpose", "limited"],
-    "expected_answer_type": "list",
-    "category": "obligations"
-  },
-  {
-    "id": "qa_016",
-    "question": "Is information disclosed before the agreement covered?",
-    "expected_clause_keywords": ["prior", "before", "retroactive", "disclosure"],
-    "expected_answer_type": "boolean",
-    "category": "scope"
-  },
-  {
-    "id": "qa_017",
-    "question": "What notification is required if there is a breach?",
-    "expected_clause_keywords": ["notify", "notification", "breach", "immediately"],
-    "expected_answer_type": "procedure",
-    "category": "obligations"
-  },
-  {
-    "id": "qa_018",
-    "question": "Can the agreement be modified or amended?",
-    "expected_clause_keywords": ["modify", "amend", "change", "written"],
-    "expected_answer_type": "boolean",
-    "category": "modification"
-  },
-  {
-    "id": "qa_019",
-    "question": "What happens upon termination of the agreement?",
-    "expected_clause_keywords": ["termination", "end", "survive", "continue"],
-    "expected_answer_type": "procedure",
-    "category": "termination"
-  },
-  {
-    "id": "qa_020",
-    "question": "Are there any indemnification provisions?",
-    "expected_clause_keywords": ["indemnify", "indemnification", "hold harmless"],
-    "expected_answer_type": "boolean",
-    "category": "indemnification"
-  },
-  {
-    "id": "qa_021",
-    "question": "What is the dispute resolution mechanism?",
-    "expected_clause_keywords": ["dispute", "arbitration", "mediation", "court"],
-    "expected_answer_type": "procedure",
-    "category": "dispute_resolution"
-  },
-  {
-    "id": "qa_022",
-    "question": "Can the agreement be assigned to another party?",
-    "expected_clause_keywords": ["assign", "assignment", "transfer", "permitted"],
-    "expected_answer_type": "boolean",
-    "category": "assignment"
-  },
-  {
-    "id": "qa_023",
-    "question": "What are the remedies for breach?",
-    "expected_clause_keywords": ["remedy", "injunction", "damages", "relief"],
-    "expected_answer_type": "list",
-    "category": "remedies"
-  },
-  {
-    "id": "qa_024",
-    "question": "What information must be marked as confidential?",
-    "expected_clause_keywords": ["mark", "label", "identify", "written"],
-    "expected_answer_type": "procedure",
-    "category": "obligations"
-  },
-  {
-    "id": "qa_025",
-    "question": "What is the scope of confidential information?",
-    "expected_clause_keywords": ["scope", "includes", "comprises", "encompasses"],
-    "expected_answer_type": "definition",
-    "category": "confidentiality"
-  },
-  {
-    "id": "qa_026",
-    "question": "Are there exceptions for information required by law?",
-    "expected_clause_keywords": ["law", "required", "compelled", "court order"],
-    "expected_answer_type": "boolean",
-    "category": "exceptions"
-  },
-  {
-    "id": "qa_027",
-    "question": "What is the expiration date?",
-    "expected_clause_keywords": ["expire", "expiration", "end date", "termination"],
-    "expected_answer_type": "date",
-    "category": "term"
-  },
-  {
-    "id": "qa_028",
-    "question": "How long must information be kept confidential after expiration?",
-    "expected_clause_keywords": ["after", "expiration", "continue", "survive"],
-    "expected_answer_type": "duration",
-    "category": "survival"
-  },
-  {
-    "id": "qa_029",
-    "question": "What constitutes a breach of the agreement?",
-    "expected_clause_keywords": ["breach", "violation", "failure", "default"],
-    "expected_answer_type": "definition",
-    "category": "breach"
-  },
-  {
-    "id": "qa_030",
-    "question": "Can confidential information be used for competitive purposes?",
-    "expected_clause_keywords": ["competitive", "use", "purpose", "restriction"],
-    "expected_answer_type": "boolean",
-    "category": "obligations"
+    "question": "what ndas expire in september 2028",
+    "expected_clause_keywords": ["expire", "expiration", "september", "2028"],
+    "expected_answer_type": "conversational",
+    "category": "term",
+    "expected_answer_text": "The Norris NDA and Central Coating NDA expire in September 2028."
   }
 ]

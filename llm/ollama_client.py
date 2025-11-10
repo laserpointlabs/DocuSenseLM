@@ -5,13 +5,21 @@ import os
 import httpx
 from typing import List, Dict, Optional
 from .llm_client import LLMClient, Chunk, Citation, Answer
-from .prompts import build_system_prompt, build_user_prompt, build_cross_document_prompt, detect_question_type
+from .prompts import (
+    build_system_prompt, 
+    build_user_prompt, 
+    build_cross_document_prompt, 
+    build_conversational_system_prompt,
+    build_conversational_prompt,
+    detect_question_type,
+    is_conversational_question
+)
 
 
 class OllamaClient(LLMClient):
     """Ollama API client"""
 
-    def __init__(self, endpoint: str = None, model: str = None, enable_thinking: bool = False):
+    def __init__(self, endpoint: str = None, model: str = None, enable_thinking: bool = False, conversation_model: str = None):
         """
         Initialize Ollama client
 
@@ -19,11 +27,23 @@ class OllamaClient(LLMClient):
             endpoint: Ollama API endpoint (default from env)
             model: Model name to use (must be provided or set via OLLAMA_MODEL env var)
             enable_thinking: Enable thinking mode for models that support it (e.g., Granite)
+            conversation_model: Optional model name for conversational responses (defaults to OLLAMA_CONVERSATION_MODEL env var, falls back to main model)
         """
         self.endpoint = endpoint or os.getenv("LLM_ENDPOINT", "http://localhost:11434")
         self.model = model or os.getenv("OLLAMA_MODEL")
         if not self.model:
             raise ValueError("OLLAMA_MODEL environment variable must be set. No hardcoded defaults allowed.")
+        
+        # Conversation model: use provided, env var, or fallback to main model
+        self.conversation_model = conversation_model or os.getenv("OLLAMA_CONVERSATION_MODEL") or self.model
+        
+        # Keep-alive duration: how long to keep models loaded in memory (in seconds)
+        # Default: 5 minutes (300s) - keeps models warm for faster switching
+        keep_alive_str = os.getenv("OLLAMA_KEEP_ALIVE", "300")
+        try:
+            self.keep_alive = int(keep_alive_str)
+        except ValueError:
+            self.keep_alive = 300  # Default to 5 minutes
         
         # Enable thinking mode for Granite models if not explicitly set
         self.enable_thinking = enable_thinking or os.getenv("ENABLE_THINKING", "false").lower() == "true"
@@ -39,7 +59,7 @@ class OllamaClient(LLMClient):
         # Log configuration
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"OllamaClient initialized: endpoint={self.endpoint}, model={self.model}, thinking={self.enable_thinking}")
+        logger.info(f"OllamaClient initialized: endpoint={self.endpoint}, model={self.model}, conversation_model={self.conversation_model}, thinking={self.enable_thinking}, keep_alive={self.keep_alive}s")
         
         # Warn if using host.docker.internal when running in Docker (should use 'ollama' service name)
         if "host.docker.internal" in self.endpoint:
@@ -71,12 +91,31 @@ class OllamaClient(LLMClient):
         self,
         query: str,
         context_chunks: List[Chunk],
-        citations: List[Citation]
+        citations: List[Citation],
+        use_conversational: bool = False,
+        additional_info: str = ""
     ) -> Answer:
-        """Generate answer using Ollama"""
+        """
+        Generate answer using Ollama
+        
+        Args:
+            query: User question
+            context_chunks: Retrieved document chunks
+            citations: Citation information
+            use_conversational: Whether to use conversational mode (auto-detected if False)
+            additional_info: Optional additional information (e.g., calculated days/months)
+        """
 
         import logging
         logger = logging.getLogger(__name__)
+        
+        # Auto-detect conversational questions if not explicitly set
+        if not use_conversational:
+            use_conversational = is_conversational_question(query)
+        
+        # Select model: use conversation model for conversational questions
+        model_to_use = self.conversation_model if use_conversational else self.model
+        logger.info(f"Using {'conversational' if use_conversational else 'structured'} mode with model: {model_to_use}")
         
 
         # Build context from chunks
@@ -116,22 +155,38 @@ class OllamaClient(LLMClient):
         logger.info(f"Context token estimate: ~{estimated_tokens} tokens ({len(context_text)} chars)")
 
         # Minimal logging for performance
-        logger.debug(f"Ollama request: {len(context_chunks)} chunks, {len(context_text)} chars, model={self.model}")
+        logger.debug(f"Ollama request: {len(context_chunks)} chunks, {len(context_text)} chars, model={model_to_use}, conversational={use_conversational}")
 
-        # Use enhanced prompts with structured format rules
-        question_type = detect_question_type(query)
-        logger.info(f"Detected question type: {question_type}")
-        
-        if question_type == "cross_document":
-            user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+        # Build prompts based on mode
+        if use_conversational:
+            # Use conversational prompts
+            system_prompt = build_conversational_system_prompt()
+            question_type = detect_question_type(query)
+            if question_type == "cross_document":
+                user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+            else:
+                user_prompt = build_conversational_prompt(query, context_chunks, citations, additional_info)
         else:
-            user_prompt = build_user_prompt(query, context_chunks, citations)
-        
-        # Use chat API with thinking mode for Granite, otherwise use generate API
-        system_prompt = build_system_prompt()
+            # Use structured prompts
+            question_type = detect_question_type(query)
+            logger.info(f"Detected question type: {question_type}")
+            
+            if question_type == "cross_document":
+                user_prompt = build_cross_document_prompt(query, context_chunks, citations)
+            else:
+                user_prompt = build_user_prompt(query, context_chunks, citations)
+            
+            system_prompt = build_system_prompt()
         
         try:
-            if self.enable_thinking and "granite" in self.model.lower():
+            # Build request payload with keep_alive to keep model warm
+            request_payload = {
+                "model": model_to_use,
+                "keep_alive": f"{self.keep_alive}s",  # Keep model loaded for faster subsequent requests
+                "stream": False
+            }
+            
+            if self.enable_thinking and "granite" in model_to_use.lower():
                 # Use chat API with thinking mode
                 messages = [
                     {"role": "control", "content": "thinking"},
@@ -139,13 +194,11 @@ class OllamaClient(LLMClient):
                     {"role": "user", "content": user_prompt}
                 ]
                 
+                request_payload["messages"] = messages
+                
                 response = await self.client.post(
                     f"{self.endpoint}/api/chat",
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "stream": False
-                    }
+                    json=request_payload
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -157,17 +210,15 @@ class OllamaClient(LLMClient):
 
 {user_prompt}"""
                 
-            response = await self.client.post(
-                f"{self.endpoint}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            response.raise_for_status()
-            result = response.json()
-            answer_text = result.get("response", "").strip()
+                request_payload["prompt"] = prompt
+                
+                response = await self.client.post(
+                    f"{self.endpoint}/api/generate",
+                    json=request_payload
+                )
+                response.raise_for_status()
+                result = response.json()
+                answer_text = result.get("response", "").strip()
 
             if not answer_text:
                 answer_text = "I cannot find this information in the provided documents"
@@ -183,7 +234,7 @@ class OllamaClient(LLMClient):
             logger.error(error_msg)
             raise Exception(error_msg)
         except httpx.TimeoutException as e:
-            error_msg = f"Request to Ollama timed out after 120s. Endpoint: {self.endpoint}, Model: {self.model}. The model may need to be loaded first (takes ~30s), or the context may be too large."
+            error_msg = f"Request to Ollama timed out after 120s. Endpoint: {self.endpoint}, Model: {model_to_use}. The model may need to be loaded first (takes ~30s), or the context may be too large."
             logger.error(error_msg)
             raise Exception(error_msg)
         except httpx.HTTPStatusError as e:
@@ -222,13 +273,16 @@ Generate specific, answerable questions about:
 Format as a numbered list of questions."""
 
         try:
+            request_payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "keep_alive": f"{self.keep_alive}s",
+                "stream": False
+            }
+            
             response = await self.client.post(
                 f"{self.endpoint}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False
-                }
+                json=request_payload
             )
             response.raise_for_status()
             result = response.json()

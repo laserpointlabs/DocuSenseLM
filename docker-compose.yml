@@ -121,7 +121,9 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama_local}
       - LLM_ENDPOINT=${LLM_ENDPOINT:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_CONVERSATION_MODEL=${OLLAMA_CONVERSATION_MODEL:-}
       - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
       - ENABLE_LLM_REFINEMENT=${ENABLE_LLM_REFINEMENT:-false}
       - LLM_EXTRACTION_MODEL=${LLM_EXTRACTION_MODEL}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -137,12 +139,17 @@ services:
         condition: service_started
       minio:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
+      model_preloader:
+        condition: service_completed_successfully
     volumes:
       - ./api:/app/api
       - ./ingest:/app/ingest
       - ./llm:/app/llm
       - ./ontology:/app/ontology
       - ./scripts:/app/scripts
+      - ./eval:/app/eval:ro
       - ./.cache/huggingface:/root/.cache/huggingface
       - ./data:/app/data:ro
       - ./docs:/app/docs:ro
@@ -204,6 +211,26 @@ services:
       - /app/node_modules
       - /app/.next
     command: npm run dev
+
+  model_preloader:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: nda-model-preloader
+    environment:
+      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_CONVERSATION_MODEL=${OLLAMA_CONVERSATION_MODEL:-}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
+    command: python3 /app/scripts/preload_ollama_models.py
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/app/scripts
+      - ./api:/app/api
+      - ./llm:/app/llm
+    restart: "no"  # Only run once at startup
 
   cloudflared:
     image: cloudflare/cloudflared:latest

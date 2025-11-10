@@ -12,6 +12,7 @@ from api.services.metadata_service import metadata_service
 from api.services.query_service import query_service
 from api.services.answer_evaluator import answer_evaluator
 from api.services.document_finder import document_finder
+from llm.prompts import is_conversational_question
 
 
 class AnswerService:
@@ -76,6 +77,10 @@ class AnswerService:
         # Check if this is a structured question that can be answered from metadata
         structured_answer = None
         
+        # Detect if this is a conversational question early (before metadata lookup)
+        # Conversational questions need LLM processing even if metadata is available
+        is_conversational = is_conversational_question(question)
+        
         # Try to find document_id if not provided but company name is in query
         # IMPORTANT: Always try to find document by company name, not just for structured questions
         # This enables flexible queries like "What date does the Faunc NDA expire?"
@@ -97,7 +102,8 @@ class AnswerService:
                 logger.warning(f"⚠️  Could not find document by company name from query: {question}")
         
         # If we have a document_id and it's a structured question, try metadata first
-        if document_id and query_info['metadata'].get('is_structured'):
+        # BUT skip metadata for conversational questions (they need LLM processing)
+        if document_id and query_info['metadata'].get('is_structured') and not is_conversational:
             structured_answer = self._try_metadata_answer(question, document_id, logger)
             if structured_answer:
                 logger.info(f"✅ Answered from metadata: {structured_answer.text[:100]}")
@@ -239,24 +245,189 @@ class AnswerService:
         for i, cit in enumerate(citations[:5]):
             logger.info(f"Citation {i+1}: doc_id={cit.doc_id[:8]}..., clause={cit.clause_number}, page={cit.page_num}, excerpt_length={len(cit.excerpt)}")
 
-        # 5. Call LLM
+        # 5. Detect conversational questions and prepare additional info
+        # Use original question for LLM (not transformed query which was only for retrieval)
+        original_question = query_info.get('original_query', question)
+        
+        # Use the conversational detection from earlier (already computed)
+        # Re-check to be sure we're using the original question
+        is_conversational = is_conversational_question(original_question)
+        additional_info = ""
+        
+        # For conversational questions asking about days/months, calculate and provide the info
+        if is_conversational:
+            question_lower = original_question.lower()
+            
+            # Check for "what NDAs expire next/this month" type questions
+            if any(term in question_lower for term in ['what ndas', 'what agreements', 'which ndas', 'which agreements']) and \
+               any(term in question_lower for term in ['next month', 'this month', 'next year', 'this year', 'expire next', 'expire in']):
+                from datetime import datetime
+                from dateutil.relativedelta import relativedelta
+                import re
+                
+                today = datetime.now()
+                target_month = None
+                target_year = None
+                
+                # Try to extract month/year from question (e.g., "expire in June 2028")
+                month_names = {
+                    'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
+                    'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
+                    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                    'jul': 7, 'aug': 8, 'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12
+                }
+                
+                # Pattern: "in [Month] [Year]" or "in [Month]" (assumes current or next year)
+                month_year_pattern = r'in\s+(\w+)\s+(\d{4})'
+                month_only_pattern = r'in\s+(\w+)'
+                
+                month_year_match = re.search(month_year_pattern, question_lower)
+                if month_year_match:
+                    month_name = month_year_match.group(1).lower()
+                    year_str = month_year_match.group(2)
+                    if month_name in month_names:
+                        target_month = month_names[month_name]
+                        target_year = int(year_str)
+                else:
+                    # Try month only pattern
+                    month_match = re.search(month_only_pattern, question_lower)
+                    if month_match:
+                        month_name = month_match.group(1).lower()
+                        if month_name in month_names:
+                            target_month = month_names[month_name]
+                            # If year not specified, use current year or next year if month has passed
+                            target_year = today.year
+                            if target_month < today.month:
+                                target_year = today.year + 1
+                
+                # If no specific month/year found, use relative terms
+                if target_month is None:
+                    target_month = today.month
+                    target_year = today.year
+                    
+                    # Determine target month/year
+                    if 'next month' in question_lower:
+                        next_month = today + relativedelta(months=1)
+                        target_month = next_month.month
+                        target_year = next_month.year
+                    elif 'next year' in question_lower:
+                        target_year = today.year + 1
+                    # "this month" and "this year" use current month/year (already set)
+                
+                logger.info(f"Searching for NDAs expiring in {target_month}/{target_year}")
+                expiring_docs = metadata_service.find_documents_expiring_in_month(target_month, target_year)
+                
+                if expiring_docs:
+                    # Format list for LLM
+                    doc_list = []
+                    for doc_info in expiring_docs:
+                        doc_list.append(f"- {doc_info['company_name']}: expires {doc_info['expiration_date']}")
+                    
+                    month_name = datetime(target_year, target_month, 1).strftime("%B %Y")
+                    additional_info = f"NDAs EXPIRING IN {month_name.upper()}:\n" + "\n".join(doc_list)
+                    logger.info(f"Found {len(expiring_docs)} NDAs expiring in {month_name}")
+                else:
+                    month_name = datetime(target_year, target_month, 1).strftime("%B %Y")
+                    additional_info = f"No NDAs found expiring in {month_name}."
+                    logger.info(f"No NDAs expiring in {month_name}")
+            
+            # Check for cross-document comparison questions (multiple companies)
+            elif ' and ' in question_lower or any(term in question_lower for term in ['both', 'same month', 'same year']):
+                # Extract multiple company names
+                company_names = self._extract_multiple_company_names(original_question)
+                if len(company_names) >= 2:
+                    logger.info(f"Cross-document comparison detected: {company_names}")
+                    comparison_info = []
+                    
+                    for company_name in company_names:
+                        logger.info(f"Searching for document matching company: {company_name}")
+                        # Try lowercase first
+                        doc_id = document_finder.find_best_document_match(company_name, use_fuzzy=True)
+                        # If not found, try capitalized version
+                        if not doc_id and company_name:
+                            capitalized = company_name.capitalize()
+                            logger.info(f"Trying capitalized version: {capitalized}")
+                            doc_id = document_finder.find_best_document_match(capitalized, use_fuzzy=True)
+                        # If still not found, try all caps (for acronyms like FANUC)
+                        if not doc_id and company_name:
+                            all_caps = company_name.upper()
+                            logger.info(f"Trying all caps version: {all_caps}")
+                            doc_id = document_finder.find_best_document_match(all_caps, use_fuzzy=True)
+                        
+                        if doc_id:
+                            logger.info(f"✅ Found document for {company_name}: {doc_id[:8]}...")
+                            # Get expiration info
+                            expiration_answer = metadata_service.answer_expiration_date(doc_id)
+                            if expiration_answer:
+                                expiration_date = expiration_answer.text
+                                # Calculate days/months
+                                days = metadata_service.calculate_days_until_expiration(doc_id)
+                                months = metadata_service.calculate_months_until_expiration(doc_id)
+                                
+                                info_parts = [f"{company_name}: expires {expiration_date}"]
+                                if days is not None:
+                                    info_parts.append(f"{days} days until expiration")
+                                if months is not None:
+                                    info_parts.append(f"{months} months until expiration")
+                                
+                                comparison_info.append(" - ".join(info_parts))
+                                logger.info(f"Added comparison info for {company_name}: {expiration_date}")
+                            else:
+                                logger.warning(f"Could not get expiration date for {company_name} (doc_id: {doc_id[:8]}...)")
+                        else:
+                            logger.warning(f"❌ Could not find document for company: {company_name}")
+                    
+                    if comparison_info:
+                        additional_info = "COMPARISON INFORMATION:\n" + "\n".join(comparison_info)
+                        logger.info(f"Prepared comparison info for {len(comparison_info)} documents:\n{additional_info}")
+                    else:
+                        logger.warning("No comparison info generated - documents not found or missing expiration dates")
+            
+            # Single document questions
+            elif document_id:
+                # Check if asking about days
+                if any(term in question_lower for term in ['how many days', 'days left', 'days until', 'days till']):
+                    days = metadata_service.calculate_days_until_expiration(document_id)
+                    if days is not None:
+                        # Format days with context
+                        if days < 0:
+                            additional_info = f"The NDA expired {abs(days)} days ago (expired)."
+                        elif days == 0:
+                            additional_info = f"The NDA expires today (0 days remaining)."
+                        else:
+                            additional_info = f"Days until expiration: {days} days (calculated from today). Use this exact number in your answer."
+                        logger.info(f"Calculated days until expiration: {days}")
+                
+                # Check if asking about months
+                elif any(term in question_lower for term in ['how many months', 'months left', 'months until', 'months till']):
+                    months = metadata_service.calculate_months_until_expiration(document_id)
+                    if months is not None:
+                        # Format months with context
+                        if months < 0:
+                            additional_info = f"The NDA expired {abs(months)} months ago (expired)."
+                        elif months == 0:
+                            additional_info = f"The NDA expires this month (0 months remaining)."
+                        else:
+                            additional_info = f"Months until expiration: {months} months (calculated from today). Use this exact number in your answer."
+                        logger.info(f"Calculated months until expiration: {months}")
+        
+        # 6. Call LLM
         if self.llm_client is None:
             self.llm_client = get_llm_client()
 
-        logger.info(f"Calling LLM with {len(context_chunks)} context chunks and {len(citations)} citations")
-        
-        # Use original question for LLM (not transformed query which was only for retrieval)
-        original_question = query_info.get('original_query', question)
+        logger.info(f"Calling LLM with {len(context_chunks)} context chunks and {len(citations)} citations, conversational={is_conversational}")
 
         answer = await self.llm_client.generate_answer(
             query=original_question,
             context_chunks=context_chunks,
-            citations=citations
+            citations=citations,
+            use_conversational=is_conversational,
+            additional_info=additional_info
         )
 
         logger.info(f"LLM returned answer: length={len(answer.text)}, answer={answer.text}")
 
-        # 6. Context Quality Summary - Easy to review
+        # 7. Context Quality Summary - Easy to review
         logger.info(f"")
         logger.info(f"═══════════════════════════════════════════════════════════════")
         logger.info(f"📊 CONTEXT QUALITY SUMMARY FOR REVIEW")
@@ -287,25 +458,31 @@ class AnswerService:
         logger.info(f"═══════════════════════════════════════════════════════════════")
         logger.info(f"")
 
-        # 7. Post-process answer to extract structured response if needed
-        # Only apply extraction for specific question types to avoid corrupting general answers
-        question_lower = question.lower()
-        is_structured_question = any(word in question_lower for word in [
-            'effective date', 'term', 'duration', 'how long', 'governing law',
-            'jurisdiction', 'mutual', 'unilateral', 'parties to'
-        ])
-
+        # 8. Post-process answer to extract structured response if needed
+        # Skip structured extraction for conversational answers (they should remain natural)
         logger.info(f"Answer before post-processing: {answer.text}")
 
-        if is_structured_question:
-            answer.text = self._extract_structured_answer(question, answer.text)
-            logger.info(f"Answer after structured extraction: {answer.text}")
-        else:
-            # For general questions, just clean up whitespace
-            answer.text = answer.text.strip() if answer.text else ""
-            logger.info(f"Answer after cleanup: {answer.text}")
+        if not is_conversational:
+            # Only apply extraction for structured questions (not conversational)
+            question_lower = question.lower()
+            is_structured_question = any(word in question_lower for word in [
+                'effective date', 'term', 'duration', 'how long', 'governing law',
+                'jurisdiction', 'mutual', 'unilateral', 'parties to'
+            ])
 
-        # 8. Calculate confidence score for the answer
+            if is_structured_question:
+                answer.text = self._extract_structured_answer(question, answer.text)
+                logger.info(f"Answer after structured extraction: {answer.text}")
+            else:
+                # For general questions, just clean up whitespace
+                answer.text = answer.text.strip() if answer.text else ""
+                logger.info(f"Answer after cleanup: {answer.text}")
+        else:
+            # For conversational answers, just clean up whitespace (keep natural language)
+            answer.text = answer.text.strip() if answer.text else ""
+            logger.info(f"Answer after cleanup (conversational): {answer.text}")
+
+        # 9. Calculate confidence score for the answer
         # For metadata answers, confidence is already set above
         if not structured_answer:
             # Use LLM-based evaluation for chunk-based answers
@@ -678,6 +855,98 @@ class AnswerService:
             return "confidentiality"
         
         return None
+
+    def _extract_multiple_company_names(self, question: str) -> List[str]:
+        """
+        Extract multiple company names from a comparison question.
+        
+        Examples:
+            "does faunc and norris expire in the same month?" -> ["faunc", "norris"]
+            "when do faunc and norris expire?" -> ["faunc", "norris"]
+        """
+        import re
+        question_lower = question.lower()
+        company_names = []
+        
+        # Pattern 1: "X and Y" where X and Y are company names
+        # Look for words around "and"
+        words = question.split()
+        and_index = None
+        for i, word in enumerate(words):
+            if word.lower() == 'and':
+                and_index = i
+                break
+        
+        if and_index and and_index > 0 and and_index < len(words) - 1:
+            # Extract word before "and" (likely first company)
+            before_and = words[and_index - 1].rstrip('?.,').strip().lower()
+            # Extract word after "and" (likely second company)
+            after_and = words[and_index + 1].rstrip('?.,').strip().lower()
+            
+            # Skip common words
+            skip_words = {'the', 'a', 'an', 'and', 'or', 'does', 'do', 'when', 'what', 'where', 
+                         'how', 'many', 'days', 'months', 'expire', 'expires', 'expiration', 
+                         'same', 'month', 'year', 'nda', 'agreement', 'both', 'all'}
+            
+            if before_and and before_and not in skip_words and len(before_and) > 2:
+                company_names.append(before_and)
+            if after_and and after_and not in skip_words and len(after_and) > 2:
+                company_names.append(after_and)
+        
+        # Pattern 2: Try using document finder to extract company names
+        # This handles capitalization variations better
+        if len(company_names) < 2:
+            # Import here to avoid circular dependency issues
+            from api.services.document_finder import document_finder as doc_finder
+            
+            # Try to find all potential company names in the question
+            # Look for capitalized words or common company name patterns
+            skip_words = {'the', 'a', 'an', 'and', 'or', 'does', 'do', 'when', 'what', 'where', 
+                         'how', 'many', 'days', 'months', 'expire', 'expires', 'expiration', 
+                         'same', 'month', 'year', 'nda', 'agreement', 'both', 'all', 'in'}
+            
+            # Extract capitalized words
+            capitalized = []
+            for word in words:
+                clean = word.rstrip('?.,').strip()
+                # Accept if capitalized OR if it's a common company name pattern (3+ chars, not a skip word)
+                is_capitalized = clean and (clean[0].isupper() or clean.isupper())
+                is_valid = clean.lower() not in skip_words and len(clean) > 2
+                
+                if is_capitalized and is_valid:
+                    capitalized.append(clean)
+                elif not is_capitalized and is_valid and len(clean) > 3:
+                    # Also try lowercase words that might be company names (like "faunc", "norris")
+                    capitalized.append(clean)
+            
+            # If we found 2+ potential company names, use them
+            if len(capitalized) >= 2:
+                company_names = [c.lower() for c in capitalized[:2]]
+        
+        # Pattern 3: Try document finder's extract_company_name for each potential name
+        # This helps with fuzzy matching
+        if len(company_names) >= 2:
+            # Verify these are actual company names by checking if documents exist
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # Import document finder here
+            from api.services.document_finder import document_finder as doc_finder
+            
+            verified_names = []
+            for name in company_names:
+                doc_id = doc_finder.find_best_document_match(name, use_fuzzy=True)
+                if doc_id:
+                    verified_names.append(name)
+                    logger.info(f"Verified company name '{name}' -> document {doc_id[:8]}...")
+            
+            if len(verified_names) >= 2:
+                return verified_names
+            elif len(verified_names) == 1:
+                # Found one, try to find the other
+                logger.info(f"Found one company ({verified_names[0]}), searching for second...")
+        
+        return company_names
 
     def _extract_structured_answer(self, question: str, answer_text: str) -> str:
         """

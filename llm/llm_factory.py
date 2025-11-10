@@ -22,7 +22,8 @@ def get_llm_client() -> LLMClient:
         model = os.getenv("OLLAMA_MODEL")
         if not model:
             raise ValueError("OLLAMA_MODEL environment variable must be set. No hardcoded defaults allowed.")
-        return OllamaClient(endpoint=endpoint, model=model)
+        conversation_model = os.getenv("OLLAMA_CONVERSATION_MODEL")  # Optional, falls back to main model
+        return OllamaClient(endpoint=endpoint, model=model, conversation_model=conversation_model)
 
     elif provider == "ollama_network":
         endpoint = os.getenv("LLM_ENDPOINT")
@@ -32,7 +33,8 @@ def get_llm_client() -> LLMClient:
         if not model:
             raise ValueError("OLLAMA_MODEL environment variable must be set. No hardcoded defaults allowed.")
         enable_thinking = os.getenv("ENABLE_THINKING", "false").lower() == "true"
-        return OllamaClient(endpoint=endpoint, model=model, enable_thinking=enable_thinking)
+        conversation_model = os.getenv("OLLAMA_CONVERSATION_MODEL")  # Optional, falls back to main model
+        return OllamaClient(endpoint=endpoint, model=model, enable_thinking=enable_thinking, conversation_model=conversation_model)
 
     elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")

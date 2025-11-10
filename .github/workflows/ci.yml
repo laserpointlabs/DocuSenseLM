@@ -120,16 +120,21 @@ jobs:
 
       - name: Test critical imports
         env:
+          POSTGRES_URL: "sqlite:///:memory:"
           SERVICE_PROFILE: test
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          set +e
-          python3 -c "from api.services.answer_service import answer_service; print('✓ answer_service imports')" || echo "⚠ answer_service import failed"
-          python3 -c "from api.routers.answer import router; print('✓ answer router imports')" || echo "⚠ answer router import failed"
-          python3 -c "from api.routers.competency import router; print('✓ competency router imports')" || echo "⚠ competency router import failed"
-          python3 -c "from llm.llm_factory import get_llm_client; print('✓ LLM factory imports')" || echo "⚠ LLM factory import failed"
-          python3 -c "from api.services.metadata_service import metadata_service; print('✓ metadata_service imports')" || echo "⚠ metadata_service import failed"
-          echo "✓ Import tests completed"
+          FAILED=0
+          python3 -c "from api.services.answer_service import answer_service; print('✓ answer_service imports')" || { echo "⚠ answer_service import failed"; FAILED=1; }
+          python3 -c "from api.routers.answer import router; print('✓ answer router imports')" || { echo "⚠ answer router import failed"; FAILED=1; }
+          python3 -c "from api.routers.competency import router; print('✓ competency router imports')" || { echo "⚠ competency router import failed"; FAILED=1; }
+          python3 -c "from llm.llm_factory import get_llm_client; print('✓ LLM factory imports')" || { echo "⚠ LLM factory import failed"; FAILED=1; }
+          python3 -c "from api.services.metadata_service import metadata_service; print('✓ metadata_service imports')" || { echo "⚠ metadata_service import failed"; FAILED=1; }
+          if [ $FAILED -eq 1 ]; then
+            echo "✗ Import tests failed - one or more critical imports failed"
+            exit 1
+          fi
+          echo "✓ Import tests completed - all imports successful"
 
   lint-check:
     name: Lint Check

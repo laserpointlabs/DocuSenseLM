@@ -400,6 +400,188 @@ class MetadataService:
             logger.warning(f"Error calculating expiration date: {e}")
             return None
 
+    def calculate_days_until_expiration(self, document_id: str) -> Optional[int]:
+        """
+        Calculate days until expiration for a document.
+        
+        Args:
+            document_id: Document UUID
+            
+        Returns:
+            Number of days until expiration (negative if expired), or None if cannot calculate
+        """
+        metadata = self.get_metadata_for_document(document_id)
+        if not metadata:
+            return None
+        
+        effective_date = metadata.get('effective_date')
+        term_months = metadata.get('term_months')
+        
+        if not effective_date or not term_months:
+            return None
+        
+        try:
+            from dateutil.relativedelta import relativedelta
+            
+            # Parse effective date
+            if isinstance(effective_date, str):
+                effective = datetime.fromisoformat(effective_date.replace('Z', '+00:00'))
+            else:
+                effective = effective_date
+            
+            # Normalize to timezone-naive for date calculations
+            if effective.tzinfo is not None:
+                effective = effective.replace(tzinfo=None)
+            
+            # Calculate expiration date
+            expiration = effective + relativedelta(months=term_months)
+            
+            # Calculate days difference from today
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            expiration_date_only = expiration.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Ensure both are timezone-naive
+            if expiration_date_only.tzinfo is not None:
+                expiration_date_only = expiration_date_only.replace(tzinfo=None)
+            
+            delta = expiration_date_only - today
+            days = delta.days
+            
+            return days
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error calculating days until expiration: {e}")
+            return None
+
+    def calculate_months_until_expiration(self, document_id: str) -> Optional[int]:
+        """
+        Calculate months until expiration for a document.
+        
+        Args:
+            document_id: Document UUID
+            
+        Returns:
+            Number of months until expiration (negative if expired), or None if cannot calculate
+        """
+        metadata = self.get_metadata_for_document(document_id)
+        if not metadata:
+            return None
+        
+        effective_date = metadata.get('effective_date')
+        term_months = metadata.get('term_months')
+        
+        if not effective_date or not term_months:
+            return None
+        
+        try:
+            from dateutil.relativedelta import relativedelta
+            
+            # Parse effective date
+            if isinstance(effective_date, str):
+                effective = datetime.fromisoformat(effective_date.replace('Z', '+00:00'))
+            else:
+                effective = effective_date
+            
+            # Normalize to timezone-naive for date calculations
+            if effective.tzinfo is not None:
+                effective = effective.replace(tzinfo=None)
+            
+            # Calculate expiration date
+            expiration = effective + relativedelta(months=term_months)
+            
+            # Calculate months difference from today
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            expiration_date_only = expiration.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Ensure both are timezone-naive
+            if expiration_date_only.tzinfo is not None:
+                expiration_date_only = expiration_date_only.replace(tzinfo=None)
+            
+            # Calculate months difference using relativedelta
+            # This handles month boundaries correctly (e.g., Jan 31 to Feb 28)
+            if expiration_date_only >= today:
+                delta = relativedelta(expiration_date_only, today)
+                months = delta.years * 12 + delta.months
+                # Add partial month if days > 0
+                if delta.days > 0:
+                    months += 1  # Round up to include partial month
+            else:
+                # Expired - calculate negative months
+                delta_past = relativedelta(today, expiration_date_only)
+                months = -(delta_past.years * 12 + delta_past.months)
+                # Subtract partial month if days > 0
+                if delta_past.days > 0:
+                    months -= 1  # Round down for expired
+            
+            return months
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error calculating months until expiration: {e}")
+            return None
+
+    def find_documents_expiring_in_month(self, target_month: int, target_year: int) -> List[Dict]:
+        """
+        Find all documents expiring in a specific month/year.
+        
+        Args:
+            target_month: Target month (1-12)
+            target_year: Target year
+            
+        Returns:
+            List of dicts with document_id, company_name, expiration_date
+        """
+        db = get_db_session()
+        try:
+            from dateutil.relativedelta import relativedelta
+            from api.db.schema import Document, DocumentStatus
+            
+            # Get all processed documents with metadata
+            documents = db.query(Document).filter(
+                Document.status == DocumentStatus.PROCESSED
+            ).all()
+            
+            expiring_docs = []
+            
+            for doc in documents:
+                metadata = db.query(DocumentMetadata).filter(
+                    DocumentMetadata.document_id == doc.id
+                ).first()
+                
+                if not metadata or not metadata.effective_date or not metadata.term_months:
+                    continue
+                
+                try:
+                    # Calculate expiration date
+                    effective = metadata.effective_date
+                    if isinstance(effective, str):
+                        effective = datetime.fromisoformat(effective.replace('Z', '+00:00'))
+                    
+                    expiration = effective + relativedelta(months=metadata.term_months)
+                    
+                    # Check if expiration matches target month/year
+                    if expiration.month == target_month and expiration.year == target_year:
+                        # Extract company name from filename
+                        company_name = doc.filename.split('_')[0] if '_' in doc.filename else doc.filename.split('.')[0]
+                        
+                        expiring_docs.append({
+                            'document_id': str(doc.id),
+                            'company_name': company_name,
+                            'expiration_date': expiration.strftime("%B %d, %Y"),
+                            'expiration_month': expiration.month,
+                            'expiration_year': expiration.year
+                        })
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.debug(f"Error processing document {doc.id}: {e}")
+                    continue
+            
+            return expiring_docs
+        finally:
+            db.close()
+
     def answer_term(self, document_id: str, question: str = "") -> Optional[Answer]:
         """Get term answer from metadata
         

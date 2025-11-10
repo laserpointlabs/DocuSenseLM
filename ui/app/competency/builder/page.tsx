@@ -9,6 +9,8 @@ export default function QuestionBuilderPage() {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [clearingAll, setClearingAll] = useState(false);
+  const [loadingFromJson, setLoadingFromJson] = useState(false);
 
   useEffect(() => {
     loadQuestions();
@@ -58,6 +60,38 @@ export default function QuestionBuilderPage() {
     }
   };
 
+  const handleClearAllQuestions = async () => {
+    if (!confirm(`⚠️  This will delete ALL ${questions.length} questions and all test data. This cannot be undone. Continue?`)) {
+      return;
+    }
+
+    setClearingAll(true);
+    try {
+      const result = await competencyAPI.deleteAllQuestions();
+      await loadQuestions();
+      alert(`Successfully deleted ${result.questions_deleted} questions, ${result.test_runs_deleted} test runs, and ${result.feedback_deleted} feedback records.`);
+    } catch (error: any) {
+      alert(`Failed to clear questions: ${error.message}`);
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
+  const handleLoadFromJson = async () => {
+    const clearFirst = confirm('Clear existing questions before loading? (Click OK to clear, Cancel to add to existing)');
+    
+    setLoadingFromJson(true);
+    try {
+      const result = await competencyAPI.loadQuestionsFromJson(clearFirst);
+      await loadQuestions();
+      alert(`Successfully loaded ${result.loaded_count} questions from JSON file${result.errors ? `\n\nErrors: ${result.errors.length}` : ''}`);
+    } catch (error: any) {
+      alert(`Failed to load questions from JSON: ${error.message}`);
+    } finally {
+      setLoadingFromJson(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
@@ -68,7 +102,16 @@ export default function QuestionBuilderPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Question</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Create New Question</h2>
+          <button
+            onClick={handleLoadFromJson}
+            disabled={loadingFromJson}
+            className="inline-flex items-center px-4 py-2 border border-primary-300 text-sm font-medium rounded-md text-primary-700 bg-primary-50 hover:bg-primary-100 disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            {loadingFromJson ? 'Loading...' : '📥 Load from JSON'}
+          </button>
+        </div>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -94,14 +137,25 @@ export default function QuestionBuilderPage() {
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Your Questions</h2>
-          <button
-            onClick={loadQuestions}
-            disabled={loadingQuestions}
-            className="text-sm text-primary-600 hover:text-primary-700 disabled:text-gray-400"
-          >
-            {loadingQuestions ? 'Loading...' : 'Refresh'}
-          </button>
+          <h2 className="text-lg font-semibold text-gray-900">Your Questions ({questions.length})</h2>
+          <div className="flex gap-2">
+            {questions.length > 0 && (
+              <button
+                onClick={handleClearAllQuestions}
+                disabled={clearingAll || loadingQuestions}
+                className="text-sm text-red-600 hover:text-red-700 disabled:text-gray-400 font-medium"
+              >
+                {clearingAll ? 'Clearing...' : 'Clear All'}
+              </button>
+            )}
+            <button
+              onClick={loadQuestions}
+              disabled={loadingQuestions}
+              className="text-sm text-primary-600 hover:text-primary-700 disabled:text-gray-400"
+            >
+              {loadingQuestions ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
         </div>
         {loadingQuestions ? (
           <p className="text-sm text-gray-600">Loading questions...</p>

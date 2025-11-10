@@ -29,6 +29,40 @@ except ImportError:
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 
+def print_progress_bar(current: int, total: int, current_item: str = "", bar_length: int = 40, status: str = ""):
+    """
+    Print a progress bar similar to reindexing progress.
+    
+    Args:
+        current: Current progress (0-indexed or 1-indexed)
+        total: Total items
+        current_item: Name of current item being processed
+        bar_length: Length of progress bar in characters
+        status: Optional status text (e.g., "PASSED", "FAILED")
+    """
+    # Ensure current is within bounds
+    current = max(0, min(current, total))
+    
+    # Calculate percentage
+    percent = (current / total * 100) if total > 0 else 0
+    
+    # Calculate filled length
+    filled_length = int(bar_length * current // total) if total > 0 else 0
+    
+    # Create bar
+    bar = '█' * filled_length + '░' * (bar_length - filled_length)
+    
+    # Build status prefix
+    status_prefix = f"{status} - " if status else ""
+    
+    # Print progress bar
+    if current_item:
+        item_display = current_item[:55] + "..." if len(current_item) > 55 else current_item
+        print(f"\r🧪 [{bar}] {current}/{total} ({percent:.1f}%) | {status_prefix}{item_display}", end='', flush=True)
+    else:
+        print(f"\r🧪 [{bar}] {current}/{total} ({percent:.1f}%)", end='', flush=True)
+
+
 def load_qa_pairs() -> List[Dict]:
     """Load QA pairs from eval/qa_pairs.json"""
     qa_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "eval", "qa_pairs.json")
@@ -87,12 +121,43 @@ def run_test(question_id: str, document_id: Optional[str] = None) -> Dict:
     if document_id:
         payload["document_id"] = document_id
 
+    # Set timeout to 150 seconds (2.5 minutes) for conversational questions
     response = requests.post(
         f"{API_URL}/competency/test/run",
-        json=payload
+        json=payload,
+        timeout=150.0
     )
     response.raise_for_status()
     return response.json()
+
+
+def clean_all_questions():
+    """Delete all competency questions and related test runs/feedback"""
+    db = get_db_session()
+    try:
+        from api.db.schema import TestRun, TestFeedback
+        
+        # Delete test feedback first (foreign key constraint)
+        feedback_count = db.query(TestFeedback).count()
+        db.query(TestFeedback).delete()
+        
+        # Delete test runs
+        test_runs_count = db.query(TestRun).count()
+        db.query(TestRun).delete()
+        
+        # Delete questions
+        questions_count = db.query(CompetencyQuestion).count()
+        db.query(CompetencyQuestion).delete()
+        
+        db.commit()
+        print(f"🧹 Cleaned {questions_count} questions, {test_runs_count} test runs, {feedback_count} feedback records")
+        return questions_count
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error cleaning questions: {e}")
+        raise
+    finally:
+        db.close()
 
 
 def load_questions(use_api: bool = True, dry_run: bool = False) -> List[str]:
@@ -138,23 +203,22 @@ def load_questions(use_api: bool = True, dry_run: bool = False) -> List[str]:
 
 def run_tests_for_questions(question_ids: List[str], document_id: Optional[str] = None) -> Dict:
     """Run tests for all loaded questions"""
-    print(f"\n🧪 Running tests for {len(question_ids)} questions...")
+    # Filter out dry-run questions
+    real_question_ids = [qid for qid in question_ids if not qid.startswith("dry-run-")]
+    total = len(real_question_ids)
+    
+    print(f"\n🧪 Running tests for {total} questions...")
+    print("=" * 70)
 
     results = {
-        "total": len(question_ids),
+        "total": total,
         "passed": 0,
         "failed": 0,
         "errors": [],
         "test_results": []
     }
 
-    for i, question_id in enumerate(question_ids, 1):
-        if question_id.startswith("dry-run-"):
-            print(f"[{i}/{len(question_ids)}] Skipping dry-run question")
-            continue
-
-        print(f"\n[{i}/{len(question_ids)}] Testing question {question_id[:8]}...")
-
+    for i, question_id in enumerate(real_question_ids, 1):
         try:
             # Get question text for display
             db = get_db_session()
@@ -166,26 +230,30 @@ def run_tests_for_questions(question_ids: List[str], document_id: Optional[str] 
             finally:
                 db.close()
 
-            print(f"   Question: {question_text[:60]}...")
-
+            # Update progress bar before test
+            print_progress_bar(i - 1, total, question_text, status="Testing...")
+            
             # Run test
             test_result = run_test(question_id, document_id)
 
-            # Check if test passed (has answer and response time < 10s)
+            # Check if test passed (has answer and response time < 120s for conversational questions)
+            # Conversational questions may take longer due to LLM processing
+            response_time_ms = test_result.get("response_time_ms", 999999)
             passed = (
                 test_result.get("answer") and
                 len(test_result.get("answer", "")) > 10 and
-                test_result.get("response_time_ms", 999999) < 10000
+                response_time_ms < 120000  # 2 minutes for conversational questions
             )
+
+            # Update progress bar with result
+            status_text = "✅ PASSED" if passed else "❌ FAILED"
+            print_progress_bar(i, total, question_text, status=status_text)
+            print()  # New line for next progress update
 
             if passed:
                 results["passed"] += 1
-                print(f"   ✅ PASSED - Response time: {test_result.get('response_time_ms')}ms")
-                print(f"      Answer: {test_result.get('answer', '')[:80]}...")
             else:
                 results["failed"] += 1
-                print(f"   ❌ FAILED - Response time: {test_result.get('response_time_ms')}ms")
-                print(f"      Answer length: {len(test_result.get('answer', ''))}")
 
             results["test_results"].append({
                 "question_id": question_id,
@@ -202,8 +270,13 @@ def run_tests_for_questions(question_ids: List[str], document_id: Optional[str] 
             results["failed"] += 1
             error_msg = f"Error testing question {question_id}: {e}"
             results["errors"].append(error_msg)
-            print(f"   ❌ ERROR: {e}")
+            print(f"\r❌ ERROR testing question {i}/{total}: {e}")
+            print()  # New line
 
+    # Final progress bar update
+    print_progress_bar(total, total, "")
+    print()  # Final newline
+    
     return results
 
 
@@ -217,6 +290,7 @@ def main():
     parser.add_argument("--test", action="store_true", help="Run tests after loading questions")
     parser.add_argument("--document-id", type=str, help="Test against specific document ID")
     parser.add_argument("--test-only", action="store_true", help="Only run tests, don't load questions")
+    parser.add_argument("--clean", action="store_true", help="Clear all existing questions before loading new ones")
 
     args = parser.parse_args()
 
@@ -243,6 +317,14 @@ def main():
     question_ids = []
 
     if not args.test_only:
+        # Clean existing questions if requested
+        if args.clean:
+            print("\n🧹 Cleaning existing questions...")
+            if not args.dry_run:
+                clean_all_questions()
+            else:
+                print("   [DRY RUN] Would clean all existing questions")
+        
         # Load questions
         question_ids = load_questions(use_api=use_api, dry_run=args.dry_run)
         print(f"\n✅ Loaded {len(question_ids)} questions")

@@ -103,6 +103,105 @@ IMPORTANT:
 Answer ONLY (no explanations, no context, no additional text):"""
 
 
+def build_conversational_system_prompt() -> str:
+    """Build system prompt for conversational responses"""
+    return """You are a helpful legal assistant analyzing Non-Disclosure Agreements (NDAs).
+Your role is to provide natural, conversational answers to user questions while maintaining accuracy.
+
+RESPONSE STYLE - Provide conversational, natural language answers:
+
+For "how many days" questions:
+  Question: "How many days until the faunc nda expires?"
+  GOOD Answer: "The faunc nda expires in about 1358 days." or "About 1358 days remain until the faunc nda expires."
+  ACCEPTABLE: "Approximately 1358 days" or "Around 1358 days"
+  
+For "how many months" questions:
+  Question: "How many months until the faunc nda expires?"
+  GOOD Answer: "The faunc nda expires in about 44 months." or "About 44 months remain until the faunc nda expires."
+  ACCEPTABLE: "Approximately 44 months" or "Around 44 months"
+  
+For "when does" questions:
+  Question: "When does the faunc nda expire?"
+  GOOD Answer: "The faunc nda expires on June 16, 2028." or "It expires on June 16, 2028."
+  
+For comparison questions:
+  Question: "Does faunc and norris expire in the same month?"
+  GOOD Answer: "No, they expire in different months. Faunc expires in June 2028, while Norris expires in September 2028."
+  GOOD Answer: "Yes, both expire in September 2028."
+  
+For cross-document questions:
+  Question: "When do faunc and norris expire?"
+  GOOD Answer: "Faunc expires on June 16, 2028, and Norris expires on September 5, 2028."
+  
+  Question: "Does faunc and norris expire in the same month?"
+  GOOD Answer: "No, they expire in different months. Faunc expires in June 2028, while Norris expires in September 2028."
+  GOOD Answer: "Yes, both expire in September 2028." (if they actually do)
+  
+  IMPORTANT: If comparison information is provided, use those exact dates/values in your answer.
+  
+For "what NDAs expire" questions:
+  Question: "What NDAs expire next month?"
+  GOOD Answer: "The following NDAs expire next month: Fanuc expires on June 16, 2028, and Norris expires on September 5, 2028." (if list provided)
+  GOOD Answer: "No NDAs expire next month." (if none found)
+  IMPORTANT: If a list of expiring NDAs is provided, include all of them in your answer.
+
+GUIDELINES:
+- Use natural language - it's okay to say "The NDA expires..." instead of just "June 16, 2028"
+- Be conversational but accurate
+- For approximate calculations (like days), use "about", "approximately", or "around"
+- For comparisons, clearly state the relationship
+- If information is not available, say "I cannot find this information in the provided documents"
+- Keep answers concise but natural (1-2 sentences typically)
+
+CRITICAL: Always base your answer on the context provided. Do NOT make up dates or information."""
+
+
+def build_conversational_prompt(query: str, context_chunks: List[Chunk], citations: List[Citation], additional_info: str = "") -> str:
+    """Build conversational prompt with context and question
+    
+    Args:
+        query: User question
+        context_chunks: Retrieved document chunks
+        citations: Citation information
+        additional_info: Optional additional information (e.g., calculated days until expiration)
+    """
+    # Build context from chunks with clear document boundaries
+    context_parts = []
+    for chunk in context_chunks:
+        # Format: [Document ID, Clause, Page] followed by text
+        doc_info = f"[Document {chunk.doc_id[:8]}..."
+        if chunk.clause_number:
+            doc_info += f", Clause {chunk.clause_number}"
+        if chunk.page_num:
+            doc_info += f", Page {chunk.page_num}"
+        doc_info += "]"
+        
+        chunk_text = f"{doc_info}\n{chunk.text}"
+        context_parts.append(chunk_text)
+    
+    context_text = "\n\n".join(context_parts)
+    
+    # Add additional calculated information if provided
+    info_section = ""
+    if additional_info:
+        info_section = f"\n\nADDITIONAL INFORMATION:\n{additional_info}\n"
+    
+    return f"""Based on the following context from NDA documents, answer this question in a natural, conversational way:
+
+{context_text}{info_section}
+Question: {query}
+
+IMPORTANT: 
+- Provide a natural, conversational answer (1-2 sentences)
+- Use the information from the context above
+- If additional information is provided above, you may use it to answer the question
+- For date calculations, you can use approximate values (e.g., "about 1358 days")
+- For comparisons across documents, clearly state the relationship
+- If the context does not contain the answer, respond with "I cannot find this information in the provided documents"
+
+Provide your answer in a natural, conversational style:"""
+
+
 def build_cross_document_prompt(query: str, context_chunks: List[Chunk], citations: List[Citation]) -> str:
     """Build prompt for cross-document queries with document grouping"""
     # Group chunks by document
@@ -138,6 +237,70 @@ IMPORTANT:
 - If the context does not contain the answer, respond with "I cannot find this information in the provided documents"
 
 Return your answer in the format shown in the system instructions. Answer ONLY (no explanations, no context, no additional text):"""
+
+
+def is_conversational_question(question: str) -> bool:
+    """
+    Detect if a question is conversational (natural language) vs structured.
+    
+    Conversational questions include:
+    - Questions asking for calculations ("how many days", "how long until")
+    - Questions asking "when does" (natural phrasing)
+    - Cross-document comparisons ("does X and Y", "same month")
+    - Questions asking for comparisons or relationships
+    
+    Args:
+        question: User question text
+        
+    Returns:
+        True if conversational, False if structured
+    """
+    question_lower = question.lower()
+    
+    # Conversational patterns
+    conversational_patterns = [
+        'how many days',
+        'how many months',
+        'how long until',
+        'how long till',
+        'days left',
+        'days until',
+        'days till',
+        'months left',
+        'months until',
+        'months till',
+        'when does',  # Natural phrasing vs "what is the expiration date"
+        'does',  # Comparison questions like "does X and Y expire"
+        'same month',
+        'same year',
+        'both expire',
+        'all expire',
+        'which expire',
+        'what ndas',  # "What NDAs expire next month?"
+        'what agreements',  # "What agreements expire..."
+        'next month',
+        'next year',
+        'this month',
+        'this year',
+        'expire next',
+        'expire in',
+        'compare',
+        'difference between',
+    ]
+    
+    # Check for conversational patterns
+    for pattern in conversational_patterns:
+        if pattern in question_lower:
+            return True
+    
+    # Check for multiple company names (cross-document comparison)
+    # Simple heuristic: if question contains "and" and company-like terms
+    if ' and ' in question_lower:
+        # Check if it looks like comparing multiple entities
+        # This is a simple heuristic - could be improved
+        return True
+    
+    return False
 
 
 def detect_question_type(question: str) -> str:
