@@ -78,5 +78,104 @@
     "expected_answer_type": "conversational",
     "category": "term",
     "expected_answer_text": "The Norris NDA and Central Coating NDA expire in September 2028."
+  },
+  {
+    "id": "qa_011",
+    "question": "What does the NDA say counts as \"Confidential Information\"?",
+    "expected_clause_keywords": ["confidential", "information", "definition", "includes", "means"],
+    "expected_answer_type": "definition",
+    "category": "confidentiality",
+    "priority": "Medium",
+    "expected_answer_text": "Confidential Information includes technical data, business plans, financial information, customer lists, proprietary information, trade secrets, and any information disclosed by the parties that is marked as confidential or would reasonably be considered confidential."
+  },
+  {
+    "id": "qa_012",
+    "question": "What state's law applies?",
+    "expected_clause_keywords": ["governing", "law", "jurisdiction", "state"],
+    "expected_answer_type": "location",
+    "category": "jurisdiction",
+    "priority": "Medium",
+    "expected_answer_text": "The NDA is governed by the laws of [State], without regard to its conflict of law provisions."
+  },
+  {
+    "id": "qa_013",
+    "question": "When the NDA ends or on request, must the recipient return or delete the information?",
+    "expected_clause_keywords": ["return", "delete", "destroy", "obligation", "upon termination", "upon request"],
+    "expected_answer_type": "boolean",
+    "category": "obligations",
+    "priority": "Low",
+    "expected_answer_text": "Yes, upon termination of the NDA or upon request by the disclosing party, the recipient must return or destroy all Confidential Information and certify in writing that such return or destruction has been completed."
+  },
+  {
+    "id": "qa_014",
+    "question": "Are there any extras (exclusivity, non-solicit, standstill) bundled into this NDA?",
+    "expected_clause_keywords": ["exclusivity", "non-solicit", "non-solicitation", "standstill", "extras", "additional"],
+    "expected_answer_type": "list",
+    "category": "metadata",
+    "priority": "Low",
+    "expected_answer_text": "The NDA [does/does not] include additional provisions such as exclusivity requirements, non-solicitation of employees, or standstill agreements. [If present, list the specific extras found in the document.]"
+  },
+  {
+    "id": "qa_015",
+    "question": "After the NDA ends, how long must confidentiality continue (the \"survival\" period)?",
+    "expected_clause_keywords": ["survival", "survive", "confidentiality", "period", "after termination", "expiration"],
+    "expected_answer_type": "duration",
+    "category": "term",
+    "priority": "Low",
+    "expected_answer_text": "The confidentiality obligations survive for [X years/months] after the termination or expiration of the NDA, or until the information is no longer confidential through no breach of the agreement."
+  },
+  {
+    "id": "qa_016",
+    "question": "When does the NDA expire (the \"date\")?",
+    "expected_clause_keywords": ["expire", "expiration", "date", "end date"],
+    "expected_answer_type": "date",
+    "category": "term",
+    "priority": "High",
+    "expected_answer_text": "The NDA expires on [specific date], which is [X years/months] from the effective date of [effective date]."
+  },
+  {
+    "id": "qa_017",
+    "question": "How long does the NDA last (the \"term\")?",
+    "expected_clause_keywords": ["term", "duration", "period", "last", "months", "years"],
+    "expected_answer_type": "duration",
+    "category": "term",
+    "priority": "High",
+    "expected_answer_text": "The NDA lasts for [X years/months] from the effective date, unless terminated earlier in accordance with its terms."
+  },
+  {
+    "id": "qa_018",
+    "question": "Who are the two parties by full legal name?",
+    "expected_clause_keywords": ["party", "parties", "legal name", "full name", "disclosing", "receiving"],
+    "expected_answer_type": "list",
+    "category": "parties",
+    "priority": "High",
+    "expected_answer_text": "The parties to the NDA are [Full Legal Name of Party 1] and [Full Legal Name of Party 2], as identified in the preamble or parties section of the agreement."
+  },
+  {
+    "id": "qa_019",
+    "question": "Is this NDA mutual (both sides protect info) or one-way?",
+    "expected_clause_keywords": ["mutual", "unilateral", "one-way", "both parties", "both sides"],
+    "expected_answer_type": "boolean",
+    "category": "metadata",
+    "priority": "High",
+    "expected_answer_text": "This NDA is [mutual/one-way]. [If mutual: Both parties agree to protect each other's confidential information. If one-way: Only one party (the receiving party) is obligated to protect the other party's confidential information.]"
+  },
+  {
+    "id": "qa_020",
+    "question": "Do trade secrets stay protected as long as they remain trade secrets?",
+    "expected_clause_keywords": ["trade secret", "trade secrets", "protected", "remain", "survival"],
+    "expected_answer_type": "boolean",
+    "category": "confidentiality",
+    "priority": "High",
+    "expected_answer_text": "[Yes/No]. Trade secrets remain protected for as long as they maintain their status as trade secrets under applicable law, regardless of the term or survival period of the NDA, unless otherwise specified in the agreement."
+  },
+  {
+    "id": "qa_021",
+    "question": "Does the NDA require changes to be in writing and signed by both sides?",
+    "expected_clause_keywords": ["amendments", "modifications", "changes", "writing", "written", "signed", "both parties"],
+    "expected_answer_type": "boolean",
+    "category": "metadata",
+    "priority": "High",
+    "expected_answer_text": "Yes, the NDA requires that any amendments or modifications must be in writing and signed by both parties to be effective."
   }
 ]
