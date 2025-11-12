@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { competencyAPI } from '@/lib/api';
 
 export default function CompetencyPage() {
@@ -37,11 +37,21 @@ export default function CompetencyPage() {
   
   // Test Progress
   const [testProgress, setTestProgress] = useState<any | null>(null);
+  const [progressIntervalId, setProgressIntervalId] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadQuestions();
     loadGlobalThreshold();
   }, []);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalId) {
+        clearInterval(progressIntervalId);
+      }
+    };
+  }, [progressIntervalId]);
 
   // Load test results after questions are loaded (so we have question thresholds)
   useEffect(() => {
@@ -349,69 +359,73 @@ export default function CompetencyPage() {
       return;
     }
 
+    // Clear any existing interval
+    if (progressIntervalId) {
+      clearInterval(progressIntervalId);
+      setProgressIntervalId(null);
+    }
+
     setTestingAll(true);
     setAllTestResults(null);
     setDetailedResults({});
-    setTestProgress(null); // Reset progress before starting
-
-    // Start polling for progress
-    const progressInterval = setInterval(async () => {
-      try {
-        const progress = await competencyAPI.getTestProgress();
-        setTestProgress(progress);
-        if (!progress.is_running) {
-          clearInterval(progressInterval);
-        }
-      } catch (error) {
-        console.error('Failed to get test progress:', error);
-      }
-    }, 500); // Poll every 500ms
+    
+    // Initialize progress state to show indicator immediately
+    setTestProgress({
+      is_running: true,
+      total: questions.length,
+      completed: 0,
+      current: null,
+      errors: 0,
+      passed: 0,
+      failed: 0,
+      progress_percent: 0
+    });
 
     try {
-      const results = await competencyAPI.runAllTests();
-      clearInterval(progressInterval);
+      // Start the background task
+      const startResponse = await competencyAPI.runAllTests();
+      
+      if (startResponse.status === 'already_running') {
+        alert('Tests are already running');
+        setTestingAll(false);
+        setTestProgress(null);
+        return;
+      }
 
-      const enhancedResults = results.results?.map((result: any) => {
-        const question = questions.find(q => q.id === result.question_id);
-        const confidence = result.accuracy_score || 0;
-        const questionThreshold = question?.confidence_threshold || 0.7;
-        return {
-          ...result,
-          question_text: result.question_text || question?.question_text,
-          expected_answer: question?.expected_answer_text || '',
-          confidence,
-          passed: confidence >= questionThreshold
-        };
-      }) || [];
+      // Start polling for progress immediately
+      const intervalId = setInterval(async () => {
+        try {
+          const progress = await competencyAPI.getTestProgress();
+          setTestProgress(progress);
+          
+          // When tests complete, load results and stop polling
+          if (!progress.is_running) {
+            clearInterval(intervalId);
+            setProgressIntervalId(null);
+            
+            // Small delay to ensure all database writes are complete
+            setTimeout(async () => {
+              // Load the actual test results from the database
+              await loadLatestTestResults();
+              setTestProgress(null);
+              setTestingAll(false);
+            }, 500);
+          }
+        } catch (error) {
+          console.error('Failed to get test progress:', error);
+        }
+      }, 500); // Poll every 500ms
+      
+      setProgressIntervalId(intervalId);
 
-      const passed = enhancedResults.filter(r => r.passed).length;
-      const failed = enhancedResults.filter(r => !r.passed).length;
-      const passRate = (passed / enhancedResults.length) * 100;
-
-      setAllTestResults({
-        ...results,
-        results: enhancedResults,
-        passed,
-        failed,
-        passRate
-      });
-
-      // Store detailed results
-      const detailed: Record<string, any> = {};
-      enhancedResults.forEach((result: any) => {
-        detailed[result.question_id] = result;
-      });
-      setDetailedResults(detailed);
-
-      // Reload test results from database to ensure we have the latest saved results
-      await loadLatestTestResults();
-      // They will persist and be loaded on refresh
-      setTestProgress(null); // Clear progress on completion
     } catch (error: any) {
-      clearInterval(progressInterval);
+      // Clean up interval on error
+      if (progressIntervalId) {
+        clearInterval(progressIntervalId);
+        setProgressIntervalId(null);
+      }
       setTestProgress(null); // Clear progress on error
-      alert(`Failed to run all tests: ${error.message}`);
-    } finally {
+      alert(`Failed to start tests: ${error.message}`);
       setTestingAll(false);
     }
   };
@@ -607,7 +621,11 @@ export default function CompetencyPage() {
                   <div className="text-xs text-gray-600">Failed</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-primary-600">{allTestResults.passRate?.toFixed(1)}%</div>
+                  <div className="text-2xl font-bold text-primary-600">
+                    {allTestResults.passRate != null && !isNaN(allTestResults.passRate) 
+                      ? allTestResults.passRate.toFixed(1) 
+                      : '0.0'}%
+                  </div>
                   <div className="text-xs text-gray-600">Pass Rate</div>
                 </div>
               </div>
@@ -669,8 +687,8 @@ export default function CompetencyPage() {
                   const isExpanded = expandedQuestion === q.id;
 
                   return (
-                    <>
-                      <tr key={q.id} className={isExpanded ? 'bg-primary-50' : ''}>
+                    <React.Fragment key={q.id}>
+                      <tr className={isExpanded ? 'bg-primary-50' : ''}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {result && (
                             <button
@@ -882,7 +900,7 @@ export default function CompetencyPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </tbody>

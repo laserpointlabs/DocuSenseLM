@@ -1,7 +1,7 @@
 """
 Competency question router
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import Optional, List
 from api.models.requests import (
     CompetencyQuestionCreate, CompetencyQuestionUpdate, TestRunRequest, TestFeedbackRequest
@@ -691,9 +691,20 @@ async def get_latest_test_results():
         db.close()
 
 
-@router.post("/test/run-all")
-async def run_all_tests():
-    """Run tests for all active competency questions"""
+def _run_all_tests_background():
+    """Background task to run tests for all active competency questions"""
+    import asyncio
+    
+    # Create a new event loop for this background task
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
     db = get_db_session()
     try:
         # Get all active questions
@@ -702,11 +713,9 @@ async def run_all_tests():
         ).all()
 
         if not questions:
-            return {
-                "message": "No active questions found",
-                "total": 0,
-                "results": []
-            }
+            with _test_progress_lock:
+                _test_progress["is_running"] = False
+            return
 
         # Initialize progress tracking
         with _test_progress_lock:
@@ -727,6 +736,9 @@ async def run_all_tests():
             with _test_progress_lock:
                 _test_progress["current"] = question.question_text[:60] + "..." if len(question.question_text) > 60 else question.question_text
                 _test_progress["completed"] = idx - 1
+            
+            # Create a new database session for this question's test
+            question_db = get_db_session()
             try:
                 # Run test for this question
                 filters = None
@@ -734,9 +746,11 @@ async def run_all_tests():
                     filters = {"document_id": str(question.document_id)}
 
                 start_time = datetime.now()
-                answer_obj = await answer_service.generate_answer(
-                    question=question.question_text,
-                    filters=filters
+                answer_obj = loop.run_until_complete(
+                    answer_service.generate_answer(
+                        question=question.question_text,
+                        filters=filters
+                    )
                 )
                 end_time = datetime.now()
 
@@ -764,11 +778,13 @@ async def run_all_tests():
                                 for c in answer_obj.citations
                             ]
                         
-                        eval_result = await answer_evaluator.evaluate_answer(
-                            question=question.question_text,
-                            actual_answer=answer_obj.text,
-                            expected_answer=question.expected_answer_text,
-                            context_chunks=context_chunks
+                        eval_result = loop.run_until_complete(
+                            answer_evaluator.evaluate_answer(
+                                question=question.question_text,
+                                actual_answer=answer_obj.text,
+                                expected_answer=question.expected_answer_text,
+                                context_chunks=context_chunks
+                            )
                         )
                         
                         llm_confidence = eval_result.get("confidence", 0.0)
@@ -807,10 +823,12 @@ async def run_all_tests():
                                 for c in answer_obj.citations
                             ]
                         
-                        eval_result = await answer_evaluator.evaluate_answer_quality(
-                            question=question.question_text,
-                            answer=answer_obj.text,
-                            context_chunks=context_chunks
+                        eval_result = loop.run_until_complete(
+                            answer_evaluator.evaluate_answer_quality(
+                                question=question.question_text,
+                                answer=answer_obj.text,
+                                context_chunks=context_chunks
+                            )
                         )
                         
                         llm_confidence = eval_result.get("confidence", 0.0)
@@ -871,9 +889,9 @@ async def run_all_tests():
                     accuracy_score=accuracy_score,
                     response_time_ms=response_time_ms
                 )
-                db.add(test_run)
-                db.commit()
-                db.refresh(test_run)
+                question_db.add(test_run)
+                question_db.commit()
+                question_db.refresh(test_run)
 
                 # Build citations list from stored data
                 citations = citations_data
@@ -917,19 +935,49 @@ async def run_all_tests():
                     "error": str(e),
                     "accuracy_score": 0.0
                 })
+            finally:
+                question_db.close()
 
         # Reset progress tracking
         with _test_progress_lock:
             _test_progress["is_running"] = False
             _test_progress["current"] = None
+    finally:
+        db.close()
 
+
+@router.post("/test/run-all")
+async def run_all_tests(background_tasks: BackgroundTasks):
+    """Start running tests for all active competency questions in the background"""
+    db = get_db_session()
+    try:
+        # Check if tests are already running
+        with _test_progress_lock:
+            if _test_progress["is_running"]:
+                return {
+                    "message": "Tests are already running",
+                    "status": "already_running"
+                }
+        
+        # Get count of active questions
+        question_count = db.query(CompetencyQuestion).filter(
+            CompetencyQuestion.is_active == True
+        ).count()
+        
+        if question_count == 0:
+            return {
+                "message": "No active questions found",
+                "status": "no_questions",
+                "total": 0
+            }
+        
+        # Start background task
+        background_tasks.add_task(_run_all_tests_background)
+        
         return {
-            "message": f"Completed testing {len(questions)} questions",
-            "total": len(questions),
-            "passed": total_passed,
-            "failed": total_failed,
-            "pass_rate": (total_passed / len(questions) * 100) if questions else 0,
-            "results": results
+            "message": f"Started testing {question_count} questions",
+            "status": "started",
+            "total": question_count
         }
     finally:
         db.close()
