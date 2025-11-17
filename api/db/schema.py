@@ -227,7 +227,7 @@ class NDARecord(Base):
     term_months = Column(Integer, nullable=True)
     survival_months = Column(Integer, nullable=True)
     expiry_date = Column(Date, nullable=True)
-    status = Column(String(20), nullable=False, default="signed")
+    status = Column(String(30), nullable=False, default="created")
     file_uri = Column(String(512), nullable=False)
     file_sha256 = Column(LargeBinary, nullable=False, unique=True)
     extracted_text = Column(Text, nullable=True)
@@ -237,10 +237,31 @@ class NDARecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    workflow_instance_id = Column(UUID(as_uuid=True), ForeignKey("nda_workflow_instances.id"), nullable=True)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("nda_templates.id"), nullable=True)  # Template used to create this NDA
+    template_version = Column(Integer, nullable=True)  # Version of template used
+
     __table_args__ = (
         UniqueConstraint('document_id', name='uq_nda_records_document_id'),
         CheckConstraint(
-            "status IN ('draft','negotiating','approved','signed','expired','terminated')",
+            "status IN ("
+            "'created',"              # Initial state when NDA created from template
+            "'draft',"               # Being edited internally  
+            "'in_review',"           # Workflow started, under review
+            "'pending_signature',"   # Sent to customer, waiting for signature
+            "'customer_signed',"     # Customer returned signed copy
+            "'llm_reviewed_approved'," # LLM approved (pre-send or post-signature)
+            "'llm_reviewed_rejected'," # LLM rejected 
+            "'reviewed',"            # Human reviewed (pre-send or post-signature)
+            "'approved',"            # Approved internally
+            "'rejected',"            # Rejected internally
+            "'signed',"              # Fully executed (both parties signed)
+            "'active',"              # Active and in effect
+            "'expired',"             # Expired
+            "'terminated',"          # Terminated early
+            "'archived',"            # Archived/inactive
+            "'negotiating'"          # Legacy status (backward compatibility)
+            ")",
             name='chk_nda_records_status'
         ),
         Index('idx_nda_records_counterparty', 'counterparty_domain', 'counterparty_name'),
@@ -292,6 +313,197 @@ class User(Base):
         Index('idx_users_username', 'username'),
         Index('idx_users_role', 'role'),
         Index('idx_users_active', 'is_active'),
+    )
+
+
+# Workflow Automation Tables
+
+class NDATemplate(Base):
+    """
+    NDA template definitions for generating unsigned NDAs.
+    Supports versioning - each template can have multiple versions.
+    """
+    __tablename__ = "nda_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    file_path = Column(String(512), nullable=False)  # Path in MinIO/S3
+    version = Column(Integer, nullable=False, default=1)  # Template version number
+    template_key = Column(String(255), nullable=False)  # Unique key for grouping versions (e.g., "standard-nda")
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_current = Column(Boolean, nullable=False, default=True)  # True for the latest version
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    change_notes = Column(Text, nullable=True)  # Notes about what changed in this version
+
+    __table_args__ = (
+        Index('idx_templates_name', 'name'),
+        Index('idx_templates_key', 'template_key'),
+        Index('idx_templates_active', 'is_active'),
+        Index('idx_templates_current', 'is_current'),
+        Index('idx_templates_created_at', 'created_at'),
+        UniqueConstraint('template_key', 'version', name='uq_template_key_version'),
+    )
+
+
+class NDAWorkflowInstance(Base):
+    """
+    Track Camunda workflow instances for NDA review and approval.
+    """
+    __tablename__ = "nda_workflow_instances"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nda_record_id = Column(UUID(as_uuid=True), ForeignKey("nda_records.id"), nullable=False, unique=True)
+    camunda_process_instance_id = Column(String(100), nullable=False, unique=True)
+    current_status = Column(String(50), nullable=False)  # e.g., "llm_review", "human_review", "approval"
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_workflow_instances_nda_record', 'nda_record_id'),
+        Index('idx_workflow_instances_camunda_id', 'camunda_process_instance_id'),
+        Index('idx_workflow_instances_status', 'current_status'),
+        Index('idx_workflow_instances_started_at', 'started_at'),
+    )
+
+
+class NDAWorkflowTask(Base):
+    """
+    Track workflow tasks for assignment and completion.
+    """
+    __tablename__ = "nda_workflow_tasks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_instance_id = Column(UUID(as_uuid=True), ForeignKey("nda_workflow_instances.id"), nullable=False)
+    task_id = Column(String(100), nullable=False)  # Camunda task ID
+    task_name = Column(String(255), nullable=False)  # Human-readable task name
+    assignee_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    status = Column(String(50), nullable=False, default="pending")  # "pending", "assigned", "completed", "rejected"
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    comments = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_workflow_tasks_instance', 'workflow_instance_id'),
+        Index('idx_workflow_tasks_task_id', 'task_id'),
+        Index('idx_workflow_tasks_assignee', 'assignee_user_id'),
+        Index('idx_workflow_tasks_status', 'status'),
+        Index('idx_workflow_tasks_due_date', 'due_date'),
+        UniqueConstraint('task_id', name='uq_workflow_tasks_task_id'),
+    )
+
+
+class EmailConfig(Base):
+    """
+    Email server configuration for sending and receiving emails.
+    """
+    __tablename__ = "email_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True)  # Configuration name
+    smtp_host = Column(String(255), nullable=False)
+    smtp_port = Column(Integer, nullable=False, default=587)
+    smtp_user = Column(String(255), nullable=False)
+    smtp_password_encrypted = Column(String(512), nullable=False)  # Encrypted password
+    smtp_use_tls = Column(Boolean, nullable=False, default=True)
+    imap_host = Column(String(255), nullable=True)
+    imap_port = Column(Integer, nullable=True, default=993)
+    imap_user = Column(String(255), nullable=True)
+    imap_password_encrypted = Column(String(512), nullable=True)  # Encrypted password
+    imap_use_ssl = Column(Boolean, nullable=True, default=True)
+    from_address = Column(String(255), nullable=False)
+    from_name = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_email_config_name', 'name'),
+        Index('idx_email_config_active', 'is_active'),
+    )
+
+
+class WorkflowConfig(Base):
+    """
+    Workflow configuration for reviewers, approvers, and settings.
+    """
+    __tablename__ = "workflow_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True)  # Configuration name
+    reviewer_user_ids = Column(JSON, nullable=False, default=list)  # Array of user UUIDs
+    approver_user_ids = Column(JSON, nullable=False, default=list)  # Array of user UUIDs
+    final_approver_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    llm_review_enabled = Column(Boolean, nullable=False, default=True)
+    llm_review_threshold = Column(Float, nullable=True, default=0.7)  # Confidence threshold
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_workflow_config_name', 'name'),
+        Index('idx_workflow_config_active', 'is_active'),
+    )
+
+
+class EmailMessage(Base):
+    """
+    Track sent and received emails related to NDAs.
+    """
+    __tablename__ = "email_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nda_record_id = Column(UUID(as_uuid=True), ForeignKey("nda_records.id"), nullable=True)
+    message_id = Column(String(255), nullable=False, unique=True)  # Email Message-ID header
+    direction = Column(String(20), nullable=False)  # "sent" or "received"
+    subject = Column(String(512), nullable=False)
+    body = Column(Text, nullable=True)
+    body_html = Column(Text, nullable=True)
+    from_address = Column(String(255), nullable=False)
+    to_addresses = Column(JSON, nullable=False)  # Array of email addresses
+    cc_addresses = Column(JSON, nullable=True)  # Array of email addresses
+    attachments = Column(JSON, nullable=True)  # Array of attachment metadata
+    tracking_id = Column(String(100), nullable=True)  # For linking emails to NDAs
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index('idx_email_messages_nda_record', 'nda_record_id'),
+        Index('idx_email_messages_message_id', 'message_id'),
+        Index('idx_email_messages_direction', 'direction'),
+        Index('idx_email_messages_tracking_id', 'tracking_id'),
+        Index('idx_email_messages_sent_at', 'sent_at'),
+        Index('idx_email_messages_received_at', 'received_at'),
+    )
+
+
+class NDAAuditLog(Base):
+    """
+    Audit trail for all NDA actions and status changes.
+    """
+    __tablename__ = "nda_audit_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nda_record_id = Column(UUID(as_uuid=True), ForeignKey("nda_records.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    action = Column(String(100), nullable=False)  # e.g., "status_changed", "email_sent", "workflow_started"
+    details = Column(JSON, nullable=True)  # Additional action details
+    ip_address = Column(String(45), nullable=True)  # IPv4 or IPv6
+    user_agent = Column(String(512), nullable=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index('idx_audit_log_nda_record', 'nda_record_id'),
+        Index('idx_audit_log_user', 'user_id'),
+        Index('idx_audit_log_action', 'action'),
+        Index('idx_audit_log_timestamp', 'timestamp'),
     )
 
 
