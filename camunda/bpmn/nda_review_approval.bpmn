@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://www.omg.org/bpmn20">
+  
+  <!-- Message Definition -->
+  <bpmn2:message id="Message_CustomerSigned" name="CustomerSignedMessage" />
+  
+  <bpmn2:process id="nda_review_approval" name="NDA Review and Approval" isExecutable="true" camunda:historyTimeToLive="90">
+    
+    <!-- Start Event: NDA Created -->
+    <bpmn2:startEvent id="StartEvent_1" name="NDA Created">
+      <bpmn2:outgoing>Flow_1</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    
+    <!-- LLM Review Task (Pre-Send Quality Control) -->
+    <bpmn2:serviceTask id="Task_LLMReview" name="LLM Review" camunda:type="external" camunda:topic="llm_review">
+      <bpmn2:incoming>Flow_1</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_2</bpmn2:outgoing>
+    </bpmn2:serviceTask>
+    
+    <!-- Gateway: LLM Approved? -->
+    <bpmn2:exclusiveGateway id="Gateway_LLMDecision" name="LLM Approved?">
+      <bpmn2:incoming>Flow_2</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_3</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_4</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    
+    <!-- Human Review Task (Pre-Send Validation) -->
+    <bpmn2:userTask id="Task_HumanReview" name="Human Review" camunda:assignee="${reviewer_user_id}">
+      <bpmn2:incoming>Flow_3</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_5</bpmn2:outgoing>
+    </bpmn2:userTask>
+    
+    <!-- Gateway: Human Approved? -->
+    <bpmn2:exclusiveGateway id="Gateway_HumanDecision" name="Human Approved?">
+      <bpmn2:incoming>Flow_5</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_6</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_7</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    
+    <!-- Send to Customer Task -->
+    <bpmn2:serviceTask id="Task_SendToCustomer" name="Send to Customer" camunda:type="external" camunda:topic="send_to_customer">
+      <bpmn2:incoming>Flow_6</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_8</bpmn2:outgoing>
+    </bpmn2:serviceTask>
+    
+    <!-- Wait for Customer Signature (Message Event) -->
+    <bpmn2:intermediateCatchEvent id="Event_CustomerSigned" name="Customer Signed">
+      <bpmn2:incoming>Flow_8</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_9</bpmn2:outgoing>
+      <bpmn2:messageEventDefinition messageRef="Message_CustomerSigned" />
+    </bpmn2:intermediateCatchEvent>
+    
+    <!-- LLM Review Signed Document (Post-Signature Validation) -->
+    <bpmn2:serviceTask id="Task_LLMReviewSigned" name="LLM Review Signed" camunda:type="external" camunda:topic="llm_review_signed">
+      <bpmn2:incoming>Flow_9</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_10</bpmn2:outgoing>
+    </bpmn2:serviceTask>
+    
+    <!-- Gateway: LLM Approved Signed? -->
+    <bpmn2:exclusiveGateway id="Gateway_LLMSignedDecision" name="LLM Approved Signed?">
+      <bpmn2:incoming>Flow_10</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_11</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_12</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    
+    <!-- Internal Signature Task -->
+    <bpmn2:userTask id="Task_InternalSignature" name="Internal Signature" camunda:assignee="${internal_signer_user_id}">
+      <bpmn2:incoming>Flow_11</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_13</bpmn2:outgoing>
+    </bpmn2:userTask>
+    
+    <!-- End Events -->
+    <bpmn2:endEvent id="EndEvent_Rejected" name="Rejected">
+      <bpmn2:incoming>Flow_4</bpmn2:incoming>
+    </bpmn2:endEvent>
+    
+    <bpmn2:endEvent id="EndEvent_RejectedHuman" name="Rejected by Human">
+      <bpmn2:incoming>Flow_7</bpmn2:incoming>
+    </bpmn2:endEvent>
+    
+    <bpmn2:endEvent id="EndEvent_RejectedSigned" name="Rejected Signed">
+      <bpmn2:incoming>Flow_12</bpmn2:incoming>
+    </bpmn2:endEvent>
+    
+    <bpmn2:endEvent id="EndEvent_Approved" name="Approved">
+      <bpmn2:incoming>Flow_13</bpmn2:incoming>
+    </bpmn2:endEvent>
+    
+    <!-- Sequence Flows -->
+    <bpmn2:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_LLMReview" />
+    <bpmn2:sequenceFlow id="Flow_2" sourceRef="Task_LLMReview" targetRef="Gateway_LLMDecision" />
+    <bpmn2:sequenceFlow id="Flow_3" name="Approved" sourceRef="Gateway_LLMDecision" targetRef="Task_HumanReview">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression">${llm_approved == true}</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="Flow_4" name="Rejected" sourceRef="Gateway_LLMDecision" targetRef="EndEvent_Rejected">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression">${llm_approved == false}</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="Flow_5" sourceRef="Task_HumanReview" targetRef="Gateway_HumanDecision" />
+    <bpmn2:sequenceFlow id="Flow_6" name="Approved" sourceRef="Gateway_HumanDecision" targetRef="Task_SendToCustomer">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression">${human_approved == true}</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="Flow_7" name="Rejected" sourceRef="Gateway_HumanDecision" targetRef="EndEvent_RejectedHuman">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression">${human_approved == false}</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="Flow_8" sourceRef="Task_SendToCustomer" targetRef="Event_CustomerSigned" />
+    <bpmn2:sequenceFlow id="Flow_9" sourceRef="Event_CustomerSigned" targetRef="Task_LLMReviewSigned" />
+    <bpmn2:sequenceFlow id="Flow_10" sourceRef="Task_LLMReviewSigned" targetRef="Gateway_LLMSignedDecision" />
+    <bpmn2:sequenceFlow id="Flow_11" name="Approved" sourceRef="Gateway_LLMSignedDecision" targetRef="Task_InternalSignature">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression">${llm_signed_approved == true}</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="Flow_12" name="Rejected" sourceRef="Gateway_LLMSignedDecision" targetRef="EndEvent_RejectedSigned">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression">${llm_signed_approved == false}</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="Flow_13" sourceRef="Task_InternalSignature" targetRef="EndEvent_Approved" />
+    
+  </bpmn2:process>
+</bpmn2:definitions>

@@ -139,3 +139,92 @@ class NDAEventResponse(BaseModel):
     scheduled_for: datetime
     delivered_at: Optional[datetime]
     payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+# Template Management Responses
+
+class TemplateResponse(BaseModel):
+    """Template response"""
+    id: str
+    name: str
+    description: Optional[str] = None
+    file_path: str
+    version: int
+    template_key: str
+    is_active: bool
+    is_current: bool
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    change_notes: Optional[str] = None
+
+
+class TemplateListResponse(BaseModel):
+    """List of templates"""
+    templates: List[TemplateResponse]
+    total: int
+
+
+class TemplateRenderResponse(BaseModel):
+    """Template render response"""
+    file_data: str  # Base64 encoded DOCX file
+    filename: str
+
+
+# NDA Workflow Responses
+
+class NDARecordSummary(BaseModel):
+    """NDA record summary"""
+    id: str
+    counterparty_name: str
+    counterparty_domain: Optional[str] = None
+    status: str
+    effective_date: Optional[date] = None
+    term_months: Optional[int] = None
+    survival_months: Optional[int] = None
+    expiry_date: Optional[date] = None
+    tags: Dict[str, Any] = {}
+    file_uri: str
+    workflow_instance_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowInstanceResponse(BaseModel):
+    """Workflow instance response"""
+    id: str
+    nda_record_id: str
+    camunda_process_instance_id: str
+    current_status: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class WorkflowTaskResponse(BaseModel):
+    """Workflow task response"""
+    id: str
+    task_id: str
+    task_name: str
+    status: str
+    assignee_user_id: Optional[str] = None
+    due_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    comments: Optional[str] = None
+
+
+class WorkflowStatusResponse(BaseModel):
+    """NDA workflow status response"""
+    nda_id: str
+    status: str
+    workflow_status: Optional[str] = None
+    workflow_instance_id: Optional[str] = None
+    current_tasks: List[WorkflowTaskResponse] = []
+    progress_percentage: Optional[float] = None
+
+
+class EmailSendResponse(BaseModel):
+    """Email send response"""
+    message_id: str
+    tracking_id: str
+    sent_to: List[str]
+    status: str
