@@ -75,7 +75,7 @@ class StorageService:
 
     def _ensure_buckets(self):
         """Ensure required buckets exist"""
-        buckets = ["nda-raw", "nda-processed", "nda-logs"]
+        buckets = ["nda-raw", "nda-processed", "nda-logs", "nda-templates"]
 
         if self.use_s3:
             for bucket in buckets:

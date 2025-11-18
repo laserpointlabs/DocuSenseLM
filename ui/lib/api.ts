@@ -332,6 +332,231 @@ export const authAPI = {
   },
 };
 
+export interface Template {
+  id: string;
+  name: string;
+  description?: string;
+  file_path: string;
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  version?: number;
+  template_key?: string;
+  is_current?: boolean;
+  change_notes?: string;
+}
+
+export interface TemplateListResponse {
+  templates: Template[];
+  total: number;
+}
+
+export interface NDACreateRequest {
+  template_id: string;
+  counterparty_name: string;
+  counterparty_domain?: string;
+  counterparty_email?: string;
+  disclosing_party?: string;
+  receiving_party?: string;
+  effective_date?: string;
+  term_months?: number;
+  survival_months?: number;
+  governing_law?: string;
+  direction?: string;
+  nda_type?: string;
+  entity_id?: string;
+  additional_data?: Record<string, any>;
+  // Workflow signers
+  reviewer_user_id?: string;
+  approver_user_id?: string;
+  internal_signer_user_id?: string;
+  // Workflow options
+  auto_start_workflow?: boolean;
+}
+
+export interface NDARecordSummary {
+  id: string;
+  document_id?: string;
+  counterparty_name: string;
+  counterparty_domain?: string;
+  status: string;
+  direction?: string;
+  nda_type?: string;
+  entity_id?: string;
+  owner_user_id?: string;
+  effective_date?: string;
+  expiry_date?: string;
+  term_months?: number;
+  survival_months?: number;
+  tags?: Record<string, any>;
+  file_uri: string;
+}
+
+export const templateAPI = {
+  list: async (activeOnly = true, currentOnly = true): Promise<TemplateListResponse> => {
+    const response = await api.get<TemplateListResponse>('/templates', {
+      params: { active_only: activeOnly, current_only: currentOnly },
+    });
+    return response.data;
+  },
+  get: async (id: string, version?: number): Promise<Template> => {
+    const response = await api.get<Template>(`/templates/${id}`, {
+      params: version ? { version } : {},
+    });
+    return response.data;
+  },
+  getVariables: async (id: string): Promise<{ variables: string[] }> => {
+    const response = await api.get(`/templates/${id}/variables`);
+    return response.data;
+  },
+  listVersions: async (templateKey: string): Promise<TemplateListResponse> => {
+    const response = await api.get<TemplateListResponse>(`/templates/${templateKey}/versions`);
+    return response.data;
+  },
+  setCurrentVersion: async (templateKey: string, version: number): Promise<Template> => {
+    const response = await api.post<Template>(`/templates/${templateKey}/versions/${version}/set-current`);
+    return response.data;
+  },
+  update: async (templateId: string, updates: { name?: string; description?: string; is_active?: boolean }): Promise<Template> => {
+    const response = await api.put<Template>(`/templates/${templateId}`, updates);
+    return response.data;
+  },
+  downloadFile: (templateId: string, version?: number, format: 'docx' | 'pdf' = 'docx'): string => {
+    const params = new URLSearchParams();
+    if (version) params.append('version', version.toString());
+    params.append('format', format);
+    return `${API_URL}/templates/${templateId}/file?${params.toString()}`;
+  },
+  getPdfUrl: (templateId: string, version?: number): string => {
+    return templateAPI.downloadFile(templateId, version, 'pdf');
+  },
+  delete: async (templateId: string, version?: number): Promise<void> => {
+    const params = version ? `?version=${version}` : '';
+    await api.delete(`/templates/${templateId}${params}`);
+  },
+  deleteVersion: async (templateKey: string, version: number): Promise<void> => {
+    await api.delete(`/templates/${templateKey}/versions/${version}`);
+  },
+};
+
+export interface NDASendEmailRequest {
+  to_addresses: string[];
+  cc_addresses?: string[];
+  subject?: string;
+  message?: string;
+}
+
+export interface WorkflowTasks {
+  workflow_instance_id: string;
+  camunda_tasks: Array<{
+    id: string;
+    name: string;
+    assignee?: string;
+    created: string;
+    due?: string;
+    processInstanceId: string;
+  }>;
+  database_tasks: Array<{
+    id: string;
+    task_id: string;
+    task_name: string;
+    status: string;
+    assignee_user_id?: string;
+    due_date?: string;
+    completed_at?: string;
+  }>;
+}
+
+export const workflowAPI = {
+  createNDA: async (request: NDACreateRequest): Promise<NDARecordSummary> => {
+    const response = await api.post<NDARecordSummary>('/workflow/nda/create', request);
+    return response.data;
+  },
+  sendNDAEmail: async (ndaId: string, request: NDASendEmailRequest) => {
+    const response = await api.post(`/workflow/nda/${ndaId}/send`, request);
+    return response.data;
+  },
+  getNDAStatus: async (ndaId: string) => {
+    const response = await api.get(`/workflow/nda/${ndaId}/status`);
+    return response.data;
+  },
+  updateNDAStatus: async (ndaId: string, status: string) => {
+    const response = await api.post(`/workflow/nda/${ndaId}/update-status`, null, {
+      params: { status },
+    });
+    return response.data;
+  },
+  startWorkflow: async (ndaId: string, reviewerUserId?: string, approverUserId?: string, finalApproverUserId?: string) => {
+    const response = await api.post(`/workflow/nda/${ndaId}/start-workflow`, null, {
+      params: {
+        reviewer_user_id: reviewerUserId,
+        approver_user_id: approverUserId,
+        final_approver_user_id: finalApproverUserId,
+      },
+    });
+    return response.data;
+  },
+  getWorkflowTasks: async (workflowInstanceId: string): Promise<WorkflowTasks> => {
+    const response = await api.get<WorkflowTasks>(`/workflow/workflow/${workflowInstanceId}/tasks`);
+    return response.data;
+  },
+  completeTask: async (taskId: string, approved: boolean, comments?: string) => {
+    const response = await api.post(`/workflow/workflow/task/${taskId}/complete`, null, {
+      params: { approved, comments },
+    });
+    return response.data;
+  },
+  listWorkflows: async (status?: string) => {
+    const response = await api.get('/workflow/workflows', {
+      params: { status },
+    });
+    return response.data;
+  },
+  restartWorkflow: async (workflowInstanceId: string, reviewerUserId?: string, approverUserId?: string, finalApproverUserId?: string) => {
+    const response = await api.post(`/workflow/workflow/${workflowInstanceId}/restart`, null, {
+      params: {
+        reviewer_user_id: reviewerUserId,
+        approver_user_id: approverUserId,
+        final_approver_user_id: finalApproverUserId,
+      },
+    });
+    return response.data;
+  },
+  deleteWorkflow: async (workflowInstanceId: string) => {
+    const response = await api.delete(`/workflow/workflow/${workflowInstanceId}`);
+    return response.data;
+  },
+  getWorkflowDetails: async (workflowInstanceId: string) => {
+    const response = await api.get(`/workflow/workflow/${workflowInstanceId}/details`);
+    return response.data;
+  },
+  deleteNDA: async (ndaId: string) => {
+    const response = await api.delete(`/workflow/nda/${ndaId}`);
+    return response.data;
+  },
+  overrideWorkflow: async (workflowInstanceId: string, action: 'approve' | 'reject' | 'retry', reason?: string) => {
+    const response = await api.post(`/workflow/workflow/${workflowInstanceId}/override`, null, {
+      params: { action, reason },
+    });
+    return response.data;
+  },
+  updateWorkflow: async (workflowInstanceId: string, reviewerUserId?: string, approverUserId?: string, internalSignerUserId?: string) => {
+    const response = await api.put(`/workflow/workflow/${workflowInstanceId}`, null, {
+      params: {
+        reviewer_user_id: reviewerUserId,
+        approver_user_id: approverUserId,
+        internal_signer_user_id: internalSignerUserId,
+      },
+    });
+    return response.data;
+  },
+  getUsers: async () => {
+    const response = await api.get('/workflow/users');
+    return response.data;
+  },
+};
+
 export const competencyAPI = {
   createQuestion: async (questionText: string, categoryId?: string, expectedAnswer?: string, confidenceThreshold?: number) => {
     const response = await api.post('/competency/questions', {

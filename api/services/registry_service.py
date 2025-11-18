@@ -51,6 +51,8 @@ class RegistryService:
         file_uri: str,
         file_bytes: bytes,
         extracted_text: Optional[str],
+        template_id: Optional[str] = None,
+        template_version: Optional[int] = None,
         tags: Optional[Dict[str, Any]] = None,
         facts: Optional[Dict[str, Any]] = None,
     ) -> NDARecord:
@@ -114,6 +116,15 @@ class RegistryService:
             record.extracted_text = extracted_text
             record.tags = tags or {}
             record.facts_json = _serialize_for_json(facts) if facts else None
+            
+            # Set template tracking if provided
+            if template_id:
+                try:
+                    template_uuid = UUID(str(template_id))
+                    record.template_id = template_uuid
+                    record.template_version = template_version
+                except ValueError:
+                    logger.warning(f"Invalid template_id: {template_id}")
 
             session.add(record)
             session.flush()

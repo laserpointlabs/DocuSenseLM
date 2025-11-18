@@ -1,6 +1,7 @@
 """
 FastAPI main application
 """
+import os
 import logging
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.routers import (
-    search, answer, upload, documents, admin, health, competency, registry, auth
+    search, answer, upload, documents, admin, health, competency, registry, auth, templates, workflow
 )
 from api.services.bootstrap import configure_services_from_env
 from contextlib import asynccontextmanager
@@ -176,10 +177,44 @@ async def lifespan(app: FastAPI):
     # Check and optionally reindex if indexes are empty
     check_and_reindex_if_needed()
     
+    # Start email poller if enabled
+    email_poller_enabled = os.getenv("EMAIL_POLLER_ENABLED", "true").lower() == "true"
+    if email_poller_enabled:
+        try:
+            from api.workers.email_poller import start_email_poller
+            start_email_poller()
+            logger.info("Email poller started")
+        except Exception as e:
+            logger.warning(f"Failed to start email poller: {e}")
+    
+    # Start Camunda worker if enabled
+    camunda_worker_enabled = os.getenv("CAMUNDA_WORKER_ENABLED", "true").lower() == "true"
+    if camunda_worker_enabled:
+        try:
+            from api.workers.camunda_worker import start_camunda_worker
+            start_camunda_worker()
+            logger.info("Camunda worker started")
+        except Exception as e:
+            logger.warning(f"Failed to start Camunda worker: {e}")
+    
     yield
     
     # Shutdown (if needed)
     logger.info("NDA Dashboard API shutting down...")
+    
+    # Stop email poller
+    try:
+        from api.workers.email_poller import stop_email_poller
+        stop_email_poller()
+    except Exception:
+        pass
+    
+    # Stop Camunda worker
+    try:
+        from api.workers.camunda_worker import stop_camunda_worker
+        stop_camunda_worker()
+    except Exception:
+        pass
 
 app = FastAPI(
     title="NDA Dashboard API",
@@ -239,6 +274,8 @@ app.include_router(documents.router)
 app.include_router(admin.router)
 app.include_router(competency.router)
 app.include_router(registry.router)
+app.include_router(templates.router)
+app.include_router(workflow.router)
 
 @app.get("/")
 async def root():

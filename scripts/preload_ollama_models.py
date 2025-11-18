@@ -13,9 +13,79 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def check_model_exists(endpoint: str, model: str) -> bool:
+    """
+    Check if a model already exists locally in Ollama.
+    
+    Args:
+        endpoint: Ollama API endpoint
+        model: Model name to check
+        
+    Returns:
+        True if model exists, False otherwise
+    """
+    try:
+        client = httpx.Client(timeout=10.0)
+        response = client.get(f"{endpoint}/api/tags")
+        client.close()
+        
+        if response.status_code == 200:
+            data = response.json()
+            models = data.get("models", [])
+            for m in models:
+                if m.get("name") == model:
+                    return True
+        return False
+    except Exception as e:
+        print(f"⚠️  Error checking if model exists: {e}")
+        return False
+
+
+def pull_model_if_needed(endpoint: str, model: str) -> bool:
+    """
+    Pull a model if it doesn't exist locally.
+    
+    Args:
+        endpoint: Ollama API endpoint
+        model: Model name to pull
+        
+    Returns:
+        True if model exists or was pulled successfully, False otherwise
+    """
+    # Check if model already exists
+    if check_model_exists(endpoint, model):
+        print(f"✅ Model {model} already exists locally, skipping pull")
+        return True
+    
+    # Model doesn't exist, pull it
+    print(f"📥 Pulling model: {model} (this may take a while for large models)...")
+    try:
+        client = httpx.Client(timeout=600.0)  # 10 minute timeout for pulling large models
+        
+        response = client.post(
+            f"{endpoint}/api/pull",
+            json={"name": model},
+            timeout=600.0
+        )
+        client.close()
+        
+        if response.status_code == 200:
+            print(f"✅ Model {model} pulled successfully")
+            return True
+        else:
+            print(f"⚠️  Failed to pull {model}: HTTP {response.status_code}")
+            print(f"   Response: {response.text[:200]}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error pulling {model}: {e}")
+        return False
+
+
 def preload_model(endpoint: str, model: str, keep_alive: str = "24h") -> bool:
     """
     Preload a model by sending a small request with keep_alive.
+    First checks if model exists, pulls if needed, then preloads.
     
     Args:
         endpoint: Ollama API endpoint
@@ -25,6 +95,10 @@ def preload_model(endpoint: str, model: str, keep_alive: str = "24h") -> bool:
     Returns:
         True if successful, False otherwise
     """
+    # Ensure model exists (pull if needed)
+    if not pull_model_if_needed(endpoint, model):
+        return False
+    
     try:
         client = httpx.Client(timeout=300.0)  # 5 minute timeout for large models
         

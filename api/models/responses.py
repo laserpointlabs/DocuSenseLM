@@ -104,6 +104,7 @@ class NDARecordSummary(BaseModel):
     survival_months: Optional[int]
     tags: Dict[str, Any] = Field(default_factory=dict)
     file_uri: str
+    workflow_instance_id: Optional[str] = None  # Workflow instance ID if workflow is started
 
 
 class NDARegistryResponse(BaseModel):
@@ -129,6 +130,34 @@ class ActiveNDAResponse(BaseModel):
     as_of: date
     active: bool
     matches: List[ActiveNDAMatch]
+
+
+class TemplateResponse(BaseModel):
+    """Template response"""
+    id: str
+    name: str
+    description: Optional[str]
+    file_path: str
+    is_active: bool
+    created_by: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    version: Optional[int] = 1
+    template_key: Optional[str] = None
+    is_current: Optional[bool] = True
+    change_notes: Optional[str] = None
+
+
+class TemplateListResponse(BaseModel):
+    """List of templates"""
+    templates: List[TemplateResponse]
+    total: int
+
+
+class TemplateRenderResponse(BaseModel):
+    """Template render response"""
+    file_data: str  # Base64 encoded DOCX file
+    filename: str
 
 
 class NDAEventResponse(BaseModel):

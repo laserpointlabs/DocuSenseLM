@@ -133,51 +133,92 @@ cmd_restart() {
     echo ""
     
     # Stop services
-    echo -e "${YELLOW}[1/6] Stopping services...${NC}"
+    echo -e "${YELLOW}[1/7] Stopping services...${NC}"
     $COMPOSE_CMD down
     
     # Clean volumes if requested
     if [ "$CLEAN" = true ]; then
-        echo -e "${YELLOW}[2/6] Cleaning volumes (this will remove all data)...${NC}"
+        echo -e "${YELLOW}[2/7] Cleaning volumes (this will remove all data)...${NC}"
         $COMPOSE_CMD down -v
     else
-        echo -e "${GREEN}[2/6] Keeping volumes (data preserved)${NC}"
+        echo -e "${GREEN}[2/7] Keeping volumes (data preserved)${NC}"
     fi
     
     # Build images if requested
     if [ "$BUILD" = true ]; then
-        echo -e "${YELLOW}[3/6] Building Docker images...${NC}"
+        echo -e "${YELLOW}[3/7] Building Docker images...${NC}"
         $COMPOSE_CMD build --parallel
     else
-        echo -e "${GREEN}[3/6] Skipping image build${NC}"
+        echo -e "${GREEN}[3/7] Skipping image build${NC}"
     fi
     
-    # Start services
-    echo -e "${YELLOW}[4/6] Starting services...${NC}"
-    $COMPOSE_CMD up -d
+    # Start ALL infrastructure services (everything except API and UI)
+    # This includes: postgres, opensearch, qdrant, minio, ollama, camunda, mailhog
+    # These can start in parallel while we initialize the database
+    # Note: model_preloader will start automatically when ollama is healthy
+    echo -e "${YELLOW}[4/7] Starting infrastructure services (postgres, opensearch, qdrant, minio, ollama, camunda, mailhog)...${NC}"
+    $COMPOSE_CMD up -d postgres opensearch qdrant minio ollama camunda mailhog
     
-    # Wait for database
+    # Wait for database to be ready (critical for DB initialization)
+    echo -e "${YELLOW}Waiting for database to be ready...${NC}"
     wait_for_db
     
-    # Initialize database
-    echo -e "${YELLOW}[5/6] Initializing database schema...${NC}"
-    $COMPOSE_CMD exec -T api python -m api.db.migrations.001_init_schema || {
+    # Initialize database BEFORE starting API (using run to avoid starting API service)
+    echo -e "${YELLOW}[5/7] Initializing database schema...${NC}"
+    $COMPOSE_CMD run --rm api python -m api.db.migrations.001_init_schema || {
         echo -e "${RED}Failed to initialize database${NC}"
         exit 1
     }
     
+    # Create default users (using run to avoid starting API service)
+    echo -e "${YELLOW}[6/7] Creating default users...${NC}"
+    $COMPOSE_CMD run --rm api python scripts/create_users.py || {
+        echo -e "${YELLOW}Warning: Failed to create default users (this is OK if users already exist)${NC}"
+    }
+    
+    # Deploy BPMN workflows to Camunda
+    echo -e "${YELLOW}Deploying BPMN workflows to Camunda...${NC}"
+    # Wait for Camunda to be ready (check from API container)
+    for i in {1..30}; do
+        if $COMPOSE_CMD run --rm api python -c "import requests; requests.get('http://camunda:8080/engine-rest/version', timeout=2)" > /dev/null 2>&1; then
+            echo -e "${GREEN}Camunda is ready${NC}"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo -e "${YELLOW}Warning: Camunda not ready after 30 attempts, skipping BPMN deployment${NC}"
+            break
+        fi
+        sleep 2
+    done
+    
+    # Deploy BPMN files if Camunda is ready
+    $COMPOSE_CMD run --rm api python scripts/deploy_bpmn.py || {
+        echo -e "${YELLOW}Warning: Failed to deploy BPMN workflows${NC}"
+    }
+    
+    # Now start API and UI (which depend on everything being ready)
+    echo -e "${YELLOW}Starting API and UI services...${NC}"
+    $COMPOSE_CMD up -d api ui ingest cloudflared
+    
+    # Give services a moment to start
+    echo -e "${YELLOW}Waiting for services to be ready...${NC}"
+    sleep 3
+    
     # Seed data if requested
     if [ "$SEED" = true ]; then
-        echo -e "${YELLOW}[6/6] Seeding sample documents...${NC}"
+        echo -e "${YELLOW}[7/7] Seeding sample documents...${NC}"
         $COMPOSE_CMD exec -T api python scripts/seed_data.py || {
             echo -e "${YELLOW}Warning: Failed to seed data (this is OK if documents already exist)${NC}"
         }
     else
-        echo -e "${GREEN}[6/6] Skipping data seeding${NC}"
+        echo -e "${GREEN}[7/7] Skipping data seeding${NC}"
     fi
     
     echo ""
     echo -e "${GREEN}=== Restart Complete! ===${NC}"
+    echo ""
+    echo -e "${BLUE}Service Status:${NC}"
+    $COMPOSE_CMD ps
     echo ""
     show_info
 }

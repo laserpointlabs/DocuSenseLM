@@ -134,7 +134,7 @@ To host this application from home and make it accessible from the internet:
 
 ## Configuration
 
-Key environment variables (see `.env.example`):
+Key environment variables (see [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) for complete reference):
 
 ```bash
 # LLM Configuration
@@ -148,11 +148,24 @@ EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2  # 768-dim
 # OCR Configuration
 USE_TEXTRACT=false                  # true for AWS Textract, false for Tesseract
 
+# Email Configuration (see docs/ENVIRONMENT_VARIABLES.md for all options)
+EMAIL_SMTP_HOST=mailhog            # SMTP server (mailhog for local dev)
+EMAIL_SMTP_PORT=1025               # SMTP port
+EMAIL_FROM_ADDRESS=nda-system@example.com
+EMAIL_POLLER_ENABLED=true          # Enable email polling worker
+EMAIL_POLL_INTERVAL=60             # Poll interval in seconds
+
+# Workflow Configuration
+CAMUNDA_URL=http://camunda:8080   # Camunda BPMN engine URL
+WORKFLOW_LLM_REVIEW_ENABLED=true  # Enable LLM review of NDAs
+
 # Cloudflare Tunnel (optional)
 CLOUDFLARE_TUNNEL_TOKEN=            # Tunnel token from Cloudflare Dashboard
 CLOUDFLARE_DOMAIN_UI=ui.yourdomain.com
 CLOUDFLARE_DOMAIN_API=api.yourdomain.com
 ```
+
+For complete environment variable documentation, see [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md).
 
 ## Usage
 

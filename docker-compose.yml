@@ -128,6 +128,30 @@ services:
       - LLM_EXTRACTION_MODEL=${LLM_EXTRACTION_MODEL}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - USE_TEXTRACT=${USE_TEXTRACT:-false}
+      # Email Configuration
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-mailhog}
+      - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-1025}
+      - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
+      - EMAIL_SMTP_PASSWORD=${EMAIL_SMTP_PASSWORD:-}
+      - EMAIL_SMTP_USE_TLS=${EMAIL_SMTP_USE_TLS:-false}
+      - EMAIL_IMAP_HOST=${EMAIL_IMAP_HOST:-}
+      - EMAIL_IMAP_PORT=${EMAIL_IMAP_PORT:-993}
+      - EMAIL_IMAP_USER=${EMAIL_IMAP_USER:-}
+      - EMAIL_IMAP_PASSWORD=${EMAIL_IMAP_PASSWORD:-}
+      - EMAIL_IMAP_USE_SSL=${EMAIL_IMAP_USE_SSL:-true}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-nda-system@example.com}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-NDA Management System}
+      - EMAIL_POLLER_ENABLED=${EMAIL_POLLER_ENABLED:-true}
+      - EMAIL_POLL_INTERVAL=${EMAIL_POLL_INTERVAL:-60}
+      - EMAIL_ENCRYPTION_KEY=${EMAIL_ENCRYPTION_KEY:-}
+      # Workflow Configuration
+      - CAMUNDA_URL=${CAMUNDA_URL:-http://camunda:8080}
+      - CAMUNDA_USERNAME=${CAMUNDA_USERNAME:-demo}
+      - CAMUNDA_PASSWORD=${CAMUNDA_PASSWORD:-demo}
+      - WORKFLOW_LLM_REVIEW_ENABLED=${WORKFLOW_LLM_REVIEW_ENABLED:-true}
+      - WORKFLOW_LLM_APPROVAL_THRESHOLD=${WORKFLOW_LLM_APPROVAL_THRESHOLD:-0.7}
+      - CAMUNDA_WORKER_ENABLED=${CAMUNDA_WORKER_ENABLED:-true}
+      - CAMUNDA_WORKER_POLL_INTERVAL=${CAMUNDA_WORKER_POLL_INTERVAL:-5}
     ports:
       - "8000:8000"
     depends_on:
@@ -140,9 +164,8 @@ services:
       minio:
         condition: service_healthy
       ollama:
-        condition: service_healthy
-      model_preloader:
-        condition: service_completed_successfully
+        condition: service_started  # Don't wait for health - start in background
+      # model_preloader: removed - don't block API startup on model preloading
     volumes:
       - ./api:/app/api
       - ./ingest:/app/ingest
@@ -153,6 +176,7 @@ services:
       - ./.cache/huggingface:/root/.cache/huggingface
       - ./data:/app/data:ro
       - ./docs:/app/docs:ro
+      - ./camunda:/app/camunda:ro  # BPMN files for deployment
 
   ingest:
     build:
@@ -231,6 +255,36 @@ services:
       - ./api:/app/api
       - ./llm:/app/llm
     restart: "no"  # Only run once at startup
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: nda-mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    restart: unless-stopped
+    networks:
+      - default
+
+  camunda:
+    image: camunda/camunda-bpm-platform:7.20.0
+    container_name: nda-camunda
+    environment:
+      - DB_DRIVER=org.postgresql.Driver
+      - DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-nda_db}
+      - DB_USERNAME=${POSTGRES_USER:-nda_user}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-nda_password}
+      - WAIT_FOR=postgres:5432
+    ports:
+      - "8080:8080"  # Camunda REST API and Web UI
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - default
+    volumes:
+      - ./camunda/bpmn:/camunda/webapps/engine-rest/WEB-INF/classes/bpmn  # BPMN workflow definitions
 
   cloudflared:
     image: cloudflare/cloudflared:latest

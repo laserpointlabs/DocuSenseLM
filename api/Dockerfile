@@ -15,6 +15,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     tesseract-ocr \
     poppler-utils \
     curl \
+    libreoffice \
+    libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements.txt

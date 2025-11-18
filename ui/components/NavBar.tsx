@@ -37,6 +37,14 @@ export default function NavBar() {
                   Dashboard
                 </a>
                 <a
+                  href="/workflow"
+                  className={`border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    pathname === '/workflow' ? 'border-primary-500 text-gray-900' : ''
+                  }`}
+                >
+                  Workflow
+                </a>
+                <a
                   href="/search"
                   className={`border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                     pathname === '/search' ? 'border-primary-500 text-gray-900' : ''

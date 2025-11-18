@@ -65,6 +65,7 @@ SEARCH_SERVICE = "search_backend"
 LLM_SERVICE = "llm_client"
 BM25_INDEXER = "bm25_indexer"
 VECTOR_INDEXER = "vector_indexer"
+EMAIL_SERVICE = "email_service"
 
 
 def register_storage_service(factory: Callable[[], Any]) -> None:
@@ -73,6 +74,14 @@ def register_storage_service(factory: Callable[[], Any]) -> None:
 
 def get_storage_service() -> Any:
     return get_service(STORAGE_SERVICE)
+
+
+def register_email_service(factory: Callable[[], Any]) -> None:
+    register_service(EMAIL_SERVICE, factory)
+
+
+def get_email_service() -> Any:
+    return get_service(EMAIL_SERVICE)
 
 
 def override_storage_service(instance: Any) -> None:

@@ -37,6 +37,7 @@ def _to_summary(record) -> NDARecordSummary:
         survival_months=record.survival_months,
         tags=record.tags or {},
         file_uri=record.file_uri,
+        workflow_instance_id=str(record.workflow_instance_id) if record.workflow_instance_id else None,
     )
 
 
