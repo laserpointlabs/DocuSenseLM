@@ -63,3 +63,11 @@ print(f"\nTotal time: {duration:.2f} seconds")
 
 
 
+
+
+
+
+
+
+
+
