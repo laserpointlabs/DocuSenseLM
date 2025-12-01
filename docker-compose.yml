@@ -1,31 +1,31 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: nda-ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH}
-      - OLLAMA_NUM_PARALLEL=1
-      - OLLAMA_NUM_THREAD=1
-      - OLLAMA_KEEP_ALIVE=5m
-      - CUDA_VISIBLE_DEVICES=0
-      - NVIDIA_VISIBLE_DEVICES=0
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:11434/api/version"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: nda-ollama
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #     - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH}
+  #     - OLLAMA_NUM_PARALLEL=1
+  #     - OLLAMA_NUM_THREAD=1
+  #     - OLLAMA_KEEP_ALIVE=5m
+  #     - CUDA_VISIBLE_DEVICES=0
+  #     - NVIDIA_VISIBLE_DEVICES=0
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             device_ids: ['0']
+  #             capabilities: [gpu]
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://127.0.0.1:11434/api/version"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
 
   postgres:
     image: postgres:15-alpine
@@ -139,8 +139,8 @@ services:
         condition: service_started
       minio:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
+      # ollama:
+      #   condition: service_healthy
       model_preloader:
         condition: service_completed_successfully
     volumes:
@@ -224,8 +224,8 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
     command: python3 /app/scripts/preload_ollama_models.py
     depends_on:
-      ollama:
-        condition: service_healthy
+      # ollama:
+      #   condition: service_healthy
     volumes:
       - ./scripts:/app/scripts
       - ./api:/app/api
@@ -253,7 +253,7 @@ services:
     #   - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
 
 volumes:
-  ollama_data:
+  # ollama_data:
   postgres_data:
   opensearch_data:
   qdrant_data:
@@ -266,7 +266,7 @@ volumes:
 # - minio_data: Object storage (uploaded files)
 # - opensearch_data: Search indices
 # - qdrant_data: Vector embeddings
-# - ollama_data: LLM models
+# - ollama_data: LLM models (currently disabled)
 #
 # Data persists across container restarts.
 # To preserve data, use: docker compose restart
