@@ -6,7 +6,9 @@ import AdminPanel from '@/components/AdminPanel';
 import TemplateManagement from '@/components/TemplateManagement';
 import Link from 'next/link';
 
-export default function AdminPage() {
+import ProtectedRoute from '@/components/ProtectedRoute';
+
+function AdminContent() {
   const [activeTab, setActiveTab] = useState<'documents' | 'templates'>('documents');
 
   return (
@@ -62,5 +64,13 @@ export default function AdminPage() {
       {activeTab === 'documents' && <AdminPanel />}
       {activeTab === 'templates' && <TemplateManagement />}
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <AdminContent />
+    </ProtectedRoute>
   );
 }

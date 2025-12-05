@@ -6,7 +6,7 @@ from api.models.responses import StatsResponse
 from api.services.db_service import db_service
 from api.db import get_db_session
 from api.db.schema import User
-from api.middleware.auth import get_current_user
+from api.middleware.auth import get_current_user, get_current_admin_user
 from ingest.indexer_opensearch import opensearch_indexer
 from ingest.indexer_qdrant import qdrant_indexer
 from datetime import datetime
@@ -26,7 +26,7 @@ _progress_lock = threading.Lock()
 
 
 @router.get("/reindex/progress")
-async def get_reindex_progress(current_user: User = Depends(get_current_user)):
+async def get_reindex_progress(current_user: User = Depends(get_current_admin_user)):
     """Get current reindexing progress"""
     import logging
     logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ async def get_reindex_progress(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats(current_user: User = Depends(get_current_user)):
+async def get_stats(current_user: User = Depends(get_current_admin_user)):
     """
     Get system statistics
     """
@@ -326,7 +326,7 @@ def _do_reindex_all():
 
 
 @router.post("/reindex/all")
-async def reindex_all(background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
+async def reindex_all(background_tasks: BackgroundTasks, current_user: User = Depends(get_current_admin_user)):
     """
     Start re-indexing all processed documents in the background
     """
@@ -367,7 +367,7 @@ async def reindex_all(background_tasks: BackgroundTasks, current_user: User = De
 
 
 @router.post("/reindex/{document_id}")
-async def reindex_document(document_id: str, current_user: User = Depends(get_current_user)):
+async def reindex_document(document_id: str, current_user: User = Depends(get_current_admin_user)):
     """
     Re-index a document by re-running ingestion
     """

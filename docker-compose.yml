@@ -136,6 +136,8 @@ services:
       - LLM_EXTRACTION_MODEL=${LLM_EXTRACTION_MODEL}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - USE_TEXTRACT=${USE_TEXTRACT:-false}
+      - CAMUNDA_WORKER_ENABLED=false
+      - EMAIL_POLLER_ENABLED=false
     ports:
       - "8000:8000"
     depends_on:
