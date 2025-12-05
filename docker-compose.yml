@@ -30,6 +30,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: nda-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-nda_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nda_password}
@@ -42,11 +43,13 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nda_user}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   opensearch:
     image: opensearchproject/opensearch:2.11.0
     container_name: nda-opensearch
+    restart: unless-stopped
     environment:
       - discovery.type=single-node
       - plugins.security.disabled=true
@@ -62,11 +65,13 @@ services:
         ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   qdrant:
     image: qdrant/qdrant:v1.7.0
     container_name: nda-qdrant
+    restart: unless-stopped
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -86,6 +91,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: nda-minio
+    restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
@@ -99,13 +105,15 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   api:
     build:
       context: .
       dockerfile: api/Dockerfile
     container_name: nda-api
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -119,7 +127,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-mpnet-base-v2}
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama_local}
-      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://ollama:11434}
+      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL}
       - OLLAMA_CONVERSATION_MODEL=${OLLAMA_CONVERSATION_MODEL:-}
       - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH}
@@ -128,30 +136,6 @@ services:
       - LLM_EXTRACTION_MODEL=${LLM_EXTRACTION_MODEL}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - USE_TEXTRACT=${USE_TEXTRACT:-false}
-      # Email Configuration
-      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-mailhog}
-      - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-1025}
-      - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
-      - EMAIL_SMTP_PASSWORD=${EMAIL_SMTP_PASSWORD:-}
-      - EMAIL_SMTP_USE_TLS=${EMAIL_SMTP_USE_TLS:-false}
-      - EMAIL_IMAP_HOST=${EMAIL_IMAP_HOST:-}
-      - EMAIL_IMAP_PORT=${EMAIL_IMAP_PORT:-993}
-      - EMAIL_IMAP_USER=${EMAIL_IMAP_USER:-}
-      - EMAIL_IMAP_PASSWORD=${EMAIL_IMAP_PASSWORD:-}
-      - EMAIL_IMAP_USE_SSL=${EMAIL_IMAP_USE_SSL:-true}
-      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-nda-system@example.com}
-      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-NDA Management System}
-      - EMAIL_POLLER_ENABLED=${EMAIL_POLLER_ENABLED:-true}
-      - EMAIL_POLL_INTERVAL=${EMAIL_POLL_INTERVAL:-60}
-      - EMAIL_ENCRYPTION_KEY=${EMAIL_ENCRYPTION_KEY:-}
-      # Workflow Configuration
-      - CAMUNDA_URL=${CAMUNDA_URL:-http://camunda:8080}
-      - CAMUNDA_USERNAME=${CAMUNDA_USERNAME:-demo}
-      - CAMUNDA_PASSWORD=${CAMUNDA_PASSWORD:-demo}
-      - WORKFLOW_LLM_REVIEW_ENABLED=${WORKFLOW_LLM_REVIEW_ENABLED:-true}
-      - WORKFLOW_LLM_APPROVAL_THRESHOLD=${WORKFLOW_LLM_APPROVAL_THRESHOLD:-0.7}
-      - CAMUNDA_WORKER_ENABLED=${CAMUNDA_WORKER_ENABLED:-true}
-      - CAMUNDA_WORKER_POLL_INTERVAL=${CAMUNDA_WORKER_POLL_INTERVAL:-5}
     ports:
       - "8000:8000"
     depends_on:
@@ -160,12 +144,13 @@ services:
       opensearch:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       # ollama:
-      #   condition: service_started  # Don't wait for health - start in background
-      # model_preloader: removed - don't block API startup on model preloading
+      #   condition: service_healthy
+      # model_preloader:
+      #   condition: service_completed_successfully
     volumes:
       - ./api:/app/api
       - ./ingest:/app/ingest
@@ -176,13 +161,13 @@ services:
       - ./.cache/huggingface:/root/.cache/huggingface
       - ./data:/app/data:ro
       - ./docs:/app/docs:ro
-      - ./camunda:/app/camunda:ro  # BPMN files for deployment
 
   ingest:
     build:
       context: .
       dockerfile: ingest/Dockerfile
     container_name: nda-ingest
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -197,7 +182,7 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-mpnet-base-v2}
       - USE_TEXTRACT=${USE_TEXTRACT:-false}
       - ENABLE_LLM_REFINEMENT=${ENABLE_LLM_REFINEMENT:-false}
-      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://ollama:11434}
+      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://host.docker.internal:11434}
       - LLM_EXTRACTION_MODEL=${LLM_EXTRACTION_MODEL}
     depends_on:
       postgres:
@@ -222,6 +207,7 @@ services:
       context: ./ui
       dockerfile: Dockerfile
     container_name: nda-ui
+    restart: unless-stopped
     environment:
       # Use Cloudflare tunnel API domain if set, otherwise fallback to localhost
       # The UI code will prepend https:// if the domain doesn't start with http
@@ -236,55 +222,23 @@ services:
       - /app/.next
     command: npm run dev
 
-  model_preloader:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    container_name: nda-model-preloader
-    environment:
-      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://ollama:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-      - OLLAMA_CONVERSATION_MODEL=${OLLAMA_CONVERSATION_MODEL:-}
-      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
-    command: python3 /app/scripts/preload_ollama_models.py
-    depends_on:
-      # ollama:
-      #   condition: service_healthy
-    volumes:
-      - ./scripts:/app/scripts
-      - ./api:/app/api
-      - ./llm:/app/llm
-    restart: "no"  # Only run once at startup
-
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: nda-mailhog
-    ports:
-      - "1025:1025"  # SMTP server
-      - "8025:8025"  # Web UI
-    restart: unless-stopped
-    networks:
-      - default
-
-  camunda:
-    image: camunda/camunda-bpm-platform:7.20.0
-    container_name: nda-camunda
-    environment:
-      - DB_DRIVER=org.postgresql.Driver
-      - DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-nda_db}
-      - DB_USERNAME=${POSTGRES_USER:-nda_user}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-nda_password}
-      - WAIT_FOR=postgres:5432
-    ports:
-      - "8080:8080"  # Camunda REST API and Web UI
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - default
-    volumes:
-      - ./camunda/bpmn:/camunda/webapps/engine-rest/WEB-INF/classes/bpmn  # BPMN workflow definitions
+#  model_preloader:
+#    build:
+#      context: .
+#      dockerfile: api/Dockerfile
+#    container_name: nda-model-preloader
+#    network_mode: "host"
+#    environment:
+#      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://localhost:11434}
+#      - OLLAMA_MODEL=${OLLAMA_MODEL}
+#      - OLLAMA_CONVERSATION_MODEL=${OLLAMA_CONVERSATION_MODEL:-}
+#      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
+#    command: python3 /app/scripts/preload_ollama_models.py
+#    volumes:
+#      - ./scripts:/app/scripts
+#      - ./api:/app/api
+#      - ./llm:/app/llm
+#    restart: "no"  # Only run once at startup
 
   cloudflared:
     image: cloudflare/cloudflared:latest
