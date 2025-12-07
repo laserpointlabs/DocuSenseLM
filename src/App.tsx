@@ -914,10 +914,39 @@ function SettingsView() {
     const [selectedFile, setSelectedFile] = useState("config.yaml");
     const [isSaving, setIsSaving] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
+    const [apiKey, setApiKey] = useState("");
+    const [apiKeySet, setApiKeySet] = useState(false);
+    const [apiKeyMasked, setApiKeyMasked] = useState("");
+    const [savingApiKey, setSavingApiKey] = useState(false);
+    const [showApiKey, setShowApiKey] = useState(false);
 
+    // Fetch API key status on component mount and when selectedFile changes
     useEffect(() => {
         fetchFileContent(selectedFile);
     }, [selectedFile]);
+    
+    useEffect(() => {
+        fetchApiKeyStatus();
+    }, []); // Run once on mount
+    
+    const fetchApiKeyStatus = async () => {
+        try {
+            const res = await fetch(`http://localhost:${API_PORT}/config`);
+            const data = await res.json();
+            if (data.api) {
+                setApiKeySet(data.api.openai_api_key_set || false);
+                setApiKeyMasked(data.api.openai_api_key_masked || "");
+            } else {
+                // No api section in config
+                setApiKeySet(false);
+                setApiKeyMasked("");
+            }
+        } catch (err) {
+            console.error("Failed to fetch API key status:", err);
+            setApiKeySet(false);
+            setApiKeyMasked("");
+        }
+    };
 
     useEffect(() => {
         if (isEditorOpen && textareaRef.current) {
@@ -991,6 +1020,72 @@ function SettingsView() {
         window.open(`http://localhost:${API_PORT}/backup`, '_blank');
     };
 
+    const handleSaveApiKey = async () => {
+        if (!apiKey.trim()) {
+            alert("Please enter an API key");
+            return;
+        }
+        
+        // Warn if overwriting existing key
+        if (apiKeySet) {
+            const confirmOverwrite = confirm(
+                `You already have an API key configured (${apiKeyMasked}).\n\n` +
+                "Do you want to replace it with the new key?\n\n" +
+                "Click OK to replace, or Cancel to keep the existing key."
+            );
+            if (!confirmOverwrite) {
+                setApiKey("");
+                return;
+            }
+        }
+        
+        setSavingApiKey(true);
+        try {
+            // Get current config
+            const res = await fetch(`http://localhost:${API_PORT}/settings/file/config.yaml`);
+            const data = await res.json();
+            let content = data.content;
+            
+            // Update API key in YAML content
+            const lines = content.split('\n');
+            let updated = false;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim().startsWith('openai_api_key:')) {
+                    lines[i] = `  openai_api_key: "${apiKey.trim()}"`;
+                    updated = true;
+                    break;
+                }
+            }
+            
+            // If api section doesn't exist, add it at the top
+            if (!updated) {
+                const apiSection = `# API Configuration\napi:\n  openai_api_key: "${apiKey.trim()}"\n\n`;
+                content = apiSection + content;
+            } else {
+                content = lines.join('\n');
+            }
+            
+            // Save updated config
+            const saveRes = await fetch(`http://localhost:${API_PORT}/settings/file/config.yaml`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content })
+            });
+            
+            if (!saveRes.ok) throw new Error("Failed to save");
+            
+            alert("API key saved successfully! The application will now use this key for OpenAI features.");
+            setApiKey("");
+            setShowApiKey(false);
+            fetchApiKeyStatus();
+        } catch (err) {
+            console.error("Failed to save API key:", err);
+            alert("Failed to save API key. Please try again.");
+        } finally {
+            setSavingApiKey(false);
+        }
+    };
+    
     const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
         if (!confirm("WARNING: This will overwrite all current data with the backup. Continue?")) return;
@@ -1016,6 +1111,118 @@ function SettingsView() {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold">Settings & Data Management</h2>
+            
+            {/* API Key Section */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Settings className="text-blue-600" /> OpenAI API Key
+                </h3>
+                
+                {apiKeySet ? (
+                    <>
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                                <Check className="text-green-600 mt-0.5" size={20} />
+                                <div className="flex-1">
+                                    <p className="text-green-800 font-medium mb-1">
+                                        API key is configured and active
+                                    </p>
+                                    <p className="text-green-700 text-sm">
+                                        Current key: <code className="bg-green-100 px-2 py-0.5 rounded">{apiKeyMasked}</code>
+                                    </p>
+                                    <p className="text-green-600 text-xs mt-2">
+                                        Your API key is stored securely in your local config file. All OpenAI features are enabled.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <details className="mb-4">
+                            <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 select-none">
+                                Change or update API key
+                            </summary>
+                            <div className="mt-3 space-y-3 pl-4 border-l-2 border-gray-200">
+                                <p className="text-sm text-gray-600">
+                                    Enter a new API key below to replace the current one.
+                                </p>
+                                <div className="flex gap-3">
+                                    <input
+                                        type={showApiKey ? "text" : "password"}
+                                        value={apiKey}
+                                        onChange={(e) => setApiKey(e.target.value)}
+                                        placeholder="Enter new API key (sk-...)"
+                                        className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <button
+                                        onClick={() => setShowApiKey(!showApiKey)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                        title={showApiKey ? "Hide API key" : "Show API key"}
+                                    >
+                                        <Eye size={18} />
+                                    </button>
+                                    <button
+                                        onClick={handleSaveApiKey}
+                                        disabled={savingApiKey || !apiKey.trim()}
+                                        className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {savingApiKey ? "Updating..." : "Update Key"}
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
+                    </>
+                ) : (
+                    <>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="text-yellow-600 mt-0.5" size={20} />
+                                <div>
+                                    <p className="text-yellow-800 font-medium mb-1">
+                                        No API key configured
+                                    </p>
+                                    <p className="text-yellow-700 text-sm">
+                                        Add your OpenAI API key to enable document processing and chat features.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <p className="text-gray-600 mb-4 text-sm">
+                            Enter your OpenAI API key below. It will be stored securely in your local configuration file.
+                        </p>
+                        
+                        <div className="space-y-3">
+                            <div className="flex gap-3">
+                                <input
+                                    type={showApiKey ? "text" : "password"}
+                                    value={apiKey}
+                                    onChange={(e) => setApiKey(e.target.value)}
+                                    placeholder="sk-..."
+                                    className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                    onClick={() => setShowApiKey(!showApiKey)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    title={showApiKey ? "Hide API key" : "Show API key"}
+                                >
+                                    <Eye size={18} />
+                                </button>
+                                <button
+                                    onClick={handleSaveApiKey}
+                                    disabled={savingApiKey || !apiKey.trim()}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {savingApiKey ? "Saving..." : "Save API Key"}
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                                Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenAI Platform</a>. 
+                                Your key is stored securely in your local configuration file.
+                            </p>
+                        </div>
+                    </>
+                )}
+            </div>
             
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
                 <button 

@@ -8,6 +8,7 @@ import shutil
 import datetime
 import pickletools
 import diskcache
+import webbrowser  # Ensure stdlib module is loaded for PyInstaller
 from typing import List, Dict, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -101,19 +102,66 @@ if not os.path.exists(os.path.join(USER_DATA_DIR, "config.yaml")):
 if not os.path.exists(os.path.join(USER_DATA_DIR, "prompts.yaml")):
     shutil.copy(os.path.join(BASE_DIR, "prompts.default.yaml"), os.path.join(USER_DATA_DIR, "prompts.yaml"))
 
-# Initialize OpenAI
-openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# Function to get API key from config or environment
+def get_api_key():
+    # Priority 1: Environment variable
+    env_key = os.environ.get("OPENAI_API_KEY")
+    if env_key:
+        return env_key
+    
+    # Priority 2: Config file
+    if config and "api" in config and "openai_api_key" in config["api"]:
+        config_key = config["api"]["openai_api_key"]
+        if config_key and config_key.strip():
+            return config_key.strip()
+    
+    return None
 
-# Initialize ChromaDB
+# Function to initialize or reinitialize OpenAI client
+def initialize_openai_client():
+    global openai_client, openai_ef, collection
+    
+    api_key = get_api_key()
+    
+    if not api_key:
+        logger.warning("No OpenAI API key found in environment or config")
+        openai_client = None
+        openai_ef = None
+        collection = None
+        return False
+    
+    try:
+        # Initialize OpenAI client
+        openai_client = OpenAI(api_key=api_key)
+        logger.info("OpenAI client initialized successfully")
+        
+        # Initialize ChromaDB with OpenAI embeddings
+        openai_ef = embedding_functions.OpenAIEmbeddingFunction(
+            api_key=api_key,
+            model_name="text-embedding-3-small"
+        )
+        collection = chroma_client.get_or_create_collection(
+            name="nda_documents",
+            embedding_function=openai_ef
+        )
+        logger.info("ChromaDB collection initialized with OpenAI embeddings")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
+        openai_client = None
+        openai_ef = None
+        collection = None
+        return False
+
+# Initialize ChromaDB (without embeddings initially)
 chroma_client = chromadb.PersistentClient(path=DB_DIR)
-openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=os.environ.get("OPENAI_API_KEY"),
-    model_name="text-embedding-3-small"
-)
-collection = chroma_client.get_or_create_collection(
-    name="nda_documents",
-    embedding_function=openai_ef
-)
+openai_client = None
+openai_ef = None
+collection = None
+
+# Try to initialize OpenAI
+initialize_openai_client()
 
 # Initialize FastAPI
 app = FastAPI(title=f"{APP_NAME} API")
@@ -251,7 +299,34 @@ def health_check():
 
 @app.get("/config")
 def get_config():
-    return config
+    # Reload config to ensure we have latest (in case it was changed)
+    global config
+    config = load_app_config()
+    
+    # Return config but mask the API key for security
+    safe_config = dict(config)
+    
+    # Ensure api section exists
+    if "api" not in safe_config:
+        safe_config["api"] = {}
+    
+    # Get the actual API key being used (from config or environment)
+    actual_key = get_api_key()
+    
+    # Handle API key masking
+    if actual_key and len(actual_key) > 8:
+        # Show first 4 and last 4 characters
+        safe_config["api"]["openai_api_key_masked"] = f"{actual_key[:4]}...{actual_key[-4:]}"
+        safe_config["api"]["openai_api_key_set"] = True
+    else:
+        safe_config["api"]["openai_api_key_masked"] = ""
+        safe_config["api"]["openai_api_key_set"] = False
+    
+    # Remove the actual key from the response if it exists
+    if "openai_api_key" in safe_config["api"]:
+        del safe_config["api"]["openai_api_key"]
+    
+    return safe_config
 
 @app.get("/documents")
 def list_documents():
@@ -318,8 +393,12 @@ async def save_config_file(filename: str, request: Dict[str, str]):
         
     # Reload configs in-memory
     global config, prompts_config
-    config = load_app_config()
-    prompts_config = load_prompts_config()
+    if filename == "config.yaml":
+        config = load_app_config()
+        # Reinitialize OpenAI client with potentially new API key
+        initialize_openai_client()
+    elif filename == "prompts.yaml":
+        prompts_config = load_prompts_config()
     
     return {"status": "saved"}
 
