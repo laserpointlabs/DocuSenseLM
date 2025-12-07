@@ -11,30 +11,32 @@
     "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\""
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "clsx": "^2.1.0",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.344.0",
-    "clsx": "^2.1.0",
+    "pdfjs-dist": "^5.4.449",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-pdf": "^10.2.0",
     "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.24",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
-    "@types/node": "^20.11.24",
-    "@types/js-yaml": "^4.0.9",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^29.1.0",
     "electron-builder": "^24.13.3",
+    "electron-is-dev": "^3.0.1",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",
     "vite": "^5.1.4",
-    "wait-on": "^7.2.0",
-    "electron-is-dev": "^3.0.1"
+    "wait-on": "^7.2.0"
   },
   "build": {
     "appId": "com.ndatool.lite",
@@ -59,4 +61,3 @@
     }
   }
 }
-

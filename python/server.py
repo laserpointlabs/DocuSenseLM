@@ -32,6 +32,7 @@ METADATA_FILE = os.path.join(DOCUMENTS_DIR, "metadata.json")
 
 # Load .env
 load_dotenv(os.path.join(BASE_DIR, ".env"))
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 
 os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 
@@ -151,7 +152,7 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
         
         try:
             response = openai_client.chat.completions.create(
-                model="gpt-4o",
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a legal document assistant. Respond in JSON."},
                     {"role": "user", "content": prompt}
@@ -176,6 +177,9 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
 
 class ChatRequest(BaseModel):
     question: str
+
+class UpdateStatusRequest(BaseModel):
+    status: str
 
 # --- Endpoints ---
 
@@ -214,6 +218,7 @@ async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", b
         "doc_type": doc_type,
         "upload_date": datetime.datetime.now().isoformat(),
         "status": "pending",
+        "workflow_status": "in_review",
         "competency_answers": {}
     }
     save_metadata(metadata)
@@ -243,6 +248,86 @@ async def reprocess_document(filename: str, background_tasks: BackgroundTasks):
     
     return {"status": "reprocessing_started", "filename": filename}
 
+@app.post("/status/{filename}")
+async def update_status(filename: str, request: UpdateStatusRequest):
+    metadata = load_metadata()
+    if filename not in metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    metadata[filename]["workflow_status"] = request.status
+    save_metadata(metadata)
+    
+    return {"status": "updated", "filename": filename, "new_status": request.status}
+
+@app.post("/archive/{filename}")
+async def archive_document(filename: str):
+    metadata = load_metadata()
+    if filename not in metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Toggle archive status
+    current_status = metadata[filename].get("archived", False)
+    metadata[filename]["archived"] = not current_status
+    save_metadata(metadata)
+    
+    return {"status": "updated", "filename": filename, "archived": not current_status}
+
+@app.delete("/documents/{filename}")
+async def delete_document(filename: str):
+    filepath = os.path.join(DOCUMENTS_DIR, filename)
+    metadata = load_metadata()
+    
+    # Remove file
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    
+    # Remove metadata
+    if filename in metadata:
+        del metadata[filename]
+        save_metadata(metadata)
+    
+    # Remove from Vector DB
+    try:
+        collection.delete(where={"filename": filename})
+    except:
+        pass
+
+    return {"status": "deleted", "filename": filename}
+
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+
+# ... existing code ...
+
+@app.get("/templates")
+def list_templates():
+    if not os.path.exists(TEMPLATES_DIR):
+        return []
+    return [f for f in os.listdir(TEMPLATES_DIR) if f.endswith((".docx", ".doc"))]
+
+@app.get("/templates/{filename}")
+async def get_template(filename: str):
+    file_path = os.path.join(TEMPLATES_DIR, filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    raise HTTPException(status_code=404, detail="File not found")
+
+@app.post("/upload_template")
+async def upload_template(file: UploadFile = File(...)):
+    filename = file.filename
+    filepath = os.path.join(TEMPLATES_DIR, filename)
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"status": "uploaded", "filename": filename}
+
+@app.delete("/templates/{filename}")
+async def delete_template(filename: str):
+    filepath = os.path.join(TEMPLATES_DIR, filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="File not found")
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     if not openai_client.api_key:
@@ -271,7 +356,7 @@ async def chat(request: ChatRequest):
     prompt = f"Context:\n{context_text}\n\nQuestion: {request.question}"
     
     response = openai_client.chat.completions.create(
-        model="gpt-4o",
+        model=LLM_MODEL,
         messages=[
             {"role": "system", "content": "You are a helpful assistant for analyzing legal documents. Use the provided context to answer the user's question. Cite the document filename if possible."},
             {"role": "user", "content": prompt}

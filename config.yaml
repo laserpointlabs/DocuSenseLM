@@ -13,14 +13,11 @@ document_types:
         question: "When does this agreement expire? Return in YYYY-MM-DD format if possible."
         type: "date"
         dashboard_metric: true
-      - id: "governing_law"
-        question: "Which state's laws govern this agreement?"
-        type: "text"
-      - id: "is_mutual"
-        question: "Is this a mutual NDA?"
-        type: "boolean"
       - id: "confidentiality_period"
         question: "How long does the confidentiality obligation last?"
+        type: "text"
+      - id: "jurisdiction"
+        question: "Which state/country jurisdiction governs this agreement?"
         type: "text"
 
   supplier_agreement:
@@ -41,7 +38,23 @@ document_types:
         question: "What are the payment terms (e.g. Net 30)?"
         type: "text"
 
+workflow_statuses:
+  - id: "draft"
+    label: "Draft"
+    color: "gray"
+  - id: "in_review"
+    label: "In Review"
+    color: "blue"
+  - id: "pending_signature"
+    label: "Pending Signature"
+    color: "yellow"
+  - id: "active"
+    label: "Active"
+    color: "green"
+  - id: "expired"
+    label: "Expired"
+    color: "red"
+
 dashboard:
   alerts:
-    expiration_warning_days: [90, 45, 30]
-
+    expiration_warning_days: [90, 60, 30]
