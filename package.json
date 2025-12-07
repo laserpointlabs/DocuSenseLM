@@ -5,7 +5,8 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && npm run electron:build && electron-builder",
+    "build:python": "rm -rf python/dist/server && python/venv/bin/python -m PyInstaller --clean --name server --distpath ./python/dist --workpath ./python/build --specpath ./python --onefile --additional-hooks-dir=python --hidden-import=key_value ./python/server.py",
+    "build": "npm run build:python && tsc && vite build && npm run electron:build && electron-builder",
     "preview": "vite preview",
     "electron:build": "tsc -p tsconfig.electron.json",
     "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\""
@@ -13,6 +14,7 @@
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "clsx": "^2.1.0",
+    "electron-updater": "^6.6.2",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.344.0",
     "pdfjs-dist": "^5.4.449",
@@ -50,17 +52,44 @@
     "files": [
       "dist-electron/**/*",
       "dist/**/*",
-      "python/**/*",
       "config.yaml"
     ],
+    "extraResources": [
+      {
+        "from": "python/dist/server",
+        "to": "python/server"
+      }
+    ],
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis"
+      ],
+      "publisherName": "NDA Tool Lite"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "category": "Utility"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jdehart",
+      "repo": "ndaTool"
     }
   }
 }

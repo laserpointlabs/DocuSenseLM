@@ -666,7 +666,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     )
 }
 
-function ChatView({ config, documents, onOpenDocument }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void }) {
+function ChatView({ onOpenDocument }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void }) {
     const [messages, setMessages] = useState<{role: 'user'|'ai', content: string, sources?: string[]}[]>(() => {
         const saved = localStorage.getItem('nda_chat_history');
         return saved ? JSON.parse(saved) : [

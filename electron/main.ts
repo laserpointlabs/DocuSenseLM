@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
+import { autoUpdater } from 'electron-updater';
 
 const isDev = !app.isPackaged;
 
@@ -26,6 +27,8 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // Check for updates
+    autoUpdater.checkForUpdatesAndNotify();
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -39,25 +42,10 @@ function createWindow() {
   });
 }
 
+// ... rest of file
+
+
 function startPythonBackend() {
-  let pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
-  
-  if (isDev) {
-      // Try to use venv if available
-      const venvPath = process.platform === 'win32' 
-          ? path.join(__dirname, '../python/venv/Scripts/python.exe')
-          : path.join(__dirname, '../python/venv/bin/python');
-      
-      if (fs.existsSync(venvPath)) {
-          console.log(`Using venv python: ${venvPath}`);
-          pythonExecutable = venvPath;
-      }
-  }
-
-  const scriptPath = isDev
-    ? path.join(__dirname, '../python/server.py')
-    : path.join(process.resourcesPath, 'python/server.py');
-
   // Get OS-specific user data path
   // Windows: %APPDATA%/nda-tool-lite
   // Linux: ~/.config/nda-tool-lite
@@ -67,15 +55,41 @@ function startPythonBackend() {
 
   console.log(`Starting Python backend on port ${API_PORT}...`);
   
-  pythonProcess = spawn(pythonExecutable, [scriptPath], {
-    env: { 
-        ...process.env, 
-        PORT: API_PORT.toString(), 
-        PYTHONUNBUFFERED: '1',
-        USER_DATA_DIR: userDataPath 
-    },
-    stdio: 'pipe' 
-  });
+  const env = { 
+      ...process.env, 
+      PORT: API_PORT.toString(), 
+      PYTHONUNBUFFERED: '1',
+      USER_DATA_DIR: userDataPath 
+  };
+
+  if (isDev) {
+      let pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+      // Try to use venv if available
+      const venvPath = process.platform === 'win32' 
+          ? path.join(__dirname, '../python/venv/Scripts/python.exe')
+          : path.join(__dirname, '../python/venv/bin/python');
+      
+      if (fs.existsSync(venvPath)) {
+          console.log(`Using venv python: ${venvPath}`);
+          pythonExecutable = venvPath;
+      }
+      const scriptPath = path.join(__dirname, '../python/server.py');
+      
+      pythonProcess = spawn(pythonExecutable, [scriptPath], {
+        env,
+        stdio: 'pipe' 
+      });
+  } else {
+      const executableName = process.platform === 'win32' ? 'server.exe' : 'server';
+      // In packaged app, we expect the executable in python/ directory in resources
+      const executablePath = path.join(process.resourcesPath, 'python', executableName);
+      console.log(`Executable Path: ${executablePath}`);
+      
+      pythonProcess = spawn(executablePath, [], {
+        env,
+        stdio: 'pipe' 
+      });
+  }
 
   if (pythonProcess.stdout) {
       pythonProcess.stdout.on('data', (data) => {
