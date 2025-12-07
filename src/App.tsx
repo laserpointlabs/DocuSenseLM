@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Modal } from './components/Modal';
 
 const API_PORT = 14242;
 
@@ -171,7 +172,24 @@ function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, labe
 }
 
 function DashboardView({ config, documents, onOpenDocument }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void }) {
+  const [report, setReport] = useState<string | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
+
   if (!config) return <div>Loading configuration...</div>;
+  
+  const handleGenerateReport = async () => {
+      setGeneratingReport(true);
+      try {
+          const res = await fetch(`http://localhost:${API_PORT}/report`, { method: "POST" });
+          const data = await res.json();
+          setReport(data.report);
+      } catch (e) {
+          console.error(e);
+          alert("Failed to generate report");
+      } finally {
+          setGeneratingReport(false);
+      }
+  };
   
   const docList = Object.values(documents);
 
@@ -209,7 +227,39 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Dashboard</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <button 
+            onClick={handleGenerateReport}
+            disabled={generatingReport}
+            className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+        >
+            {generatingReport ? <RefreshCw className="animate-spin" size={16} /> : <FileText size={16} />}
+            Generate Status Report
+        </button>
+      </div>
+
+      <Modal
+        isOpen={!!report}
+        onClose={() => setReport(null)}
+        title="Email Status Report"
+      >
+          <div className="flex flex-col gap-4">
+              <div className="bg-gray-50 p-4 rounded-lg text-sm font-mono whitespace-pre-wrap border border-gray-200 select-all max-h-[60vh] overflow-y-auto">
+                  {report}
+              </div>
+              <div className="flex justify-end">
+                  <button 
+                    onClick={() => {
+                        if (report) navigator.clipboard.writeText(report);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                  >
+                      <Check size={16} /> Copy to Clipboard
+                  </button>
+              </div>
+          </div>
+      </Modal>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {Object.entries(config.document_types).map(([key, type]: [string, any]) => {

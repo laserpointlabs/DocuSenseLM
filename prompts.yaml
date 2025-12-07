@@ -1,26 +1,14 @@
-prompts:
-  competency_extraction:
-    system: "You are a legal document assistant. Respond in JSON."
-    user: |
-      Analyze the following document text and answer the questions.
-
-      Document Text:
-      {document_text}
-
-      Questions:
-      {questions_list}
-
-      Provide answers in JSON format with keys matching the question IDs.
-
-  chat:
-    system: "You are a helpful assistant. Use the provided context to answer. Be precise about sources. Always consider the Current Date for time-sensitive questions."
+  email_report:
+    system: "You are a professional executive assistant. Format the provided data into a concise, text-based email status report. Use the provided Subject Line, Header, and Footer exactly as specified. Do not use markdown tables, use simple lists or text."
     user: |
       Current Date: {current_date}
 
-      Context:
-      {context_text}
+      Please generate a status report email based on the following instructions and data:
 
-      Question: {question}
+      {data_context}
 
-      Answer the question based on the context. Use the Current Date to calculate relative dates (e.g. 'in 30 days', 'expired last week'). At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: ["file1.pdf", "file2.pdf"].
-
+      Ensure the email follows this structure:
+      1. Subject Line (as provided)
+      2. Greeting & Header (as provided)
+      3. Body (summarizing the Data Sections clearly)
+      4. Footer (as provided)

@@ -350,6 +350,131 @@ async def delete_template(filename: str):
         return {"status": "deleted"}
     raise HTTPException(status_code=404, detail="File not found")
 
+@app.post("/report")
+async def generate_report():
+    if not openai_client.api_key:
+        raise HTTPException(status_code=500, detail="OpenAI API Key not configured")
+    
+    metadata = load_metadata()
+    docs = list(metadata.values())
+    
+    # Helper to parse dates
+    def parse_date(d_str):
+        if not d_str: return None
+        try:
+            return datetime.datetime.fromisoformat(d_str)
+        except:
+            try:
+                return datetime.datetime.strptime(d_str, "%Y-%m-%d")
+            except:
+                return None
+
+    now = datetime.datetime.now()
+    report_config = config.get("report", {}).get("sections", [])
+    data_context = ""
+
+    for section in report_config:
+        section_id = section.get("id")
+        title = section.get("title")
+        sec_type = section.get("type")
+        limit = section.get("limit", 10)
+        
+        items = []
+        
+        if sec_type == "recent_uploads":
+            days = section.get("days", 7)
+            # Sort by upload date desc
+            sorted_docs = sorted(docs, key=lambda x: x.get("upload_date", ""), reverse=True)
+            for d in sorted_docs:
+                upload_date = parse_date(d.get("upload_date"))
+                if upload_date and (now - upload_date).days <= days:
+                    items.append(f"- {d['filename']} (Uploaded: {d.get('upload_date', '').split('T')[0]})")
+        
+        elif sec_type == "expiring":
+            days = section.get("days", 90)
+            # Filter and sort by expiration
+            candidates = []
+            for d in docs:
+                exp_date_str = d.get("competency_answers", {}).get("expiration_date")
+                exp_date = parse_date(exp_date_str)
+                if exp_date:
+                    days_left = (exp_date - now).days
+                    if 0 <= days_left <= days:
+                        candidates.append((days_left, d, exp_date_str))
+            
+            # Sort by soonest expiring
+            candidates.sort(key=lambda x: x[0])
+            for days_left, d, exp_date_str in candidates:
+                items.append(f"- {d['filename']} (Expires: {exp_date_str}, Days Left: {days_left})")
+
+        elif sec_type == "status":
+            statuses = section.get("statuses", [])
+            for d in docs:
+                status = d.get("workflow_status", "in_review")
+                if status in statuses:
+                    items.append(f"- {d['filename']} (Status: {status.replace('_', ' ').title()})")
+
+        # Apply limit
+        if len(items) > limit:
+            items = items[:limit]
+            items.append(f"... and {len(items) - limit} more.")
+            
+        data_context += f"\n{title}:\n" + ("\n".join(items) if items else "None") + "\n"
+
+    # Load Prompts
+    system_prompt = prompts_config.get("prompts", {}).get("email_report", {}).get("system", "Format as email.")
+    user_prompt_template = prompts_config.get("prompts", {}).get("email_report", {}).get("user", "Report:\n{data_context}")
+    
+    # Load email template components from config
+    report_settings = config.get("report", {})
+    subject = report_settings.get("subject", "Status Report - {date}")
+    header = report_settings.get("header", "Summary of activity.")
+    
+    # Get footer components
+    email_closing = report_settings.get("email_closing", "Best regards,")
+    signature_name = report_settings.get("signature_name", "Legal Team")
+    signature_title = report_settings.get("signature_title", "")
+    department = report_settings.get("department", "")
+    
+    # Construct footer
+    footer = f"{email_closing}\n\n{signature_name}"
+    if signature_title:
+        footer += f"\n{signature_title}"
+    if department:
+        footer += f"\n{department}"
+    
+    # Format date in subject
+    formatted_subject = subject.format(date=now.strftime("%Y-%m-%d"))
+
+    # Inject these into the user prompt data
+    email_context = f"""
+    Subject Line: {formatted_subject}
+    
+    Email Header:
+    {header}
+    
+    Data Sections:
+    {data_context}
+    
+    Email Footer:
+    {footer}
+    """
+    
+    user_prompt = user_prompt_template.format(
+        current_date=now.strftime("%A, %B %d, %Y"),
+        data_context=email_context
+    )
+    
+    response = openai_client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+    )
+    
+    return {"report": response.choices[0].message.content}
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     if not openai_client.api_key:

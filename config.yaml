@@ -58,3 +58,61 @@ workflow_statuses:
 dashboard:
   alerts:
     expiration_warning_days: [90, 60, 30]
+
+report:
+  subject: "Weekly Contract Status Report - {date}"
+  header: "Here is the summary of recent contract activity and upcoming expirations."
+  
+  # Email Sign-off Configuration
+  # Leave any field blank ("") to exclude it from the email signature.
+  email_closing: "Best regards,"
+  signature_name: "Legal Team"
+  signature_title: "Contract Management"
+  department: "Legal Operations Dept"
+
+  sections:
+    - id: "new_docs"
+      title: "New Documents (Last 7 Days)"
+      type: "recent_uploads"
+      days: 7
+      limit: 10
+    
+    - id: "expiring_docs"
+      title: "Expiring Soon (< 90 Days)"
+      type: "expiring"
+      days: 90
+      limit: 20
+    
+    - id: "pending_docs"
+      title: "Pending Actions"
+      type: "status"
+      statuses: ["in_review", "pending_signature"]
+      limit: 20
+
+# --- Advanced Report Configuration Examples ---
+# You can add these to the 'sections' list above to customize your report further:
+#
+# 1. Show recently expired documents:
+#    - id: "just_expired"
+#      title: "Expired in Last 30 Days"
+#      type: "expiring" 
+#      days: -30  # Negative days implies looking backwards (if supported) or you can repurpose status
+#
+# 2. Show all Active contracts:
+#    - id: "active_contracts"
+#      title: "Active Contracts"
+#      type: "status"
+#      statuses: ["active"]
+#      limit: 50
+#
+# 3. Show Drafts only:
+#    - id: "drafts"
+#      title: "Drafts in Progress"
+#      type: "status"
+#      statuses: ["draft"]
+#
+# 4. Extended New Uploads window:
+#    - id: "new_docs_month"
+#      title: "New This Month"
+#      type: "recent_uploads"
+#      days: 30
