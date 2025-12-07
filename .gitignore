@@ -13,3 +13,4 @@ documents/metadata.json
 legacy_v1
 .cache
 chroma_db
+data
