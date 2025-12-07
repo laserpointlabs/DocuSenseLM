@@ -906,8 +906,8 @@ function TemplatesView() {
 
 function SettingsView() {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [selectedFile, setSelectedFile] = useState("config.yaml");
-    const [fileContent, setFileContent] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
 
@@ -919,55 +919,61 @@ function SettingsView() {
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/${filename}`);
             const data = await res.json();
-            setFileContent(data.content);
+            if (textareaRef.current) {
+                textareaRef.current.value = data.content;
+            }
         } catch (err) {
             console.error(err);
         }
     };
 
     const handleSaveFile = async () => {
+        if (!textareaRef.current) return;
+        
         setIsSaving(true);
+        const content = textareaRef.current.value;
+        
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/${selectedFile}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: fileContent })
+                body: JSON.stringify({ content })
             });
             if (!res.ok) throw new Error();
-            alert("Saved successfully!");
+            // Success
         } catch (err) {
-            alert("Failed to save. Check YAML syntax.");
+            console.error("Failed to save:", err);
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleResetFile = async () => {
-        if (!confirm("Revert to default settings? This cannot be undone.")) return;
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/reset/${selectedFile}`, {
                 method: "POST"
             });
             const data = await res.json();
-            setFileContent(data.content);
-            alert("Reset to defaults.");
+            if (textareaRef.current) {
+                textareaRef.current.value = data.content;
+            }
         } catch (err) {
-            alert("Failed to reset.");
+            console.error("Failed to reset:", err);
         }
     };
 
     const handleRestoreLastGood = async () => {
-        if (!confirm("Restore the last saved working configuration?")) return;
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/restore_last_good/${selectedFile}`, {
                 method: "POST"
             });
             if (!res.ok) throw new Error();
             const data = await res.json();
-            setFileContent(data.content);
-            alert("Restored last saved version.");
+            if (textareaRef.current) {
+                textareaRef.current.value = data.content;
+            }
         } catch (err) {
-            alert("No backup found or failed to restore.");
+            console.error("No backup found:", err);
         }
     };
 
@@ -1026,7 +1032,7 @@ function SettingsView() {
                             <button 
                                 onClick={handleSaveFile}
                                 disabled={isSaving}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 min-w-[120px]"
                             >
                                 {isSaving ? "Saving..." : "Save Changes"}
                             </button>
@@ -1045,9 +1051,9 @@ function SettingsView() {
                             </button>
                         </div>
                         <textarea
-                            value={fileContent}
-                            onChange={(e) => setFileContent(e.target.value)}
-                            className="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            ref={textareaRef}
+                            defaultValue=""
+                            className="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white caret-black resize-y"
                             spellCheck={false}
                         />
                     </div>
