@@ -9,7 +9,8 @@ module.exports = {
   files: [
     "dist-electron/**/*",
     "dist/**/*",
-    "config.yaml"
+    "config.yaml",
+    "build/icon.png" 
   ],
   extraResources: [
     {
@@ -19,6 +20,7 @@ module.exports = {
   ],
   mac: {
     category: "public.app-category.productivity",
+    icon: "build/icon.icns",
     target: [
       "dmg",
       "zip"
@@ -29,6 +31,7 @@ module.exports = {
     entitlementsInherit: "build/entitlements.mac.plist"
   },
   win: {
+    icon: "build/icon.ico",
     target: [
       "nsis"
     ],
@@ -41,6 +44,7 @@ module.exports = {
   },
   linux: {
     target: "AppImage",
+    icon: "build/icon.png",
     category: "Utility"
   },
   publish: {

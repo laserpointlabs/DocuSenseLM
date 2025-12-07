@@ -1,21 +1,27 @@
 # DocuSenseLM
 
-A simple, local Electron desktop application for managing and analyzing documents using GPT-4o.
+**DocuSenseLM** is a lightweight, local desktop application designed to make legal and business document management intelligent and private. By combining a secure local storage architecture with GPT-4o integration, it provides automated analysis, key data extraction, and chat capabilities for any document type—from NDAs to Supplier Agreements.
+
+## Why DocuSenseLM?
+
+- **Privacy First**: Your documents stay on your local machine. Only text excerpts are sent to OpenAI for processing, and only when you choose to analyze them.
+- **Intelligent Extraction**: Don't just store files; understand them. Automatically extract expiration dates, party names, and jurisdictions.
+- **Flexible**: It's not just for NDAs. Configure any document type and set your own "Competency Questions" to extract the data that matters to you.
 
 ## Features
 
-- **Document Management**: Drag and drop PDF/DOCX files. Organize by type (NDA, Supplier Agreement).
-- **Automated Analysis**: Automatically extracts key information (Parties, Expiration, Jurisdiction) using GPT-4o based on configurable competency questions.
-- **Dashboard**: View high-level metrics and expiration warnings.
-- **Chat**: Chat with your documents to answer specific questions.
-- **Configurable**: Define new document types and questions in `config.yaml`.
-- **Local & Secure**: Documents stay on your local machine (except for processing by OpenAI).
+- **Drag-and-Drop Management**: Easily organize PDF and DOCX files.
+- **AI Analysis**: Automated extraction of critical metadata using GPT-4o.
+- **Chat with Documents**: Ask questions across your entire document library.
+- **Dashboard**: Track expirations and workflow statuses at a glance.
+- **Configurable**: Define custom document types and questions in `config.yaml`.
+- **Branding**: Fully white-label ready via environment variables.
 
 ## Architecture
 
-- **Frontend**: Electron + React + TailwindCSS
-- **Backend**: Python (FastAPI/FastMCP) running locally as a subprocess
-- **Storage**: Local filesystem (`documents/` folder and `documents/metadata.json`)
+- **Frontend**: Electron + React + TailwindCSS for a modern, responsive UI.
+- **Backend**: Python (FastAPI/FastMCP) running locally as a subprocess for robust logic.
+- **Storage**: Local filesystem (`documents/` folder and `documents/metadata.json`) for zero-dependency data management.
 
 ## Setup
 
@@ -44,20 +50,20 @@ A simple, local Electron desktop application for managing and analyzing document
    npm run electron:dev
    ```
 
-## Branding
+## Branding & White-Labeling
 
-You can customize the application name and branding by setting environment variables in your `.env` file:
+DocuSenseLM is designed to be easily rebranded for your organization. You can customize the application name and window title by setting environment variables in your `.env` file:
 
 ```bash
-VITE_APP_TITLE="DocuSenseLM"
-APP_NAME="DocuSenseLM"
+VITE_APP_TITLE="My Law Firm Analyzer"
+APP_NAME="My Law Firm Analyzer"
 ```
 
-These variables control the window title, application name in the UI, and the name of the built application/installer.
+The application icon can be customized by replacing the `build/icon.png` file before building.
 
 ## Configuration
 
-Edit `config.yaml` to change document types or competency questions.
+Edit `config.yaml` to define your own document types (e.g., Employment Contracts, Leases) and the specific questions you want the AI to answer for each.
 
 ## Legacy
 
