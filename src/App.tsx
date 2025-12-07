@@ -121,7 +121,16 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-8 relative">
-        {activeTab === 'dashboard' && <DashboardView config={config} documents={documents} />}
+        {activeTab === 'dashboard' && (
+            <DashboardView 
+                config={config} 
+                documents={documents} 
+                onOpenDocument={(filename) => {
+                    setDocToOpen(filename);
+                    setActiveTab('documents');
+                }}
+            />
+        )}
         {activeTab === 'documents' && (
             <DocumentsView 
                 config={config} 
@@ -161,7 +170,7 @@ function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, labe
   );
 }
 
-function DashboardView({ config, documents }: { config: Config | null, documents: Record<string, DocumentData> }) {
+function DashboardView({ config, documents, onOpenDocument }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void }) {
   if (!config) return <div>Loading configuration...</div>;
   
   const docList = Object.values(documents);
@@ -180,6 +189,24 @@ function DashboardView({ config, documents }: { config: Config | null, documents
     }).length;
   };
 
+  const getExpiringDocs = (type: string, days: number) => {
+    return docList.filter(d => {
+        if (d.doc_type !== type) return false;
+        const exp = d.competency_answers?.expiration_date;
+        if (!exp) return false;
+        const date = new Date(exp);
+        if (isNaN(date.getTime())) return false;
+        const now = new Date();
+        const diffTime = date.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays > 0 && diffDays <= days;
+    }).sort((a, b) => {
+        const dateA = new Date(a.competency_answers.expiration_date).getTime();
+        const dateB = new Date(b.competency_answers.expiration_date).getTime();
+        return dateA - dateB;
+    }).slice(0, 3);
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Dashboard</h2>
@@ -188,19 +215,42 @@ function DashboardView({ config, documents }: { config: Config | null, documents
         {Object.entries(config.document_types).map(([key, type]: [string, any]) => {
           const count = docList.filter(d => d.doc_type === key).length;
           const expiring = getExpiringCount(key, 90);
+          const expiringDocs = getExpiringDocs(key, 90);
           const reviewCount = docList.filter(d => d.doc_type === key && (d.workflow_status === 'in_review' || !d.workflow_status)).length;
           
           return (
-          <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
             <h3 className="text-lg font-semibold text-gray-700">{type.name}s</h3>
             <div className="mt-4 flex items-baseline gap-2">
               <span className="text-4xl font-bold text-blue-600">{count}</span>
               <span className="text-gray-500">total</span>
             </div>
-             <div className="mt-2 text-sm space-y-1">
+             <div className="mt-2 text-sm space-y-1 mb-4">
                 <div className="text-red-500 font-medium">{expiring} expiring in 90 days</div>
                 <div className="text-blue-500">{reviewCount} in review</div>
              </div>
+             
+             {expiringDocs.length > 0 && (
+                 <div className="mt-auto border-t border-gray-100 pt-3">
+                     <p className="text-xs text-gray-500 font-semibold mb-2">Expiring Soon:</p>
+                     <ul className="space-y-2">
+                         {expiringDocs.map(doc => (
+                             <li key={doc.filename}>
+                                 <button 
+                                    onClick={() => onOpenDocument(doc.filename)}
+                                    className="text-xs text-left text-red-600 hover:underline truncate w-full block"
+                                    title={doc.filename}
+                                 >
+                                     {doc.filename}
+                                 </button>
+                                 <span className="text-[10px] text-gray-400 block">
+                                     Expires: {doc.competency_answers.expiration_date}
+                                 </span>
+                             </li>
+                         ))}
+                     </ul>
+                 </div>
+             )}
           </div>
         )})}
       </div>
