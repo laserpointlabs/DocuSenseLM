@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File } from 'lucide-react';
+import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Modal } from './components/Modal';
@@ -24,7 +24,7 @@ interface DocumentData {
 import { LoadingScreen } from './components/LoadingScreen';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
   const [config, setConfig] = useState<Config | null>(null);
   const [documents, setDocuments] = useState<Record<string, DocumentData>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -110,6 +110,12 @@ function App() {
             active={activeTab === 'templates'} 
             onClick={() => setActiveTab('templates')} 
           />
+          <NavItem 
+            icon={<Database />} 
+            label="Settings & Data" 
+            active={activeTab === 'settings'} 
+            onClick={() => setActiveTab('settings')} 
+          />
         </nav>
         
         <div className="mt-auto pt-4 border-t border-slate-700">
@@ -152,6 +158,7 @@ function App() {
             />
         )}
         {activeTab === 'templates' && <TemplatesView />}
+        {activeTab === 'settings' && <SettingsView />}
       </div>
     </div>
   );
@@ -892,6 +899,202 @@ function TemplatesView() {
                         No templates found. Upload one to get started.
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function SettingsView() {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [selectedFile, setSelectedFile] = useState("config.yaml");
+    const [fileContent, setFileContent] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+    const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+    useEffect(() => {
+        fetchFileContent(selectedFile);
+    }, [selectedFile]);
+
+    const fetchFileContent = async (filename: string) => {
+        try {
+            const res = await fetch(`http://localhost:${API_PORT}/settings/file/${filename}`);
+            const data = await res.json();
+            setFileContent(data.content);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleSaveFile = async () => {
+        setIsSaving(true);
+        try {
+            const res = await fetch(`http://localhost:${API_PORT}/settings/file/${selectedFile}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: fileContent })
+            });
+            if (!res.ok) throw new Error();
+            alert("Saved successfully!");
+        } catch (err) {
+            alert("Failed to save. Check YAML syntax.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleResetFile = async () => {
+        if (!confirm("Revert to default settings? This cannot be undone.")) return;
+        try {
+            const res = await fetch(`http://localhost:${API_PORT}/settings/reset/${selectedFile}`, {
+                method: "POST"
+            });
+            const data = await res.json();
+            setFileContent(data.content);
+            alert("Reset to defaults.");
+        } catch (err) {
+            alert("Failed to reset.");
+        }
+    };
+
+    const handleRestoreLastGood = async () => {
+        if (!confirm("Restore the last saved working configuration?")) return;
+        try {
+            const res = await fetch(`http://localhost:${API_PORT}/settings/restore_last_good/${selectedFile}`, {
+                method: "POST"
+            });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            setFileContent(data.content);
+            alert("Restored last saved version.");
+        } catch (err) {
+            alert("No backup found or failed to restore.");
+        }
+    };
+
+    const handleBackup = () => {
+        window.open(`http://localhost:${API_PORT}/backup`, '_blank');
+    };
+
+    const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.length) return;
+        if (!confirm("WARNING: This will overwrite all current data with the backup. Continue?")) return;
+
+        const file = e.target.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await fetch(`http://localhost:${API_PORT}/restore`, {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+            alert(data.message);
+            window.location.reload(); // Reload to refresh data
+        } catch (err) {
+            console.error(err);
+            alert("Failed to restore backup.");
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Settings & Data Management</h2>
+            
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
+                <button 
+                    onClick={() => setIsEditorOpen(!isEditorOpen)}
+                    className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                >
+                    <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <Settings className="text-gray-600" /> Configuration Editor
+                    </h3>
+                    {isEditorOpen ? <ChevronDown size={20} className="text-gray-400" /> : <ChevronRight size={20} className="text-gray-400" />}
+                </button>
+                
+                {isEditorOpen && (
+                    <div className="p-6 pt-0 border-t border-gray-100">
+                        <div className="flex gap-4 mb-4 mt-4">
+                            <select 
+                                value={selectedFile}
+                                onChange={(e) => setSelectedFile(e.target.value)}
+                                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                            >
+                                <option value="config.yaml">config.yaml (App Settings)</option>
+                                <option value="prompts.yaml">prompts.yaml (AI Prompts)</option>
+                            </select>
+                            <button 
+                                onClick={handleSaveFile}
+                                disabled={isSaving}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                            >
+                                {isSaving ? "Saving..." : "Save Changes"}
+                            </button>
+                            <button 
+                                onClick={handleRestoreLastGood}
+                                className="text-orange-600 hover:bg-orange-50 px-4 py-2 rounded-lg text-sm font-medium"
+                                title="Undo recent changes"
+                            >
+                                Undo / Restore Last Saved
+                            </button>
+                            <button 
+                                onClick={handleResetFile}
+                                className="text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium ml-auto"
+                            >
+                                Reset to Default
+                            </button>
+                        </div>
+                        <textarea
+                            value={fileContent}
+                            onChange={(e) => setFileContent(e.target.value)}
+                            className="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            spellCheck={false}
+                        />
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Database className="text-blue-600" /> Data Backup
+                </h3>
+                <p className="text-gray-600 mb-6">
+                    Export your entire system state (documents, database, metadata) to a ZIP file. 
+                    You can use this file to migrate to another computer or restore your data later.
+                </p>
+                
+                <div className="flex gap-4">
+                    <button 
+                        onClick={handleBackup}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2"
+                    >
+                        <Download size={18} /> Download Backup
+                    </button>
+                    
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg font-medium flex items-center gap-2"
+                    >
+                        <Upload size={18} /> Restore from Backup
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept=".zip" 
+                        onChange={handleRestore}
+                    />
+                </div>
+            </div>
+
+            <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-200">
+                <h3 className="text-sm font-bold text-yellow-800 mb-2 flex items-center gap-2">
+                    <AlertCircle size={16} /> Important Note
+                </h3>
+                <p className="text-sm text-yellow-700">
+                    Restoring a backup will <strong>permanently delete</strong> all current documents and settings. 
+                    Please ensure you have backed up your current data before restoring.
+                </p>
             </div>
         </div>
     );

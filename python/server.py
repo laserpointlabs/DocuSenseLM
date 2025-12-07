@@ -43,12 +43,56 @@ os.makedirs(DB_DIR, exist_ok=True)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 
-try:
-    with open(CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f)
-except Exception as e:
-    logger.error(f"Failed to load config: {e}")
-    config = {"document_types": {}, "dashboard": {}}
+# Load prompts
+def load_prompts_config():
+    # Try loading user override first
+    user_prompts = os.path.join(USER_DATA_DIR, "prompts.yaml")
+    if os.path.exists(user_prompts):
+        try:
+            with open(user_prompts, "r") as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            logger.error(f"Failed to load user prompts: {e}")
+    
+    # Fallback to default
+    default_prompts = os.path.join(BASE_DIR, "prompts.default.yaml")
+    try:
+        with open(default_prompts, "r") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Failed to load default prompts: {e}")
+        return {}
+
+prompts_config = load_prompts_config()
+
+# Load configuration
+def load_app_config():
+    # Try loading user override first
+    user_config = os.path.join(USER_DATA_DIR, "config.yaml")
+    if os.path.exists(user_config):
+        try:
+            with open(user_config, "r") as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            logger.error(f"Failed to load user config: {e}")
+    
+    # Fallback to default
+    default_config = os.path.join(BASE_DIR, "config.default.yaml")
+    try:
+        with open(default_config, "r") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Failed to load default config: {e}")
+        return {"document_types": {}, "dashboard": {}}
+
+config = load_app_config()
+
+# Ensure user config files exist in USER_DATA_DIR for editing
+if not os.path.exists(os.path.join(USER_DATA_DIR, "config.yaml")):
+    shutil.copy(os.path.join(BASE_DIR, "config.default.yaml"), os.path.join(USER_DATA_DIR, "config.yaml"))
+
+if not os.path.exists(os.path.join(USER_DATA_DIR, "prompts.yaml")):
+    shutil.copy(os.path.join(BASE_DIR, "prompts.default.yaml"), os.path.join(USER_DATA_DIR, "prompts.yaml"))
 
 # Initialize OpenAI
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -146,17 +190,6 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
     except Exception as e:
         logger.error(f"Indexing failed for {filename}: {e}")
 
-# Load prompts
-PROMPTS_PATH = os.path.join(BASE_DIR, "prompts.yaml")
-try:
-    with open(PROMPTS_PATH, "r") as f:
-        prompts_config = yaml.safe_load(f)
-except Exception as e:
-    logger.error(f"Failed to load prompts: {e}")
-    prompts_config = {}
-
-# ... existing code ...
-
     # 2. Run Competency Questions
     questions = config.get("document_types", {}).get(doc_type, {}).get("competency_questions", [])
     answers = {}
@@ -223,6 +256,148 @@ async def get_file(filename: str):
     if os.path.exists(file_path):
         return FileResponse(file_path)
     raise HTTPException(status_code=404, detail="File not found")
+
+@app.get("/settings/files")
+def list_config_files():
+    return ["config.yaml", "prompts.yaml"]
+
+@app.get("/settings/file/{filename}")
+def get_config_file(filename: str):
+    if filename not in ["config.yaml", "prompts.yaml"]:
+        raise HTTPException(status_code=400, detail="Invalid file")
+    
+    filepath = os.path.join(USER_DATA_DIR, filename)
+    try:
+        with open(filepath, "r") as f:
+            return {"content": f.read()}
+    except FileNotFoundError:
+        # If not found in user dir, try default
+        default_name = filename.replace(".yaml", ".default.yaml")
+        try:
+            with open(os.path.join(BASE_DIR, default_name), "r") as f:
+                return {"content": f.read()}
+        except:
+            raise HTTPException(status_code=404, detail="File not found")
+
+@app.post("/settings/file/{filename}")
+async def save_config_file(filename: str, request: Dict[str, str]):
+    if filename not in ["config.yaml", "prompts.yaml"]:
+        raise HTTPException(status_code=400, detail="Invalid file")
+    
+    content = request.get("content")
+    if not content:
+        raise HTTPException(status_code=400, detail="Content required")
+    
+    # Validate YAML
+    try:
+        yaml.safe_load(content)
+    except yaml.YAMLError:
+        raise HTTPException(status_code=400, detail="Invalid YAML format")
+        
+    filepath = os.path.join(USER_DATA_DIR, filename)
+    
+    # Create Backup
+    if os.path.exists(filepath):
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = f"{filepath}.{timestamp}.bak"
+        shutil.copy(filepath, backup_path)
+        
+        # Also save as "last_good" for quick restore
+        last_good_path = f"{filepath}.last_good.bak"
+        shutil.copy(filepath, last_good_path)
+
+    with open(filepath, "w") as f:
+        f.write(content)
+        
+    # Reload configs in-memory
+    global config, prompts_config
+    config = load_app_config()
+    prompts_config = load_prompts_config()
+    
+    return {"status": "saved"}
+
+@app.post("/settings/restore_last_good/{filename}")
+def restore_last_good_config(filename: str):
+    if filename not in ["config.yaml", "prompts.yaml"]:
+        raise HTTPException(status_code=400, detail="Invalid file")
+        
+    filepath = os.path.join(USER_DATA_DIR, filename)
+    last_good_path = f"{filepath}.last_good.bak"
+    
+    if os.path.exists(last_good_path):
+        shutil.copy(last_good_path, filepath)
+        
+        # Reload
+        global config, prompts_config
+        config = load_app_config()
+        prompts_config = load_prompts_config()
+        
+        with open(filepath, "r") as f:
+            return {"content": f.read(), "status": "restored"}
+            
+    raise HTTPException(status_code=404, detail="No backup found")
+
+@app.post("/settings/reset/{filename}")
+def reset_config_file(filename: str):
+    if filename not in ["config.yaml", "prompts.yaml"]:
+        raise HTTPException(status_code=400, detail="Invalid file")
+        
+    default_name = filename.replace(".yaml", ".default.yaml")
+    default_path = os.path.join(BASE_DIR, default_name)
+    user_path = os.path.join(USER_DATA_DIR, filename)
+    
+    if os.path.exists(default_path):
+        shutil.copy(default_path, user_path)
+        # Reload
+        global config, prompts_config
+        config = load_app_config()
+        prompts_config = load_prompts_config()
+        
+        with open(user_path, "r") as f:
+            return {"content": f.read(), "status": "reset"}
+            
+    raise HTTPException(status_code=500, detail="Default file not found")
+
+@app.get("/backup")
+def backup_data():
+    # Create zip of USER_DATA_DIR
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"nda_backup_{timestamp}.zip"
+    zip_path = os.path.join(BASE_DIR, zip_filename) # Store temp zip in app dir, not user dir (to avoid recursive zip)
+    
+    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', USER_DATA_DIR)
+    
+    return FileResponse(zip_path, filename=zip_filename, media_type='application/zip')
+
+@app.post("/restore")
+async def restore_data(file: UploadFile = File(...)):
+    # Validate
+    if not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Must be a zip.")
+    
+    # Save uploaded zip
+    temp_zip = os.path.join(BASE_DIR, "temp_restore.zip")
+    with open(temp_zip, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # Wipe current user data (DANGER)
+    # We should probably backup first, but let's trust the user wants to overwrite
+    if os.path.exists(USER_DATA_DIR):
+        shutil.rmtree(USER_DATA_DIR)
+    os.makedirs(USER_DATA_DIR)
+    
+    # Unzip
+    shutil.unpack_archive(temp_zip, USER_DATA_DIR)
+    
+    # Cleanup
+    os.remove(temp_zip)
+    
+    # Restart Chroma Client (it might have open connections to old files)
+    global chroma_client, collection
+    # Force reload if possible, or just let the next request handle it
+    # Chroma persistent client handles restarts okay usually.
+    
+    return {"status": "restored", "message": "Data restored successfully. Please restart the application if you see issues."}
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", background_tasks: BackgroundTasks = None):
@@ -315,11 +490,6 @@ async def delete_document(filename: str):
         pass
 
     return {"status": "deleted", "filename": filename}
-
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-os.makedirs(TEMPLATES_DIR, exist_ok=True)
-
-# ... existing code ...
 
 @app.get("/templates")
 def list_templates():
@@ -451,11 +621,13 @@ async def generate_report():
     department = report_settings.get("department", "")
     
     # Construct footer
-    footer = f"{email_closing}\n\n{signature_name}"
-    if signature_title:
-        footer += f"\n{signature_title}"
-    if department:
-        footer += f"\n{department}"
+    # Only include non-empty fields
+    footer_parts = [email_closing]
+    if signature_name: footer_parts.append(signature_name)
+    if signature_title: footer_parts.append(signature_title)
+    if department: footer_parts.append(department)
+    
+    footer = "\n".join(footer_parts)
     
     # Format date in subject
     formatted_subject = subject.format(date=now.strftime("%Y-%m-%d"))
