@@ -229,19 +229,24 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
-        const file = e.target.files[0];
-        const formData = new FormData();
-        formData.append("file", file);
         
-        try {
-            await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
-                method: "POST",
-                body: formData
-            });
-            refresh();
-        } catch (err) {
-            console.error(err);
+        const files = Array.from(e.target.files);
+        
+        for (const file of files) {
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            try {
+                await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                    method: "POST",
+                    body: formData
+                });
+            } catch (err) {
+                console.error(`Error uploading ${file.name}:`, err);
+            }
         }
+        
+        refresh();
     };
 
     const handleReprocess = async (filename: string) => {
@@ -300,6 +305,48 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         return matchesSearch && matchesArchive;
     });
 
+    const [isDragging, setIsDragging] = useState(false);
+
+    // ... existing handlers ...
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const files = Array.from(e.dataTransfer.files);
+            
+            for (const file of files) {
+                if (!file.name.toLowerCase().endsWith('.pdf') && !file.name.toLowerCase().endsWith('.docx')) {
+                    continue;
+                }
+
+                const formData = new FormData();
+                formData.append("file", file);
+                
+                try {
+                    await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                        method: "POST",
+                        body: formData
+                    });
+                } catch (err) {
+                    console.error(`Error uploading ${file.name}:`, err);
+                }
+            }
+            refresh();
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
     return (
         <div className="space-y-6 h-full flex flex-col">
             <h2 className="text-2xl font-bold flex justify-between items-center">
@@ -343,6 +390,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         ref={fileInputRef} 
                         className="hidden" 
                         accept=".pdf,.docx" 
+                        multiple
                         onChange={handleUpload}
                     />
                 </div>
@@ -350,7 +398,18 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
 
             <div className="flex-1 flex gap-6 min-h-0">
                 {/* Document List */}
-                <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-auto flex-1 ${previewDoc ? 'w-1/2' : 'w-full'}`}>
+                <div 
+                    className={`bg-white rounded-xl shadow-sm border overflow-auto flex-1 ${previewDoc ? 'w-1/2' : 'w-full'} ${isDragging ? 'border-blue-500 bg-blue-50 border-2 border-dashed' : 'border-gray-100'}`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                >
+                    {isDragging && (
+                        <div className="h-full flex items-center justify-center text-blue-500 font-medium text-lg">
+                            Drop files here to upload
+                        </div>
+                    )}
+                    {!isDragging && (
                     <table className="w-full text-left">
                         <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                             <tr>
@@ -428,6 +487,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             ))}
                         </tbody>
                     </table>
+                    )}
                 </div>
 
                 {/* PDF Preview Pane */}

@@ -51,10 +51,22 @@ function startPythonBackend() {
     ? path.join(__dirname, '../python/server.py')
     : path.join(process.resourcesPath, 'python/server.py');
 
+  // Get OS-specific user data path
+  // Windows: %APPDATA%/nda-tool-lite
+  // Linux: ~/.config/nda-tool-lite
+  // Mac: ~/Library/Application Support/nda-tool-lite
+  const userDataPath = app.getPath('userData');
+  console.log(`User Data Path: ${userDataPath}`);
+
   console.log(`Starting Python backend on port ${API_PORT}...`);
   
   pythonProcess = spawn(pythonExecutable, [scriptPath], {
-    env: { ...process.env, PORT: API_PORT.toString(), PYTHONUNBUFFERED: '1' },
+    env: { 
+        ...process.env, 
+        PORT: API_PORT.toString(), 
+        PYTHONUNBUFFERED: '1',
+        USER_DATA_DIR: userDataPath 
+    },
     stdio: 'pipe' 
   });
 

@@ -26,15 +26,22 @@ logger = logging.getLogger("nda-tool")
 # Load configuration
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
-DOCUMENTS_DIR = os.path.join(BASE_DIR, "documents")
-DB_DIR = os.path.join(BASE_DIR, "chroma_db")
+
+# Use USER_DATA_DIR from environment or fall back to local documents folder
+USER_DATA_DIR = os.environ.get("USER_DATA_DIR", os.path.join(BASE_DIR, "documents"))
+DOCUMENTS_DIR = os.path.join(USER_DATA_DIR, "documents")
+TEMPLATES_DIR = os.path.join(USER_DATA_DIR, "templates")
+DB_DIR = os.path.join(USER_DATA_DIR, "chroma_db")
 METADATA_FILE = os.path.join(DOCUMENTS_DIR, "metadata.json")
+
+# Ensure all directories exist
+os.makedirs(DOCUMENTS_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+os.makedirs(DB_DIR, exist_ok=True)
 
 # Load .env
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
-
-os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 
 try:
     with open(CONFIG_PATH, "r") as f:
