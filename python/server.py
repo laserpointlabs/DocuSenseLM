@@ -433,14 +433,29 @@ async def chat(request: ChatRequest):
     final_sources = list(retrieved_files) # Default to all if parsing fails
     if "SOURCES: [" in content:
         try:
-            parts = content.split("SOURCES: ")
-            answer_text = parts[0].strip()
-            sources_json = parts[1].strip()
-            # Clean up if there are extra characters after the JSON
-            if "]" in sources_json:
-                sources_json = sources_json[:sources_json.rfind("]")+1]
-            final_sources = json.loads(sources_json)
-        except:
+            # Split from the LAST occurrence of "SOURCES: [" to ensure we don't split on text content
+            # Using rsplit with maxsplit=1
+            parts = content.rsplit("SOURCES: [", 1)
+            if len(parts) == 2:
+                answer_text = parts[0].strip()
+                sources_json_str = "[" + parts[1].strip()
+                
+                # Clean up if there are extra characters after the JSON
+                if "]" in sources_json_str:
+                    # Find the closing bracket that matches our opening bracket
+                    # Simple naive approach: find the first ] after the start
+                    # Better: find the LAST ] if we assume the list is at the end
+                    
+                    # Actually, let's just try to find the last ] 
+                    end_index = sources_json_str.rfind("]")
+                    if end_index != -1:
+                        sources_json_str = sources_json_str[:end_index+1]
+                        
+                final_sources = json.loads(sources_json_str)
+            else:
+                answer_text = content
+        except Exception as e:
+            logger.error(f"Failed to parse sources from LLM response: {e}")
             answer_text = content
     else:
         answer_text = content
