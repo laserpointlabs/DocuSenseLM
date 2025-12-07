@@ -55,6 +55,9 @@ A new custom icon set was generated to replace the generic placeholder.
 - **Conflict Resolution**: 
   - **Action**: Accepted the state of the feature branch over `main`.
   - **Deleted**: Legacy microservices files (`docker-compose.yml`, `api/` folder) were removed to finalize the transition to the local Electron desktop architecture.
+- **Stale Branch Cleanup**:
+  - Deleted: `restart_pre_phase_work`, `feature/simple-electron-app`, `feature/nda-workflow-automation-system`, `feature/phase1-fix-nda-workflow`, `feature/phase5-enhanced-review`.
+  - Renamed: `restore-template-management-ui` → `historical/web_ui_version` (Preserved as legacy reference).
 
 ## 5. Verification
 - **Build**: Validated that `electron-builder` picks up the new name and icons.
