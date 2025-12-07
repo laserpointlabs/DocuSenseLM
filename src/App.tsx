@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const API_PORT = 14242;
 
@@ -626,26 +627,25 @@ function ChatView({ config, documents, onOpenDocument }: { config: Config | null
                                 }`}>
                                     {m.role === 'ai' ? 'AI' : 'Me'}
                                 </div>
-                                <div className={`rounded-lg p-3 text-sm whitespace-pre-wrap ${
-                                    m.role === 'ai' ? 'bg-gray-100' : 'bg-blue-600 text-white'
+                                <div className={`rounded-lg p-3 text-sm overflow-hidden ${
+                                    m.role === 'ai' ? 'bg-gray-100 prose prose-sm max-w-none' : 'bg-blue-600 text-white'
                                 }`}>
                                     {m.role === 'ai' ? (
-                                        <div className="prose prose-sm max-w-none">
-                                            <ReactMarkdown 
-                                                components={{
-                                                    p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-                                                    ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2" {...props} />,
-                                                    ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2" {...props} />,
-                                                    li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                                                    a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
-                                                    strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
-                                                }}
-                                            >
-                                                {m.content}
-                                            </ReactMarkdown>
-                                        </div>
+                                        <ReactMarkdown 
+                                            remarkPlugins={[remarkGfm]}
+                                            components={{
+                                                table: ({node, ...props}) => <table className="border-collapse table-auto w-full my-2" {...props} />,
+                                                th: ({node, ...props}) => <th className="border border-gray-300 px-2 py-1 bg-gray-200 font-semibold" {...props} />,
+                                                td: ({node, ...props}) => <td className="border border-gray-300 px-2 py-1" {...props} />,
+                                                ul: ({node, ...props}) => <ul className="list-disc pl-4 my-1" {...props} />,
+                                                ol: ({node, ...props}) => <ol className="list-decimal pl-4 my-1" {...props} />,
+                                                a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
+                                            }}
+                                        >
+                                            {m.content}
+                                        </ReactMarkdown>
                                     ) : (
-                                        m.content
+                                        <div className="whitespace-pre-wrap">{m.content}</div>
                                     )}
                                 </div>
                             </div>
