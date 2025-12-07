@@ -6,6 +6,11 @@ import { autoUpdater } from 'electron-updater';
 
 const isDev = !app.isPackaged;
 
+// Enable remote debugging for MCP server
+if (isDev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;
 const API_PORT = 14242;
