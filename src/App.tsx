@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 const API_PORT = 14242;
 
@@ -628,7 +629,24 @@ function ChatView({ config, documents, onOpenDocument }: { config: Config | null
                                 <div className={`rounded-lg p-3 text-sm whitespace-pre-wrap ${
                                     m.role === 'ai' ? 'bg-gray-100' : 'bg-blue-600 text-white'
                                 }`}>
-                                    {m.content}
+                                    {m.role === 'ai' ? (
+                                        <div className="prose prose-sm max-w-none">
+                                            <ReactMarkdown 
+                                                components={{
+                                                    p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                                                    ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2" {...props} />,
+                                                    ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2" {...props} />,
+                                                    li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                                                    a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
+                                                    strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                                                }}
+                                            >
+                                                {m.content}
+                                            </ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        m.content
+                                    )}
                                 </div>
                             </div>
                             {m.sources && m.sources.length > 0 && (

@@ -146,23 +146,38 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
     except Exception as e:
         logger.error(f"Indexing failed for {filename}: {e}")
 
+# Load prompts
+PROMPTS_PATH = os.path.join(BASE_DIR, "prompts.yaml")
+try:
+    with open(PROMPTS_PATH, "r") as f:
+        prompts_config = yaml.safe_load(f)
+except Exception as e:
+    logger.error(f"Failed to load prompts: {e}")
+    prompts_config = {}
+
+# ... existing code ...
+
     # 2. Run Competency Questions
     questions = config.get("document_types", {}).get(doc_type, {}).get("competency_questions", [])
     answers = {}
     
     if questions and openai_client.api_key:
-        prompt = f"Analyze the following document text and answer the questions.\n\nDocument Text:\n{text[:100000]}...\n\nQuestions:\n"
-        for q in questions:
-            prompt += f"- {q['id']}: {q['question']}\n"
+        system_prompt = prompts_config.get("prompts", {}).get("competency_extraction", {}).get("system", "You are a legal document assistant. Respond in JSON.")
+        user_prompt_template = prompts_config.get("prompts", {}).get("competency_extraction", {}).get("user", "Analyze the text:\n{document_text}\n\nQuestions:\n{questions_list}")
         
-        prompt += "\nProvide answers in JSON format with keys matching the question IDs."
+        questions_list_str = "\n".join([f"- {q['id']}: {q['question']}" for q in questions])
+        
+        user_prompt = user_prompt_template.format(
+            document_text=text[:100000],
+            questions_list=questions_list_str
+        )
         
         try:
             response = openai_client.chat.completions.create(
                 model=LLM_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a legal document assistant. Respond in JSON."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ],
                 response_format={"type": "json_object"}
             )
@@ -395,13 +410,20 @@ async def chat(request: ChatRequest):
     # 3. Call LLM
     current_date = datetime.datetime.now().strftime("%A, %B %d, %Y")
     
-    prompt = f"Current Date: {current_date}\n\nContext:\n{context_text}\n\nQuestion: {request.question}\n\nAnswer the question based on the context. Use the Current Date to calculate relative dates (e.g. 'in 30 days', 'expired last week'). At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: [\"file1.pdf\", \"file2.pdf\"]."
+    system_prompt = prompts_config.get("prompts", {}).get("chat", {}).get("system", "You are a helpful assistant.")
+    user_prompt_template = prompts_config.get("prompts", {}).get("chat", {}).get("user", "Context:\n{context_text}\n\nQuestion: {question}")
+    
+    user_prompt = user_prompt_template.format(
+        current_date=current_date,
+        context_text=context_text,
+        question=request.question
+    )
     
     response = openai_client.chat.completions.create(
         model=LLM_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful assistant. Use the provided context to answer. Be precise about sources. Always consider the Current Date for time-sensitive questions."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ]
     )
     
