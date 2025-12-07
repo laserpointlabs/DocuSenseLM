@@ -96,7 +96,7 @@ report:
 #    - id: "just_expired"
 #      title: "Expired in Last 30 Days"
 #      type: "expiring" 
-#      days: -30  # Negative days implies looking backwards (if supported) or you can repurpose status
+#      days: -30
 #
 # 2. Show all Active contracts:
 #    - id: "active_contracts"

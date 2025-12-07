@@ -245,8 +245,19 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
         title="Email Status Report"
       >
           <div className="flex flex-col gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg text-sm font-mono whitespace-pre-wrap border border-gray-200 select-all max-h-[60vh] overflow-y-auto">
-                  {report}
+              <div className="bg-gray-50 p-4 rounded-lg text-sm font-mono whitespace-pre-wrap border border-gray-200 select-all max-h-[60vh] overflow-y-auto prose prose-sm max-w-none">
+                  <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                          // Reduce vertical spacing in lists and paragraphs
+                          p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                          ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2" {...props} />,
+                          ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2" {...props} />,
+                          li: ({node, ...props}) => <li className="mb-0.5" {...props} />,
+                      }}
+                  >
+                      {report}
+                  </ReactMarkdown>
               </div>
               <div className="flex justify-end">
                   <button 

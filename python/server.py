@@ -399,10 +399,24 @@ async def generate_report():
                 exp_date = parse_date(exp_date_str)
                 if exp_date:
                     days_left = (exp_date - now).days
-                    if 0 <= days_left <= days:
+                    
+                    # Support negative days (e.g. -30 means expired in last 30 days)
+                    # Logic: 
+                    # If days > 0:  0 <= days_left <= days (Expiring Soon)
+                    # If days < 0:  days <= days_left < 0  (Recently Expired)
+                    
+                    is_match = False
+                    if days > 0:
+                        if 0 <= days_left <= days:
+                            is_match = True
+                    else:
+                        if days <= days_left < 0:
+                            is_match = True
+                            
+                    if is_match:
                         candidates.append((days_left, d, exp_date_str))
             
-            # Sort by soonest expiring
+            # Sort by soonest expiring (or most recently expired)
             candidates.sort(key=lambda x: x[0])
             for days_left, d, exp_date_str in candidates:
                 items.append(f"- {d['filename']} (Expires: {exp_date_str}, Days Left: {days_left})")
