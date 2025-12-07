@@ -1,6 +1,6 @@
-# NDA Tool Lite
+# DocuSenseLM
 
-A simple, local Electron desktop application for managing and analyzing NDAs and Agreements using GPT-4o.
+A simple, local Electron desktop application for managing and analyzing documents using GPT-4o.
 
 ## Features
 
@@ -43,6 +43,17 @@ A simple, local Electron desktop application for managing and analyzing NDAs and
    ```bash
    npm run electron:dev
    ```
+
+## Branding
+
+You can customize the application name and branding by setting environment variables in your `.env` file:
+
+```bash
+VITE_APP_TITLE="DocuSenseLM"
+APP_NAME="DocuSenseLM"
+```
+
+These variables control the window title, application name in the UI, and the name of the built application/installer.
 
 ## Configuration
 

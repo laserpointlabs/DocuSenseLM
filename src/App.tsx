@@ -23,6 +23,8 @@ interface DocumentData {
 
 import { LoadingScreen } from './components/LoadingScreen';
 
+const APP_TITLE = import.meta.env.VITE_APP_TITLE || "NDA Tool Lite";
+
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
   const [config, setConfig] = useState<Config | null>(null);
@@ -53,6 +55,8 @@ function App() {
 
     initApp();
 
+    document.title = APP_TITLE;
+
     const interval = setInterval(() => {
       if (!isLoading) fetchDocuments();
     }, 5000); 
@@ -82,7 +86,7 @@ function App() {
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 text-white flex flex-col p-4">
         <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-          <FileText className="text-blue-400" /> NDA Tool Lite
+          <FileText className="text-blue-400" /> {APP_TITLE}
         </h1>
         
         <nav className="flex-1 space-y-2">

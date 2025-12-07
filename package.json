@@ -1,5 +1,5 @@
 {
-  "name": "nda-tool-lite",
+  "name": "docusenselm",
   "version": "1.0.0",
   "description": "Simple desktop app for managing and interrogating NDAs/Agreements",
   "main": "dist-electron/main.js",
@@ -34,6 +34,7 @@
     "autoprefixer": "^10.4.18",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
+    "dotenv": "^17.2.3",
     "electron": "^29.1.0",
     "electron-builder": "^24.13.3",
     "electron-is-dev": "^3.0.1",
@@ -42,54 +43,5 @@
     "typescript": "^5.3.3",
     "vite": "^5.1.4",
     "wait-on": "^7.2.0"
-  },
-  "build": {
-    "appId": "com.ndatool.lite",
-    "productName": "NDA Tool Lite",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "dist-electron/**/*",
-      "dist/**/*",
-      "config.yaml"
-    ],
-    "extraResources": [
-      {
-        "from": "python/dist/server",
-        "to": "python/server"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.productivity",
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "publisherName": "NDA Tool Lite"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
-    },
-    "linux": {
-      "target": "AppImage",
-      "category": "Utility"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "jdehart",
-      "repo": "ndaTool"
-    }
   }
 }

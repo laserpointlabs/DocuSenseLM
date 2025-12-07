@@ -44,6 +44,7 @@ os.makedirs(DB_DIR, exist_ok=True)
 # Load .env
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+APP_NAME = os.environ.get("APP_NAME", "NDA Tool")
 
 # Load prompts
 def load_prompts_config():
@@ -111,7 +112,7 @@ collection = chroma_client.get_or_create_collection(
 )
 
 # Initialize FastAPI
-app = FastAPI(title="NDA Tool API")
+app = FastAPI(title=f"{APP_NAME} API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -122,7 +123,7 @@ app.add_middleware(
 )
 
 # Initialize MCP
-mcp = FastMCP("NDA Tool")
+mcp = FastMCP(APP_NAME)
 
 # --- Helpers ---
 
