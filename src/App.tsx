@@ -915,6 +915,12 @@ function SettingsView() {
         fetchFileContent(selectedFile);
     }, [selectedFile]);
 
+    useEffect(() => {
+        if (isEditorOpen && textareaRef.current) {
+            fetchFileContent(selectedFile);
+        }
+    }, [isEditorOpen]);
+
     const fetchFileContent = async (filename: string) => {
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/${filename}`);
