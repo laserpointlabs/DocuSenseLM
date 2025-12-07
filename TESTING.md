@@ -8,69 +8,58 @@ This guide covers how to run both manual and automated tests for the NDA Tool Li
 - Python 3.12+
 - `venv` setup and dependencies installed (see `README.md` or `BUILDing.md`)
 
-## Automated E2E Tests
+## Automated CI Test Suite
 
-We have created an automated end-to-end test suite that verifies the core API functionality (which drives the frontend).
+We have a comprehensive CI script that runs both functional end-to-end tests and LLM efficacy tests.
 
-### Setup
+### Running All Tests
 
-1. Activate the Python virtual environment:
-   ```bash
-   source python/venv/bin/activate
-   ```
+Simply run the CI runner script:
 
-2. Install test dependencies:
-   ```bash
-   pip install pytest requests
-   ```
+```bash
+chmod +x run_ci_tests.sh
+./run_ci_tests.sh
+```
 
-### Running the Tests
+This script will:
+1.  Start the backend server (if not running).
+2.  Run `tests/test_lite_e2e.py` (Functional API Tests).
+3.  Run `tests/test_llm_efficacy.py` (LLM Accuracy Tests).
+4.  Clean up the server process.
 
-1. Start the backend server in one terminal:
-   ```bash
-   # Use port 14242 as expected by the tests
-   source python/venv/bin/activate
-   export PORT=14242
-   python python/server.py
-   ```
+### Test Descriptions
 
-2. Run the tests in another terminal:
-   ```bash
-   source python/venv/bin/activate
-   python -m pytest tests/test_lite_e2e.py
-   ```
+*   **Functional E2E Tests (`tests/test_lite_e2e.py`)**:
+    *   Verifies API health, configuration, file upload/delete, and basic processing flows.
+    *   Ensures the application mechanics work correctly.
 
-### What is Tested
-
-The `tests/test_lite_e2e.py` script covers:
-- Backend Health Check
-- Configuration loading
-- Document Upload (NDA type)
-- Document Processing (RAG indexing)
-- Chat functionality (RAG retrieval)
-- Status Report Generation (LLM integration)
-- Document Reprocessing
-- Document Deletion
+*   **LLM Efficacy Tests (`tests/test_llm_efficacy.py`)**:
+    *   **Competency Extraction**: Verifies correct extraction of expiration dates and parties.
+    *   **RAG Retrieval**: Ensures the correct document is cited for relevant queries.
+    *   **Response Quality**: Checks if the LLM answers specific questions correctly (e.g., termination terms).
+    *   **Hallucination Check**: Verifies the LLM refuses to answer questions about non-existent information.
+    *   **Report Generation**: Checks structure and content inclusion in generated reports.
 
 ## Manual UI Testing
 
 To test the User Interface manually:
 
-1. Start the backend (as above).
+1. Start the backend:
+   ```bash
+   source python/venv/bin/activate
+   export PORT=14242
+   python python/server.py
+   ```
 2. Start the frontend:
    ```bash
    npm run dev
    ```
-3. Open `http://localhost:5173` in your browser.
+3. Open `http://localhost:5173`.
 
-### Test Scenarios
+### Key Scenarios
 
-1. **Dashboard Load**: Verify the dashboard shows "System Ready" and correct counts.
-2. **Upload**: Go to "Documents", upload a PDF/DOCX. Verify it appears in the list.
-3. **Processing**: Wait for status to change from "pending" to "processed".
-4. **Preview**: Click "View" (Eye icon) to see the PDF preview and extracted metadata.
-5. **Chat**: Go to "Chat & Ask", ask a question about the document (e.g., "What is the expiration date?").
-6. **Reprocess**: In "Documents", click the Refresh icon to re-run indexing/extraction.
-7. **Report**: In "Dashboard", click "Generate Status Report" and verify the email draft appears.
-8. **Delete**: In "Documents", delete the file and verify it disappears.
-
+1. **Dashboard Load**: Verify "System Ready".
+2. **Upload**: Upload `green_nda.pdf`.
+3. **Processing**: Wait for "processed" status.
+4. **Chat**: Ask "What is the termination clause?".
+5. **Report**: Click "Generate Status Report".

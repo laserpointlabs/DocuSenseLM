@@ -17,6 +17,7 @@ from fastmcp import FastMCP
 from pypdf import PdfReader
 from openai import OpenAI
 from dotenv import load_dotenv
+from platformdirs import user_config_dir
 import chromadb
 from chromadb.utils import embedding_functions
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -29,8 +30,11 @@ logger = logging.getLogger("nda-tool")
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 
-# Use USER_DATA_DIR from environment or fall back to local documents folder
-USER_DATA_DIR = os.environ.get("USER_DATA_DIR", os.path.join(BASE_DIR, "documents"))
+# Use USER_DATA_DIR from environment or fall back to platform-specific config dir
+# e.g. ~/.config/docusenselm on Linux
+default_user_data = user_config_dir("docusenselm", appauthor=False)
+USER_DATA_DIR = os.environ.get("USER_DATA_DIR", default_user_data)
+
 DOCUMENTS_DIR = os.path.join(USER_DATA_DIR, "documents")
 TEMPLATES_DIR = os.path.join(USER_DATA_DIR, "templates")
 DB_DIR = os.path.join(USER_DATA_DIR, "chroma_db")
