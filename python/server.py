@@ -8,12 +8,16 @@ import shutil
 import datetime
 from typing import List, Dict, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastmcp import FastMCP
 from pypdf import PdfReader
 from openai import OpenAI
 from dotenv import load_dotenv
+import chromadb
+from chromadb.utils import embedding_functions
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +27,7 @@ logger = logging.getLogger("nda-tool")
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 DOCUMENTS_DIR = os.path.join(BASE_DIR, "documents")
+DB_DIR = os.path.join(BASE_DIR, "chroma_db")
 METADATA_FILE = os.path.join(DOCUMENTS_DIR, "metadata.json")
 
 # Load .env
@@ -38,8 +43,18 @@ except Exception as e:
     config = {"document_types": {}, "dashboard": {}}
 
 # Initialize OpenAI
-# Note: In a real app, we might want to pass this from the frontend or config
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# Initialize ChromaDB
+chroma_client = chromadb.PersistentClient(path=DB_DIR)
+openai_ef = embedding_functions.OpenAIEmbeddingFunction(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    model_name="text-embedding-3-small"
+)
+collection = chroma_client.get_or_create_collection(
+    name="nda_documents",
+    embedding_function=openai_ef
+)
 
 # Initialize FastAPI
 app = FastAPI(title="NDA Tool API")
@@ -81,16 +96,54 @@ def extract_text_from_pdf(filepath):
         logger.error(f"Error extracting text from {filepath}: {e}")
         return ""
 
+def index_document(filename: str, text: str):
+    # Split text
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len,
+    )
+    chunks = text_splitter.split_text(text)
+    
+    # Prepare for Chroma
+    ids = [f"{filename}_chunk_{i}" for i in range(len(chunks))]
+    metadatas = [{"filename": filename, "chunk_index": i} for i in range(len(chunks))]
+    
+    # Delete existing chunks for this file to avoid duplication
+    try:
+        collection.delete(where={"filename": filename})
+    except:
+        pass # Might not exist
+    
+    # Upsert
+    if chunks:
+        collection.upsert(
+            documents=chunks,
+            ids=ids,
+            metadatas=metadatas
+        )
+    logger.info(f"Indexed {len(chunks)} chunks for {filename}")
+
 async def process_document_background(filename: str, filepath: str, doc_type: str):
     logger.info(f"Processing {filename}...")
     text = extract_text_from_pdf(filepath)
     
-    # Run competency questions using LLM
+    if not text:
+        logger.warning(f"No text extracted from {filename}")
+        return
+
+    # 1. Index into Vector Store
+    try:
+        index_document(filename, text)
+    except Exception as e:
+        logger.error(f"Indexing failed for {filename}: {e}")
+
+    # 2. Run Competency Questions
     questions = config.get("document_types", {}).get(doc_type, {}).get("competency_questions", [])
     answers = {}
     
-    if questions and text and openai_client.api_key:
-        prompt = f"Analyze the following document text and answer the questions.\n\nDocument Text:\n{text[:20000]}...\n\nQuestions:\n"
+    if questions and openai_client.api_key:
+        prompt = f"Analyze the following document text and answer the questions.\n\nDocument Text:\n{text[:100000]}...\n\nQuestions:\n"
         for q in questions:
             prompt += f"- {q['id']}: {q['question']}\n"
         
@@ -114,7 +167,6 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
     metadata = load_metadata()
     if filename in metadata:
         metadata[filename]["status"] = "processed"
-        metadata[filename]["text_preview"] = text[:200]
         metadata[filename]["competency_answers"] = answers
         save_metadata(metadata)
     
@@ -124,13 +176,12 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
 
 class ChatRequest(BaseModel):
     question: str
-    context_files: List[str] = []
 
 # --- Endpoints ---
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.0.1", "rag": "enabled"}
 
 @app.get("/config")
 def get_config():
@@ -140,14 +191,23 @@ def get_config():
 def list_documents():
     return load_metadata()
 
+@app.get("/files/{filename}")
+async def get_file(filename: str):
+    file_path = os.path.join(DOCUMENTS_DIR, filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    raise HTTPException(status_code=404, detail="File not found")
+
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", background_tasks: BackgroundTasks = None):
     filename = file.filename
     filepath = os.path.join(DOCUMENTS_DIR, filename)
     
+    # Save file
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
+    # Init metadata
     metadata = load_metadata()
     metadata[filename] = {
         "filename": filename,
@@ -158,38 +218,70 @@ async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", b
     }
     save_metadata(metadata)
     
+    # Process
     background_tasks.add_task(process_document_background, filename, filepath, doc_type)
     
     return {"status": "uploaded", "filename": filename}
+
+@app.post("/reprocess/{filename}")
+async def reprocess_document(filename: str, background_tasks: BackgroundTasks):
+    filepath = os.path.join(DOCUMENTS_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    metadata = load_metadata()
+    if filename not in metadata:
+        raise HTTPException(status_code=404, detail="Metadata not found")
+    
+    # Update status
+    metadata[filename]["status"] = "reprocessing"
+    save_metadata(metadata)
+    
+    # Re-run processing
+    doc_type = metadata[filename].get("doc_type", "nda")
+    background_tasks.add_task(process_document_background, filename, filepath, doc_type)
+    
+    return {"status": "reprocessing_started", "filename": filename}
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
     if not openai_client.api_key:
         raise HTTPException(status_code=500, detail="OpenAI API Key not configured")
 
-    context = ""
-    # Naive context loading: load text of all selected files
-    # In a real app with "hundreds" of docs, we need a vector store (e.g. Chroma/FAISS) or better selection.
-    # For now, we'll limit to the first few or rely on specific selection.
+    # 1. Retrieve relevant chunks from Chroma
+    results = collection.query(
+        query_texts=[request.question],
+        n_results=10
+    )
     
-    metadata = load_metadata()
-    for filename in request.context_files:
-        filepath = os.path.join(DOCUMENTS_DIR, filename)
-        if os.path.exists(filepath):
-            text = extract_text_from_pdf(filepath)
-            context += f"--- Document: {filename} ---\n{text[:10000]}\n\n" # Truncate for token limits
-            
-    prompt = f"Context:\n{context}\n\nQuestion: {request.question}"
+    # 2. Build Context
+    context_text = ""
+    retrieved_files = set()
+    
+    if results['documents']:
+        for i, doc in enumerate(results['documents'][0]):
+            meta = results['metadatas'][0][i]
+            filename = meta.get('filename', 'unknown')
+            retrieved_files.add(filename)
+            context_text += f"--- Excerpt from {filename} ---\n{doc}\n\n"
+    
+    logger.info(f"RAG retrieved context from: {retrieved_files}")
+
+    # 3. Call LLM
+    prompt = f"Context:\n{context_text}\n\nQuestion: {request.question}"
     
     response = openai_client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant for analyzing legal documents."},
+            {"role": "system", "content": "You are a helpful assistant for analyzing legal documents. Use the provided context to answer the user's question. Cite the document filename if possible."},
             {"role": "user", "content": prompt}
         ]
     )
     
-    return {"answer": response.choices[0].message.content}
+    return {
+        "answer": response.choices[0].message.content,
+        "sources": list(retrieved_files)
+    }
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

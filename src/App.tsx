@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search } from 'lucide-react';
+import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw } from 'lucide-react';
 
 const API_PORT = 14242;
 
@@ -24,7 +24,7 @@ function App() {
   useEffect(() => {
     fetchConfig();
     fetchDocuments();
-    const interval = setInterval(fetchDocuments, 5000); // Poll for updates
+    const interval = setInterval(fetchDocuments, 5000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -80,7 +80,7 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 relative">
         {activeTab === 'dashboard' && <DashboardView config={config} documents={documents} />}
         {activeTab === 'documents' && <DocumentsView config={config} documents={documents} refresh={fetchDocuments} />}
         {activeTab === 'chat' && <ChatView config={config} documents={documents} />}
@@ -109,8 +109,6 @@ function DashboardView({ config, documents }: { config: Config | null, documents
   const docList = Object.values(documents);
 
   const getExpiringCount = (type: string, days: number) => {
-    // Basic logic: parse expiration date from competency answers and compare
-    // This is naive and depends on LLM format "YYYY-MM-DD"
     return docList.filter(d => {
         if (d.doc_type !== type) return false;
         const exp = d.competency_answers?.expiration_date;
@@ -144,19 +142,6 @@ function DashboardView({ config, documents }: { config: Config | null, documents
           </div>
         )})}
       </div>
-      
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="text-lg font-semibold mb-4">Recent Documents</h3>
-        <ul className="divide-y divide-gray-100">
-            {docList.slice(0, 5).map(doc => (
-                <li key={doc.filename} className="py-3 flex justify-between">
-                    <span>{doc.filename}</span>
-                    <span className="text-gray-500 text-sm">{doc.status}</span>
-                </li>
-            ))}
-            {docList.length === 0 && <li className="text-gray-500 italic">No documents yet.</li>}
-        </ul>
-      </div>
     </div>
   );
 }
@@ -164,6 +149,8 @@ function DashboardView({ config, documents }: { config: Config | null, documents
 function DocumentsView({ config, documents, refresh }: { config: Config | null, documents: Record<string, DocumentData>, refresh: () => void }) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedType, setSelectedType] = useState("nda");
+    const [previewDoc, setPreviewDoc] = useState<string | null>(null);
+    const [reprocessing, setReprocessing] = useState(false);
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
@@ -182,8 +169,25 @@ function DocumentsView({ config, documents, refresh }: { config: Config | null, 
         }
     };
 
+    const handleReprocess = async (filename: string) => {
+        if (!confirm(`Are you sure you want to re-process ${filename}? This will re-index it and run competency questions again.`)) return;
+        
+        setReprocessing(true);
+        try {
+            await fetch(`http://localhost:${API_PORT}/reprocess/${filename}`, {
+                method: "POST"
+            });
+            refresh();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to start reprocessing");
+        } finally {
+            setReprocessing(false);
+        }
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 h-full flex flex-col">
             <h2 className="text-2xl font-bold flex justify-between items-center">
                 <span>Documents</span>
                 <div className="flex gap-2">
@@ -212,63 +216,101 @@ function DocumentsView({ config, documents, refresh }: { config: Config | null, 
                 </div>
             </h2>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                            <th className="p-4 font-semibold text-gray-600">Document Name</th>
-                            <th className="p-4 font-semibold text-gray-600">Type</th>
-                            <th className="p-4 font-semibold text-gray-600">Status</th>
-                            <th className="p-4 font-semibold text-gray-600">Key Info (Competency)</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {Object.values(documents).map(doc => (
-                            <tr key={doc.filename} className="hover:bg-gray-50">
-                                <td className="p-4">{doc.filename}</td>
-                                <td className="p-4 capitalize">{doc.doc_type.replace('_', ' ')}</td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 rounded-full text-xs ${
-                                        doc.status === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                    }`}>
-                                        {doc.status}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-sm text-gray-600">
-                                    {doc.status === 'processed' ? (
-                                        <ul className="list-disc pl-4 space-y-1">
-                                            {Object.entries(doc.competency_answers || {}).slice(0, 3).map(([k, v]) => (
-                                                <li key={k} title={String(v)} className="truncate max-w-xs">
-                                                    <span className="font-medium">{k}:</span> {String(v)}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <span className="italic">Analyzing...</span>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                        {Object.keys(documents).length === 0 && (
+            <div className="flex-1 flex gap-6 min-h-0">
+                {/* Document List */}
+                <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-auto flex-1 ${previewDoc ? 'w-1/2' : 'w-full'}`}>
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                             <tr>
-                                <td className="p-8 text-center text-gray-500" colSpan={4}>
-                                    No documents found.
-                                </td>
+                                <th className="p-4 font-semibold text-gray-600">Document Name</th>
+                                <th className="p-4 font-semibold text-gray-600">Type</th>
+                                <th className="p-4 font-semibold text-gray-600">Status</th>
+                                <th className="p-4 font-semibold text-gray-600">Actions</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {Object.values(documents).map(doc => (
+                                <tr key={doc.filename} className="hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewDoc(doc.filename)}>
+                                    <td className="p-4 font-medium">{doc.filename}</td>
+                                    <td className="p-4 capitalize text-sm">{doc.doc_type.replace('_', ' ')}</td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1 rounded-full text-xs ${
+                                            doc.status === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                        }`}>
+                                            {doc.status}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 flex gap-2">
+                                        <button 
+                                            className="p-1 hover:bg-gray-200 rounded text-blue-600"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPreviewDoc(doc.filename);
+                                            }}
+                                            title="View"
+                                        >
+                                            <Eye size={18} />
+                                        </button>
+                                        <button 
+                                            className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-blue-600"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleReprocess(doc.filename);
+                                            }}
+                                            disabled={reprocessing}
+                                            title="Reprocess & Re-index"
+                                        >
+                                            <RefreshCw size={18} className={reprocessing ? "animate-spin" : ""} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* PDF Preview Pane */}
+                {previewDoc && (
+                    <div className="w-1/2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+                        <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="font-semibold truncate" title={previewDoc}>{previewDoc}</h3>
+                            <button onClick={() => setPreviewDoc(null)} className="text-gray-500 hover:text-red-500">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="flex-1 bg-gray-200 relative">
+                             <iframe 
+                                src={`http://localhost:${API_PORT}/files/${previewDoc}`} 
+                                className="w-full h-full border-none" 
+                                title="Document Preview"
+                             />
+                        </div>
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 text-sm overflow-auto max-h-48">
+                            <h4 className="font-bold text-gray-700 mb-2">Extracted Data</h4>
+                            {documents[previewDoc]?.competency_answers ? (
+                                <ul className="space-y-1">
+                                    {Object.entries(documents[previewDoc].competency_answers).map(([k, v]) => (
+                                        <li key={k}>
+                                            <span className="font-medium text-gray-800">{k}:</span> <span className="text-gray-600">{String(v)}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-gray-500 italic">No data extracted yet.</p>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )
 }
 
 function ChatView({ config, documents }: { config: Config | null, documents: Record<string, DocumentData> }) {
-    const [messages, setMessages] = useState<{role: 'user'|'ai', content: string}[]>([
-        {role: 'ai', content: 'Hello! I can help you analyze your documents. Select documents below to include them in context.'}
+    const [messages, setMessages] = useState<{role: 'user'|'ai', content: string, sources?: string[]}[]>([
+        {role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}
     ]);
     const [input, setInput] = useState('');
-    const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -291,12 +333,15 @@ function ChatView({ config, documents }: { config: Config | null, documents: Rec
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    question: userMsg,
-                    context_files: selectedDocs
+                    question: userMsg
                 })
             });
             const data = await res.json();
-            setMessages(prev => [...prev, {role: 'ai', content: data.answer || "Sorry, I couldn't get an answer."}]);
+            setMessages(prev => [...prev, {
+                role: 'ai', 
+                content: data.answer || "Sorry, I couldn't get an answer.",
+                sources: data.sources
+            }]);
         } catch (err) {
             setMessages(prev => [...prev, {role: 'ai', content: "Error communicating with server."}]);
         } finally {
@@ -307,24 +352,31 @@ function ChatView({ config, documents }: { config: Config | null, documents: Rec
     return (
         <div className="h-[calc(100vh-4rem)] flex gap-6">
             <div className="flex-1 flex flex-col">
-                <h2 className="text-2xl font-bold mb-4">Chat</h2>
+                <h2 className="text-2xl font-bold mb-4">Chat with Documents</h2>
                 
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 mb-4 p-4 overflow-auto flex flex-col gap-4">
                     {messages.map((m, i) => (
-                        <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                                m.role === 'ai' ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-600'
-                            }`}>
-                                {m.role === 'ai' ? 'AI' : 'Me'}
+                        <div key={i} className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                            <div className={`flex gap-3 max-w-[80%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                    m.role === 'ai' ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-600'
+                                }`}>
+                                    {m.role === 'ai' ? 'AI' : 'Me'}
+                                </div>
+                                <div className={`rounded-lg p-3 text-sm whitespace-pre-wrap ${
+                                    m.role === 'ai' ? 'bg-gray-100' : 'bg-blue-600 text-white'
+                                }`}>
+                                    {m.content}
+                                </div>
                             </div>
-                            <div className={`rounded-lg p-3 max-w-[80%] text-sm whitespace-pre-wrap ${
-                                m.role === 'ai' ? 'bg-gray-100' : 'bg-blue-600 text-white'
-                            }`}>
-                                {m.content}
-                            </div>
+                            {m.sources && m.sources.length > 0 && (
+                                <div className="text-xs text-gray-400 ml-11">
+                                    Sources: {m.sources.join(', ')}
+                                </div>
+                            )}
                         </div>
                     ))}
-                    {loading && <div className="text-sm text-gray-500 italic">AI is thinking...</div>}
+                    {loading && <div className="text-sm text-gray-500 italic ml-11">AI is thinking...</div>}
                     <div ref={messagesEndRef} />
                 </div>
 
@@ -334,7 +386,7 @@ function ChatView({ config, documents }: { config: Config | null, documents: Rec
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSend()}
-                        placeholder="Ask a question..." 
+                        placeholder="Ask a question across all documents..." 
                         className="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button 
@@ -344,33 +396,6 @@ function ChatView({ config, documents }: { config: Config | null, documents: Rec
                     >
                         Send
                     </button>
-                </div>
-            </div>
-
-            {/* Document Context Selector */}
-            <div className="w-72 bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <Search size={16} /> Context
-                </h3>
-                <div className="flex-1 overflow-auto space-y-2">
-                    {Object.values(documents).map(doc => (
-                        <label key={doc.filename} className="flex items-start gap-2 text-sm p-2 hover:bg-gray-50 rounded cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                checked={selectedDocs.includes(doc.filename)}
-                                onChange={e => {
-                                    if (e.target.checked) setSelectedDocs(prev => [...prev, doc.filename]);
-                                    else setSelectedDocs(prev => prev.filter(f => f !== doc.filename));
-                                }}
-                                className="mt-1"
-                            />
-                            <div className="break-all">
-                                <div className="font-medium">{doc.filename}</div>
-                                <div className="text-xs text-gray-500">{doc.doc_type}</div>
-                            </div>
-                        </label>
-                    ))}
-                    {Object.keys(documents).length === 0 && <div className="text-gray-500 text-sm italic">No documents available.</div>}
                 </div>
             </div>
         </div>

@@ -7,3 +7,5 @@ fastapi
 python-multipart
 watchdog
 python-dotenv
+chromadb
+langchain-text-splitters
