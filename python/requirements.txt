@@ -1,0 +1,12 @@
+fastmcp
+openai
+pypdf
+pyyaml
+uvicorn
+fastapi
+python-multipart
+watchdog
+python-dotenv
+chromadb
+langchain-text-splitters
+pyinstaller
