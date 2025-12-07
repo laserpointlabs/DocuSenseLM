@@ -1,0 +1,64 @@
+INFO:chromadb.telemetry.product.posthog:Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+/home/jdehart/Working/ndaTool/python/venv/lib/python3.12/site-packages/chromadb/utils/embedding_functions/openai_embedding_function.py:54: DeprecationWarning: Direct api_key configuration will not be persisted. Please use environment variables via api_key_env_var for persistent storage.
+  warnings.warn(
+/home/jdehart/Working/ndaTool/python/venv/lib/python3.12/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+  warnings.warn(  # deprecated in 14.0 - 2024-11-09
+/home/jdehart/Working/ndaTool/python/venv/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+  from websockets.server import WebSocketServerProtocol
+INFO:     Started server process [1898773]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:14242 (Press CTRL+C to quit)
+INFO:     127.0.0.1:40818 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40826 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40836 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40840 - "GET /config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40844 - "POST /upload?doc_type=nda HTTP/1.1" 200 OK
+INFO:nda-tool:Processing green_nda.pdf...
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:Indexed 9 chunks for green_nda.pdf
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:nda-tool:Finished processing green_nda.pdf
+INFO:     127.0.0.1:40408 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40412 - "GET /documents HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:RAG retrieved context from: {'Boston Green Company, Inc._Signed NDA_Expires Oct. 2028.pdf', 'Delva Tool & Machine, LLC_Signed NDA_Expires Sept. 2025.pdf', 'Central Coating Technologies, Inc._Signed NDA_Expires Sept. 2028.pdf', 'Delva Tool & Machine, LLC_SIGNED NDA_Expires Aug. 2028.pdf', 'Fanuc America Corporation_Signed NDA_Expires June 2028.pdf', 'Delva Tool & Machine, LLC_Signed NDA_Expires Jan. 2026.pdf', 'green_nda.pdf'}
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:40416 - "POST /chat HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:40424 - "POST /report HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40434 - "POST /reprocess/green_nda.pdf HTTP/1.1" 200 OK
+INFO:nda-tool:Processing green_nda.pdf...
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:Indexed 9 chunks for green_nda.pdf
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:nda-tool:Finished processing green_nda.pdf
+INFO:     127.0.0.1:49338 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49352 - "DELETE /documents/green_nda.pdf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49368 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49372 - "DELETE /documents/green_nda.pdf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49382 - "POST /upload?doc_type=nda HTTP/1.1" 200 OK
+INFO:nda-tool:Processing green_nda.pdf...
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:Indexed 9 chunks for green_nda.pdf
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:nda-tool:Finished processing green_nda.pdf
+INFO:     127.0.0.1:49390 - "GET /documents HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:RAG retrieved context from: {'Boston Green Company, Inc._Signed NDA_Expires Oct. 2028.pdf', 'Central Coating Technologies, Inc._Signed NDA_Expires Sept. 2028.pdf', 'Delva Tool & Machine, LLC_SIGNED NDA_Expires Aug. 2028.pdf', 'Fanuc America Corporation_Signed NDA_Expires June 2028.pdf', 'green_nda.pdf'}
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:49398 - "POST /chat HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:RAG retrieved context from: {'Delva Tool & Machine, LLC_Signed NDA_Expires Sept. 2025.pdf', 'Boston Green Company, Inc._Signed NDA_Expires Oct. 2028.pdf', 'Central Coating Technologies, Inc._Signed NDA_Expires Sept. 2028.pdf', 'Delva Tool & Machine, LLC_SIGNED NDA_Expires Aug. 2028.pdf', 'Fanuc America Corporation_Signed NDA_Expires June 2028.pdf', 'Delva Tool & Machine, LLC_Signed NDA_Expires Jan. 2026.pdf', 'green_nda.pdf'}
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:49400 - "POST /chat HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+INFO:nda-tool:RAG retrieved context from: {'Boston Green Company, Inc._Signed NDA_Expires Oct. 2028.pdf', 'Delva Tool & Machine, LLC_Signed NDA_Expires Sept. 2025.pdf', 'Central Coating Technologies, Inc._Signed NDA_Expires Sept. 2028.pdf', 'Delva Tool & Machine, LLC_SIGNED NDA_Expires Aug. 2028.pdf', 'Fanuc America Corporation_Signed NDA_Expires June 2028.pdf', 'Delva Tool & Machine, LLC_Signed NDA_Expires Jan. 2026.pdf', 'green_nda.pdf'}
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:32902 - "POST /chat HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:32908 - "POST /report HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1898773]

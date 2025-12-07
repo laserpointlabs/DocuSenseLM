@@ -1,0 +1,53 @@
+/home/jdehart/Working/ndaTool/
+  - build/
+    - entitlements.mac.plist
+    - icon.icns
+    - icon.ico
+    - icon.png
+  - config.default.yaml
+  - data/
+    - green_nda.pdf
+    - ... (other test docs)
+  - dist/
+    - ... (build artifacts)
+  - dist-electron/
+    - ... (electron build artifacts)
+  - docs/
+    - REBRANDING_LOG.md
+  - electron/
+    - main.ts
+    - preload.ts
+  - electron-builder.config.js
+  - index.html
+  - node_modules/
+  - package-lock.json
+  - package.json
+  - postcss.config.js
+  - prompts.default.yaml
+  - public/
+    - icon.png
+  - python/
+    - build/
+    - dist/
+    - hook-diskcache.py
+    - requirements.txt
+    - server.py
+    - server.spec
+    - venv/
+  - README.md
+  - run_ci_tests.sh
+  - src/
+    - App.tsx
+    - components/
+    - index.css
+    - main.tsx
+  - tailwind.config.js
+  - templates/
+    - NDA_Template_2024.docx
+  - TESTING.md
+  - tests/
+    - test_lite_e2e.py
+    - test_llm_efficacy.py
+  - tsconfig.electron.json
+  - tsconfig.json
+  - vite.config.ts

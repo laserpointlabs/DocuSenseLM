@@ -21,6 +21,7 @@ EXPECTED_FACTS = {
 @pytest.fixture(scope="module")
 def setup_document():
     """Uploads the document and waits for processing to complete."""
+    # Cleanup specific file to ensure fresh upload state
     requests.delete(f"{API_URL}/documents/{FILENAME}")
     
     with open(TEST_FILE, "rb") as f:
@@ -54,14 +55,15 @@ def test_competency_extraction_accuracy(setup_document):
     assert found_party, f"Could not find expected parties {EXPECTED_FACTS['parties']} in extracted metadata"
 
 def test_rag_retrieval_efficacy(setup_document):
-    query = "What is the termination clause?"
+    # Use specific query to target this document in a potentially shared vector DB
+    query = "What is the termination clause in the Green NDA?"
     res = requests.post(f"{API_URL}/chat", json={"question": query})
     data = res.json()
     sources = data.get("sources", [])
     assert FILENAME in sources, f"RAG failed to cite {FILENAME} as a source."
 
 def test_chat_response_quality(setup_document):
-    query = "How long is the term of the agreement?"
+    query = "How long is the term of the Green NDA?"
     res = requests.post(f"{API_URL}/chat", json={"question": query})
     data = res.json()
     answer = data.get("answer", "").lower()
@@ -74,7 +76,7 @@ def test_chat_response_quality(setup_document):
         "LLM failed to answer with the correct term duration (expected '3 years')"
 
 def test_hallucination_check(setup_document):
-    query = "What is the specific budget for the 'Project Mars' initiative?"
+    query = "What is the specific budget for the 'Project Mars' initiative in the Green NDA?"
     res = requests.post(f"{API_URL}/chat", json={"question": query})
     data = res.json()
     answer = data.get("answer", "").lower()
