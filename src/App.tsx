@@ -487,9 +487,12 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
 }
 
 function ChatView({ config, documents, onOpenDocument }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void }) {
-    const [messages, setMessages] = useState<{role: 'user'|'ai', content: string, sources?: string[]}[]>([
-        {role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}
-    ]);
+    const [messages, setMessages] = useState<{role: 'user'|'ai', content: string, sources?: string[]}[]>(() => {
+        const saved = localStorage.getItem('nda_chat_history');
+        return saved ? JSON.parse(saved) : [
+            {role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}
+        ];
+    });
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -499,6 +502,16 @@ function ChatView({ config, documents, onOpenDocument }: { config: Config | null
     };
 
     useEffect(scrollToBottom, [messages]);
+
+    useEffect(() => {
+        localStorage.setItem('nda_chat_history', JSON.stringify(messages));
+    }, [messages]);
+
+    const handleClear = () => {
+        if (confirm("Clear chat history?")) {
+            setMessages([{role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}]);
+        }
+    };
 
     const handleSend = async () => {
         if (!input.trim()) return;
@@ -532,7 +545,16 @@ function ChatView({ config, documents, onOpenDocument }: { config: Config | null
     return (
         <div className="h-[calc(100vh-4rem)] flex gap-6">
             <div className="flex-1 flex flex-col">
-                <h2 className="text-2xl font-bold mb-4">Chat with Documents</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold">Chat with Documents</h2>
+                    <button 
+                        onClick={handleClear} 
+                        className="text-gray-500 hover:text-red-600 p-2 rounded hover:bg-gray-100"
+                        title="Clear Chat"
+                    >
+                        <Trash2 size={20} />
+                    </button>
+                </div>
                 
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 mb-4 p-4 overflow-auto flex flex-col gap-4">
                     {messages.map((m, i) => (
