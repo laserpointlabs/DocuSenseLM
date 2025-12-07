@@ -353,19 +353,37 @@ async def chat(request: ChatRequest):
     logger.info(f"RAG retrieved context from: {retrieved_files}")
 
     # 3. Call LLM
-    prompt = f"Context:\n{context_text}\n\nQuestion: {request.question}"
+    prompt = f"Context:\n{context_text}\n\nQuestion: {request.question}\n\nAnswer the question based on the context. At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: [\"file1.pdf\", \"file2.pdf\"]."
     
     response = openai_client.chat.completions.create(
         model=LLM_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful assistant for analyzing legal documents. Use the provided context to answer the user's question. Cite the document filename if possible."},
+            {"role": "system", "content": "You are a helpful assistant. Use the provided context to answer. Be precise about sources."},
             {"role": "user", "content": prompt}
         ]
     )
     
+    content = response.choices[0].message.content
+    
+    # Extract sources if the LLM followed instructions
+    final_sources = list(retrieved_files) # Default to all if parsing fails
+    if "SOURCES: [" in content:
+        try:
+            parts = content.split("SOURCES: ")
+            answer_text = parts[0].strip()
+            sources_json = parts[1].strip()
+            # Clean up if there are extra characters after the JSON
+            if "]" in sources_json:
+                sources_json = sources_json[:sources_json.rfind("]")+1]
+            final_sources = json.loads(sources_json)
+        except:
+            answer_text = content
+    else:
+        answer_text = content
+
     return {
-        "answer": response.choices[0].message.content,
-        "sources": list(retrieved_files)
+        "answer": answer_text,
+        "sources": final_sources
     }
 
 if __name__ == "__main__":
