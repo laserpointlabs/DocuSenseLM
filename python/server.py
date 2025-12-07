@@ -341,6 +341,25 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail="OpenAI API Key not configured")
 
     # 1. Retrieve relevant chunks from Chroma
+    # Hybrid Search Approach:
+    # a) Check if query contains specific keywords matching filenames (Exact Retrieval)
+    # b) Perform Semantic Vector Search (Fuzzy Retrieval)
+    
+    metadata = load_metadata()
+    forced_context_files = []
+    
+    # Simple keyword matching in filenames
+    query_lower = request.question.lower()
+    for filename in metadata.keys():
+        # Check if significant parts of the filename are in the query
+        # e.g. "BRAWO" in "KIDDE_BRAWO_Supply..."
+        # Split filename by common separators
+        parts = filename.replace('.pdf', '').replace('.docx', '').replace('_', ' ').split()
+        for part in parts:
+            if len(part) > 3 and part.lower() in query_lower:
+                forced_context_files.append(filename)
+                break
+    
     results = collection.query(
         query_texts=[request.question],
         n_results=10
@@ -350,22 +369,38 @@ async def chat(request: ChatRequest):
     context_text = ""
     retrieved_files = set()
     
+    # Add Forced Context first (high priority)
+    for filename in forced_context_files:
+        filepath = os.path.join(DOCUMENTS_DIR, filename)
+        if os.path.exists(filepath):
+            # Extract text again (or cache it in metadata? simpler to re-extract for now or store preview)
+            # For speed, let's use the stored text_preview if available, or extract fresh
+            # Actually, for accuracy, we should probably index full text in a way we can retrieve by ID.
+            # Since we don't have that handy, let's just re-extract. It's local and fast enough for 1-2 docs.
+            text = extract_text_from_pdf(filepath)
+            context_text += f"--- FULL TEXT from {filename} ---\n{text[:50000]}\n\n" # Truncate to be safe
+            retrieved_files.add(filename)
+
+    # Add Vector Context
     if results['documents']:
         for i, doc in enumerate(results['documents'][0]):
             meta = results['metadatas'][0][i]
             filename = meta.get('filename', 'unknown')
-            retrieved_files.add(filename)
-            context_text += f"--- Excerpt from {filename} ---\n{doc}\n\n"
+            if filename not in retrieved_files: # Avoid dupes if forced
+                retrieved_files.add(filename)
+                context_text += f"--- Excerpt from {filename} ---\n{doc}\n\n"
     
     logger.info(f"RAG retrieved context from: {retrieved_files}")
 
     # 3. Call LLM
-    prompt = f"Context:\n{context_text}\n\nQuestion: {request.question}\n\nAnswer the question based on the context. At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: [\"file1.pdf\", \"file2.pdf\"]."
+    current_date = datetime.datetime.now().strftime("%A, %B %d, %Y")
+    
+    prompt = f"Current Date: {current_date}\n\nContext:\n{context_text}\n\nQuestion: {request.question}\n\nAnswer the question based on the context. Use the Current Date to calculate relative dates (e.g. 'in 30 days', 'expired last week'). At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: [\"file1.pdf\", \"file2.pdf\"]."
     
     response = openai_client.chat.completions.create(
         model=LLM_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful assistant. Use the provided context to answer. Be precise about sources."},
+            {"role": "system", "content": "You are a helpful assistant. Use the provided context to answer. Be precise about sources. Always consider the Current Date for time-sensitive questions."},
             {"role": "user", "content": prompt}
         ]
     )
