@@ -31,6 +31,6 @@ jobs:
         run: |
           # We skip the build:python part of the build script since we did it above
           npm run build:web
-          npm run electron:build
+          npm run build:electron
           npx electron-builder --linux --publish never
 
