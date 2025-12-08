@@ -10,7 +10,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Check out Git repository
@@ -59,11 +59,11 @@ jobs:
 
       - name: Build and Release Electron App
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           # We skip the build:python part of the build script since we did it above
           npm run tsc
           npm run vite build
           npm run electron:build
-          npx electron-builder --publish never
+          npx electron-builder --publish always
 
