@@ -1,0 +1,54 @@
+name: Build Windows (NSIS + dir)
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npm run build:web
+
+      - name: Build electron
+        run: npm run build:electron
+
+      - name: Build Windows (nsis + dir)
+        env:
+          # Ensure signing is disabled; relies on config sign:false
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          WIN_CSC_LINK: ""
+          CSC_LINK: ""
+          SKIP_NOTARIZATION: "true"
+        run: npx electron-builder --win nsis dir --publish=never
+
+      - name: Upload NSIS installer (if present)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocuSenseLM-setup
+          path: |
+            release/*.exe
+            release/*.msi
+          if-no-files-found: ignore
+
+      - name: Upload unpacked build
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocuSenseLM-unpacked
+          path: release/win-unpacked/**
+          if-no-files-found: error
+

@@ -52,15 +52,8 @@ module.exports = {
       "nsis",
       "dir"
     ],
-    sign: async () => {
-      // Completely bypass signing
-      return;
-    }
-  },
-  nsis: {
-    oneClick: false,
-    perMachine: false,
-    allowToChangeInstallationDirectory: true
+    sign: false, // disable signing to avoid winCodeSign download
+    signingHashAlgorithms: []
   },
   linux: {
     target: "AppImage",
