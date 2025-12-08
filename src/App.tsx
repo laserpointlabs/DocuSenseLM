@@ -24,7 +24,7 @@ interface DocumentData {
 import { LoadingScreen } from './components/LoadingScreen';
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || "DocuSenseLM";
-const APP_VERSION = "1.0.7";
+const APP_VERSION = "1.0.8";
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
