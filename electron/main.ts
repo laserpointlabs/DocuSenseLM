@@ -3,6 +3,7 @@ import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
 import { autoUpdater } from 'electron-updater';
+import http from 'http';
 
 const isDev = !app.isPackaged;
 
@@ -105,14 +106,8 @@ function startPythonBackend() {
       console.log(`Dev mode - Script: ${scriptPath}`);
   } else {
       // Production or dist build mode - use packaged Python source
-      let pythonBasePath: string;
-      if (distBuild) {
-          // Running from dist\win-unpacked - Python is in resources folder
-          pythonBasePath = path.join(process.resourcesPath, 'python');
-      } else {
-          // Packaged app - use resourcesPath
-          pythonBasePath = path.join(process.resourcesPath, 'python');
-      }
+      // In packaged apps, extraResources are always in process.resourcesPath
+      const pythonBasePath = path.join(process.resourcesPath, 'python');
       
       const venvPath = process.platform === 'win32' 
           ? path.join(pythonBasePath, 'venv', 'Scripts', 'python.exe')
@@ -144,18 +139,50 @@ function startPythonBackend() {
       }
   }
   
+  // Verify paths before spawning
+  console.log(`About to spawn Python:`);
+  console.log(`  Executable: ${pythonExecutable}`);
+  console.log(`  Script: ${scriptPath}`);
+  console.log(`  Executable exists: ${fs.existsSync(pythonExecutable)}`);
+  console.log(`  Script exists: ${fs.existsSync(scriptPath)}`);
+  console.log(`  Working directory: ${process.cwd()}`);
+  console.log(`  Resources path: ${process.resourcesPath}`);
+  
+  if (!fs.existsSync(pythonExecutable)) {
+      const errorMsg = `Python executable not found at ${pythonExecutable}`;
+      console.error(`ERROR: ${errorMsg}`);
+      if (mainWindow) {
+          mainWindow.webContents.send('python-error', errorMsg);
+      }
+      return;
+  }
+  
+  if (!fs.existsSync(scriptPath)) {
+      const errorMsg = `Python script not found at ${scriptPath}`;
+      console.error(`ERROR: ${errorMsg}`);
+      if (mainWindow) {
+          mainWindow.webContents.send('python-error', errorMsg);
+      }
+      return;
+  }
+  
   // Spawn the Python process
+  console.log(`Spawning Python process...`);
   pythonProcess = spawn(pythonExecutable, [scriptPath], {
     env,
-    stdio: 'pipe',
-    detached: false
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: false,
+    cwd: path.dirname(scriptPath)
   });
   
   pythonProcess.on('error', (error) => {
-      console.error(`Failed to start Python process: ${error.message}`);
+      const errorMsg = `Failed to start Python process: ${error.message}`;
+      console.error(`ERROR: ${errorMsg}`);
       console.error(`Error details:`, error);
+      console.error(`Python executable: ${pythonExecutable}`);
+      console.error(`Script path: ${scriptPath}`);
       if (mainWindow) {
-          mainWindow.webContents.send('python-error', `Failed to start Python backend: ${error.message}`);
+          mainWindow.webContents.send('python-error', errorMsg);
       }
   });
 
@@ -170,15 +197,20 @@ function startPythonBackend() {
       pythonProcess.stderr.on('data', (data) => {
         const output = data.toString();
         console.error(`[Python Stderr]: ${output}`);
+        // Also send stderr to renderer for debugging
+        if (mainWindow) {
+            mainWindow.webContents.send('python-stderr', output);
+        }
       });
   }
-
+  
   pythonProcess.on('close', (code, signal) => {
     console.log(`Python process exited with code ${code}, signal ${signal}`);
     if (code !== 0 && code !== null) {
-        console.error(`Python backend crashed with exit code ${code}`);
+        const errorMsg = `Python backend crashed with exit code ${code}`;
+        console.error(`ERROR: ${errorMsg}`);
         if (mainWindow) {
-            mainWindow.webContents.send('python-error', `Python backend crashed with exit code ${code}`);
+            mainWindow.webContents.send('python-error', errorMsg);
         }
     }
   });
@@ -186,6 +218,42 @@ function startPythonBackend() {
   pythonProcess.on('exit', (code, signal) => {
     console.log(`Python process exit event - code: ${code}, signal: ${signal}`);
   });
+  
+  // Log process info
+  console.log(`Python process spawned with PID: ${pythonProcess.pid}`);
+  
+  // Poll health endpoint to verify backend started
+  let healthCheckAttempts = 0;
+  const maxHealthChecks = 30; // 30 seconds max
+  const healthCheckInterval = setInterval(() => {
+    healthCheckAttempts++;
+    const req = http.get(`http://127.0.0.1:${API_PORT}/health`, (res) => {
+      if (res.statusCode === 200) {
+        console.log(`✓ Python backend health check passed after ${healthCheckAttempts} attempts`);
+        clearInterval(healthCheckInterval);
+        if (mainWindow) {
+          mainWindow.webContents.send('python-ready');
+        }
+      }
+      res.resume(); // Consume response
+    });
+    
+    req.on('error', (error) => {
+      if (healthCheckAttempts >= maxHealthChecks) {
+        console.error(`✗ Python backend health check failed after ${maxHealthChecks} attempts`);
+        console.error(`Last error: ${error.message}`);
+        clearInterval(healthCheckInterval);
+        if (mainWindow) {
+          mainWindow.webContents.send('python-error', `Backend failed to start - health check timeout: ${error.message}`);
+        }
+      }
+      // Otherwise continue polling
+    });
+    
+    req.setTimeout(1000, () => {
+      req.destroy();
+    });
+  }, 1000);
 }
 
 app.whenReady().then(() => {
