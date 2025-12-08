@@ -24,6 +24,7 @@ interface DocumentData {
 import { LoadingScreen } from './components/LoadingScreen';
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || "NDA Tool Lite";
+const APP_VERSION = "1.0.0";
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
@@ -85,9 +86,12 @@ function App() {
     <div className="flex h-screen w-full bg-gray-50 text-gray-900 font-sans">
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 text-white flex flex-col p-4">
-        <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-          <FileText className="text-blue-400" /> {APP_TITLE}
-        </h1>
+        <div className="mb-8">
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <FileText className="text-blue-400" /> {APP_TITLE}
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">Version {APP_VERSION}</p>
+        </div>
         
         <nav className="flex-1 space-y-2">
           <NavItem 
