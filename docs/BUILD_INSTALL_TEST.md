@@ -25,6 +25,7 @@ Outputs in `release\`:
 
 CI (recommended for installer):
 - Workflow: `.github/workflows/build-windows.yml`
+- Triggers on any branch push, PR, tags (`v*`), and manual dispatch
 - Runs on Windows runner, builds nsis + dir, uploads artifacts:
   - Installer: `release/*.exe` or `*.msi`
   - Unpacked: `release/win-unpacked/**`
