@@ -10,13 +10,14 @@
     "build:web": "tsc && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:linux": "npm run build:web && npm run build:electron && npx electron-builder --linux",
-    "build:windows": "npm run build:web && npm run build:electron && npx electron-builder --win",
+    "build:windows": "powershell -ExecutionPolicy Bypass -File ./build-windows.ps1",
     "preview": "vite preview",
     "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\""
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "clsx": "^2.1.0",
+    "electron": "^39.2.6",
     "electron-updater": "^6.6.2",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.344.0",
@@ -38,7 +39,6 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "dotenv": "^17.2.3",
-    "electron": "^29.1.0",
     "electron-builder": "^24.13.3",
     "electron-is-dev": "^3.0.1",
     "postcss": "^8.4.35",
@@ -87,7 +87,7 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "dir"
       ],
       "publisherName": "DocuSenseLM"
     },

@@ -6,6 +6,11 @@ import { autoUpdater } from 'electron-updater';
 
 const isDev = !app.isPackaged;
 
+// Helper function to check if running from dist directory
+function isDistBuild(): boolean {
+  return __dirname.includes('dist') || __dirname.includes('win-unpacked');
+}
+
 // Enable remote debugging for MCP server
 // if (isDev) {
 app.commandLine.appendSwitch('remote-debugging-port', '9222');
@@ -28,13 +33,22 @@ function createWindow() {
     },
   });
 
-  if (isDev) {
+  const distBuild = isDistBuild();
+  if (isDev && !distBuild) {
+    // True dev mode - Vite dev server is running
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-    // Check for updates
-    autoUpdater.checkForUpdatesAndNotify();
+    // Production or dist build - load from file system
+    const htmlPath = distBuild 
+      ? path.join(__dirname, 'resources', 'index.html')
+      : path.join(__dirname, '../dist/index.html');
+    console.log(`Loading HTML from: ${htmlPath}`);
+    mainWindow.loadFile(htmlPath);
+    // Check for updates only if packaged
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdatesAndNotify();
+    }
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -74,9 +88,11 @@ function startPythonBackend() {
   // Determine Python executable and script path
   let pythonExecutable: string;
   let scriptPath: string;
-  
-  if (isDev) {
-      // Development mode
+
+  const distBuild = isDistBuild();
+  console.log(`DEBUG: isDev=${isDev}, distBuild=${distBuild}, condition=${isDev && !distBuild}`);
+  if (isDev && !distBuild) {
+      // Development mode - use project Python
       pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
       const venvPath = process.platform === 'win32' 
           ? path.join(__dirname, '../python/venv/Scripts/python.exe')
@@ -89,25 +105,27 @@ function startPythonBackend() {
       scriptPath = path.join(__dirname, '../python/server.py');
       console.log(`Dev mode - Script: ${scriptPath}`);
   } else {
-      // Production mode - use packaged Python source with venv
-      const venvPath = process.platform === 'win32' 
-          ? path.join(process.resourcesPath, 'python', 'venv', 'Scripts', 'python.exe')
-          : path.join(process.resourcesPath, 'python', 'venv', 'bin', 'python');
-      
-      scriptPath = path.join(process.resourcesPath, 'python', 'server.py');
-      
-      console.log(`Production mode - Python: ${venvPath}`);
-      console.log(`Production mode - Script: ${scriptPath}`);
-      console.log(`Python exists: ${fs.existsSync(venvPath)}`);
-      console.log(`Script exists: ${fs.existsSync(scriptPath)}`);
-      
-      if (!fs.existsSync(venvPath)) {
-          console.error(`ERROR: Python venv not found at ${venvPath}`);
-          if (mainWindow) {
-              mainWindow.webContents.send('python-error', `Python venv not found at ${venvPath}`);
-          }
-          return;
+      // Production or dist build mode - use packaged Python source
+      let pythonBasePath: string;
+      if (distBuild) {
+          // Running from dist\win-unpacked - Python is in resources\python
+          pythonBasePath = path.join(__dirname, 'resources', 'python');
+      } else {
+          // Packaged app - use resourcesPath
+          pythonBasePath = path.join(process.resourcesPath, 'python');
       }
+      
+      const venvPath = process.platform === 'win32' 
+          ? path.join(pythonBasePath, 'venv', 'Scripts', 'python.exe')
+          : path.join(pythonBasePath, 'venv', 'bin', 'python');
+      
+      scriptPath = path.join(pythonBasePath, 'server.py');
+      
+      console.log(`Production/Dist mode - Python base: ${pythonBasePath}`);
+      console.log(`Production/Dist mode - Python venv: ${venvPath}`);
+      console.log(`Production/Dist mode - Script: ${scriptPath}`);
+      console.log(`Python venv exists: ${fs.existsSync(venvPath)}`);
+      console.log(`Script exists: ${fs.existsSync(scriptPath)}`);
       
       if (!fs.existsSync(scriptPath)) {
           console.error(`ERROR: Python script not found at ${scriptPath}`);
@@ -117,7 +135,14 @@ function startPythonBackend() {
           return;
       }
       
-      pythonExecutable = venvPath;
+      // Try venv first, fall back to system Python if venv doesn't exist
+      if (fs.existsSync(venvPath)) {
+          console.log(`Using Python venv: ${venvPath}`);
+          pythonExecutable = venvPath;
+      } else {
+          console.log(`Python venv not found, using system Python`);
+          pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+      }
   }
   
   // Spawn the Python process

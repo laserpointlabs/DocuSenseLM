@@ -97,10 +97,18 @@ config = load_app_config()
 
 # Ensure user config files exist in USER_DATA_DIR for editing
 if not os.path.exists(os.path.join(USER_DATA_DIR, "config.yaml")):
-    shutil.copy(os.path.join(BASE_DIR, "config.default.yaml"), os.path.join(USER_DATA_DIR, "config.yaml"))
+    config_default_path = os.path.join(BASE_DIR, "config.default.yaml")
+    if os.path.exists(config_default_path):
+        shutil.copy(config_default_path, os.path.join(USER_DATA_DIR, "config.yaml"))
+    else:
+        logger.warning(f"config.default.yaml not found at {config_default_path}, skipping copy")
 
 if not os.path.exists(os.path.join(USER_DATA_DIR, "prompts.yaml")):
-    shutil.copy(os.path.join(BASE_DIR, "prompts.default.yaml"), os.path.join(USER_DATA_DIR, "prompts.yaml"))
+    prompts_default_path = os.path.join(BASE_DIR, "prompts.default.yaml")
+    if os.path.exists(prompts_default_path):
+        shutil.copy(prompts_default_path, os.path.join(USER_DATA_DIR, "prompts.yaml"))
+    else:
+        logger.warning(f"prompts.default.yaml not found at {prompts_default_path}, skipping copy")
 
 # Function to get API key from config or environment
 def get_api_key():
@@ -863,5 +871,6 @@ async def chat(request: ChatRequest):
     }
 
 if __name__ == "__main__":
+    print("Starting FastAPI server...")
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
