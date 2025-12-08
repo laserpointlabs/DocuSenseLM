@@ -30,10 +30,8 @@ jobs:
 
       - name: Build Windows (nsis + dir)
         env:
-          # Ensure signing is disabled; relies on config sign:false
+          # Ensure signing is disabled
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          WIN_CSC_LINK: ""
-          CSC_LINK: ""
           SKIP_NOTARIZATION: "true"
         run: npx electron-builder --win nsis dir --publish=never
 
