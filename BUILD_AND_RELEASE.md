@@ -101,7 +101,7 @@ The application uses `electron-updater` to check for updates on startup (product
 "publish": {
   "provider": "github",
   "owner": "jdehart",
-  "repo": "ndaTool"
+  "repo": "DocuSenseLM"
 }
 ```
 

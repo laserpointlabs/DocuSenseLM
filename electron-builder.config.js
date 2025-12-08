@@ -50,7 +50,7 @@ module.exports = {
   publish: {
     provider: "github",
     owner: "jdehart",
-    repo: "ndaTool"
+    repo: "DocuSenseLM"
   }
 };
 
