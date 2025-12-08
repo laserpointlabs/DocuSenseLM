@@ -1,14 +1,17 @@
 {
   "name": "docusenselm",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Simple desktop app for managing and interrogating NDAs/Agreements",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build:python": "echo 'Skipping PyInstaller - using Python source directly'",
     "build": "tsc && vite build && npm run electron:build && electron-builder",
+    "build:web": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:linux": "npm run build:web && npm run build:electron && npx electron-builder --linux",
+    "build:windows": "npm run build:web && npm run build:electron && npx electron-builder --win",
     "preview": "vite preview",
-    "electron:build": "tsc -p tsconfig.electron.json",
     "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\""
   },
   "dependencies": {
