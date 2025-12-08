@@ -62,8 +62,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           # We skip the build:python part of the build script since we did it above
-          npm run tsc
-          npm run vite build
+          npm run build:web
           npm run electron:build
           npx electron-builder --publish always
 
