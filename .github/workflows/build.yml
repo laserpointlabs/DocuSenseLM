@@ -65,5 +65,5 @@ jobs:
           npm run tsc
           npm run vite build
           npm run electron:build
-          npx electron-builder --publish always
+          npx electron-builder --publish never
 
