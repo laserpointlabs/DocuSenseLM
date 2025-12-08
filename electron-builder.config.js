@@ -38,7 +38,6 @@ module.exports = {
   },
   linux: {
     target: "AppImage",
-    icon: "build/icon.png",
     category: "Utility"
   },
   publish: {
