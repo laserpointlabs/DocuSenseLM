@@ -2,6 +2,7 @@
   "name": "docusenselm",
   "version": "1.0.13",
   "description": "Simple desktop app for managing and interrogating NDAs/Agreements",
+  "author": "DocuSenseLM",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -11,13 +12,15 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:linux": "npm run build:web && npm run build:electron && npx electron-builder --linux",
     "build:windows": "powershell -ExecutionPolicy Bypass -File ./build-windows.ps1",
+    "run:windows": "powershell -ExecutionPolicy Bypass -File ./run-windows.ps1",
+    "build-and-run:windows": "npm run build:windows && npm run run:windows",
     "preview": "vite preview",
-    "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\""
+    "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\"",
+    "postinstall": "node scripts/patch-electron-builder.js"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "clsx": "^2.1.0",
-    "electron": "^39.2.6",
     "electron-updater": "^6.6.2",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.344.0",
@@ -39,6 +42,7 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "dotenv": "^17.2.3",
+    "electron": "^39.2.6",
     "electron-builder": "^24.13.3",
     "electron-is-dev": "^3.0.1",
     "postcss": "^8.4.35",
@@ -52,11 +56,11 @@
     "appId": "com.docusenselm.app",
     "productName": "DocuSenseLM",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "dist-electron/**/*",
-      "dist/**/*",
+      "web-dist/**/*",
       "config.yaml",
       "build/**/*"
     ],
@@ -72,6 +76,18 @@
           "!**/*.spec",
           "!**/hook-*.py"
         ]
+      },
+      {
+        "from": "web-dist",
+        "to": "web-dist"
+      },
+      {
+        "from": "config.default.yaml",
+        "to": "config.default.yaml"
+      },
+      {
+        "from": "prompts.default.yaml",
+        "to": "prompts.default.yaml"
       }
     ],
     "mac": {
@@ -88,8 +104,7 @@
     "win": {
       "target": [
         "dir"
-      ],
-      "publisherName": "DocuSenseLM"
+      ]
     },
     "nsis": {
       "oneClick": false,

@@ -12,9 +12,8 @@ function isDistBuild(): boolean {
 }
 
 // Enable remote debugging for MCP server
-// if (isDev) {
+// Always enable for debugging
 app.commandLine.appendSwitch('remote-debugging-port', '9222');
-// }
 
 let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;
@@ -40,8 +39,8 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     // Production or dist build - load from file system
-    const htmlPath = distBuild 
-      ? path.join(__dirname, 'resources', 'index.html')
+    const htmlPath = distBuild
+      ? path.join(process.resourcesPath, 'web-dist', 'index.html')
       : path.join(__dirname, '../dist/index.html');
     console.log(`Loading HTML from: ${htmlPath}`);
     mainWindow.loadFile(htmlPath);
@@ -108,8 +107,8 @@ function startPythonBackend() {
       // Production or dist build mode - use packaged Python source
       let pythonBasePath: string;
       if (distBuild) {
-          // Running from dist\win-unpacked - Python is in resources\python
-          pythonBasePath = path.join(__dirname, 'resources', 'python');
+          // Running from dist\win-unpacked - Python is in resources folder
+          pythonBasePath = path.join(process.resourcesPath, 'python');
       } else {
           // Packaged app - use resourcesPath
           pythonBasePath = path.join(process.resourcesPath, 'python');

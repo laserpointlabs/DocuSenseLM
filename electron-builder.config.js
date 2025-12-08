@@ -4,13 +4,35 @@ module.exports = {
   appId: "com.docusenselm.app",
   productName: "DocuSenseLM",
   directories: {
-    output: "dist"
+    output: "release"
   },
   files: [
     "dist-electron/**/*",
-    "dist/**/*",
+    "web-dist/**/*",
     "config.yaml",
     "build/icon.png" 
+  ],
+  extraResources: [
+    {
+      from: "python",
+      to: "python",
+      filter: [
+        "**/*",
+        "!**/__pycache__/**",
+        "!**/build/**",
+        "!**/dist/**",
+        "!**/*.spec",
+        "!**/hook-*.py"
+      ]
+    },
+    {
+      from: "config.default.yaml",
+      to: "config.default.yaml"
+    },
+    {
+      from: "prompts.default.yaml",
+      to: "prompts.default.yaml"
+    }
   ],
   mac: {
     category: "public.app-category.productivity",
@@ -27,9 +49,13 @@ module.exports = {
   win: {
     icon: "build/icon.ico",
     target: [
-      "nsis"
+      "nsis",
+      "dir"
     ],
-    publisherName: "DocuSenseLM"
+    sign: async () => {
+      // Completely bypass signing
+      return;
+    }
   },
   nsis: {
     oneClick: false,
