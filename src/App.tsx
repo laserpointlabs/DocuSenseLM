@@ -24,7 +24,7 @@ interface DocumentData {
 import { LoadingScreen } from './components/LoadingScreen';
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || "NDA Tool Lite";
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
