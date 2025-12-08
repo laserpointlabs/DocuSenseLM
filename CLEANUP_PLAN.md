@@ -1,4 +1,4 @@
-/home/jdehart/Working/ndaTool/
+/home/jdehart/Working/DocuSenseLM/
   - build/
     - entitlements.mac.plist
     - icon.icns
