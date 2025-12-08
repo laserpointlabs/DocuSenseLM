@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 module.exports = {
-  appId: "com.ndatool.lite",
-  productName: process.env.APP_NAME || "NDA Tool Lite",
+  appId: "com.docusenselm.app",
+  productName: "DocuSenseLM",
   directories: {
     output: "dist"
   },
@@ -11,12 +11,6 @@ module.exports = {
     "dist/**/*",
     "config.yaml",
     "build/icon.png" 
-  ],
-  extraResources: [
-    {
-      from: "python/dist/server",
-      to: "python/server"
-    }
   ],
   mac: {
     category: "public.app-category.productivity",
@@ -35,7 +29,7 @@ module.exports = {
     target: [
       "nsis"
     ],
-    publisherName: process.env.APP_NAME || "NDA Tool Lite"
+    publisherName: "DocuSenseLM"
   },
   nsis: {
     oneClick: false,
@@ -49,7 +43,7 @@ module.exports = {
   },
   publish: {
     provider: "github",
-    owner: "jdehart",
+    owner: "laserpointlabs",
     repo: "DocuSenseLM"
   }
 };
