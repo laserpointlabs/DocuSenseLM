@@ -49,7 +49,7 @@ os.makedirs(DB_DIR, exist_ok=True)
 # Load .env
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
-APP_NAME = os.environ.get("APP_NAME", "NDA Tool")
+APP_NAME = os.environ.get("APP_NAME", "DocuSenseLM")
 
 # Load prompts
 def load_prompts_config():

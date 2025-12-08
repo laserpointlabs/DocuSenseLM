@@ -6,7 +6,7 @@ export const LoadingScreen = () => {
         <div className="absolute top-0 left-0 w-full h-full border-4 border-slate-200 rounded-full"></div>
         <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
       </div>
-      <h2 className="text-xl font-semibold text-slate-700">Initializing NDA Tool...</h2>
+      <h2 className="text-xl font-semibold text-slate-700">Initializing DocuSenseLM...</h2>
       <p className="text-slate-500 mt-2">Starting local services</p>
     </div>
   );
