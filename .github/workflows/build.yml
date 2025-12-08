@@ -10,7 +10,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
 
     steps:
       - name: Check out Git repository
@@ -24,38 +24,6 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r python/requirements.txt
-
-      - name: Build Python Executable
-        shell: bash
-        run: |
-          # Clean previous
-          rm -rf python/dist/server python/build
-          
-          # Build
-          # Windows uses ; as separator, others : but pyinstaller handles paths reasonably well
-          # We use python -m PyInstaller to ensure we use the correct python env
-          python -m PyInstaller --clean \
-            --name server \
-            --distpath ./python/dist \
-            --workpath ./python/build \
-            --specpath ./python \
-            --onefile \
-            --additional-hooks-dir=python \
-            --hidden-import=key_value \
-            --hidden-import=diskcache \
-            --hidden-import=pickletools \
-            python/server.py
 
       - name: Build and Release Electron App
         env:
