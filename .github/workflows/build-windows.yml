@@ -27,13 +27,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Python dependencies
+      - name: Build standalone Python backend with PyInstaller
         run: |
           cd python
-          python -m venv venv
-          .\venv\Scripts\activate
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller server.spec --clean --noconfirm
+          
+      - name: Package standalone backend for distribution
+        run: |
+          mkdir python\dist_packaged
+          copy python\dist\server.exe python\dist_packaged\
+          Remove-Item python\build -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Build web
         run: npm run build:web
