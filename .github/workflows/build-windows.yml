@@ -22,24 +22,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Build standalone Python backend with PyInstaller
+      - name: Setup Python embeddable (relocatable)
         run: |
-          cd python
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-          pyinstaller server.spec --clean --noconfirm
+          # Download Python embeddable distribution
+          $pythonUrl = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
+          $pythonZip = "python-embed.zip"
+          Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip
           
-      - name: Package standalone backend for distribution
-        run: |
-          mkdir python\dist_packaged
-          copy python\dist\server.exe python\dist_packaged\
-          Remove-Item python\build -Recurse -Force -ErrorAction SilentlyContinue
+          # Extract to python/python_embed
+          Expand-Archive -Path $pythonZip -DestinationPath python/python_embed -Force
+          Remove-Item $pythonZip
+          
+          # Enable pip in embeddable python
+          $pthFile = Get-ChildItem "python/python_embed" -Filter "*._pth" | Select-Object -First 1
+          $pthContent = Get-Content $pthFile.FullName
+          $pthContent = $pthContent -replace "#import site", "import site"
+          $pthContent | Set-Content $pthFile.FullName
+          
+          # Download get-pip.py
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "python/python_embed/get-pip.py"
+          
+          # Install pip
+          cd python/python_embed
+          .\python.exe get-pip.py
+          
+          # Install dependencies
+          .\python.exe -m pip install -r ../requirements.txt
+          
+          # Cleanup
+          Remove-Item get-pip.py
 
       - name: Build web
         run: npm run build:web
@@ -54,13 +65,13 @@ jobs:
           SKIP_NOTARIZATION: "true"
         run: npx electron-builder --win nsis dir --publish=never
 
-      - name: Test standalone backend
+      - name: Test embeddable Python backend
         run: |
-          cd release/win-unpacked/resources/python/dist_packaged
+          cd release/win-unpacked/resources/python
           $env:USER_DATA_DIR = "$env:TEMP\docusenselm_test"
           $env:PORT = "14242"
-          $process = Start-Process -FilePath ".\server.exe" -NoNewWindow -PassThru
-          Start-Sleep 10
+          $process = Start-Process -FilePath "python_embed\python.exe" -ArgumentList "server.py" -NoNewWindow -PassThru
+          Start-Sleep 15
           $response = Invoke-WebRequest -Uri "http://127.0.0.1:14242/health" -UseBasicParsing -ErrorAction Stop
           if ($response.StatusCode -ne 200) {
             Write-Error "Backend health check failed"

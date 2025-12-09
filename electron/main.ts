@@ -108,24 +108,23 @@ function startPythonBackend() {
       // Production or dist build mode - use packaged Python source
       // In packaged apps, extraResources are always in process.resourcesPath
       const pythonBasePath = path.join(process.resourcesPath, 'python');
+      scriptPath = path.join(pythonBasePath, 'server.py');
       
-      // Check for standalone PyInstaller executable first (CI builds)
-      const standaloneExe = process.platform === 'win32'
-          ? path.join(pythonBasePath, 'dist_packaged', 'server.exe')
-          : path.join(pythonBasePath, 'dist_packaged', 'server');
+      // Check for Python embeddable distribution first (CI builds - relocatable)
+      const embedPython = process.platform === 'win32'
+          ? path.join(pythonBasePath, 'python_embed', 'python.exe')
+          : path.join(pythonBasePath, 'python_embed', 'bin', 'python3');
       
-      if (fs.existsSync(standaloneExe)) {
-          console.log(`Production mode - Using standalone Python executable`);
-          console.log(`Standalone exe: ${standaloneExe}`);
-          pythonExecutable = standaloneExe;
-          scriptPath = ''; // Not needed for standalone exe
+      if (fs.existsSync(embedPython)) {
+          console.log(`Production mode - Using Python embeddable distribution`);
+          console.log(`Embed Python: ${embedPython}`);
+          console.log(`Script: ${scriptPath}`);
+          pythonExecutable = embedPython;
       } else {
           // Fall back to venv-based approach (local builds)
           const venvPath = process.platform === 'win32' 
               ? path.join(pythonBasePath, 'venv', 'Scripts', 'python.exe')
               : path.join(pythonBasePath, 'venv', 'bin', 'python');
-          
-          scriptPath = path.join(pythonBasePath, 'server.py');
           
           console.log(`Production/Dist mode - Python base: ${pythonBasePath}`);
           console.log(`Production/Dist mode - Python venv: ${venvPath}`);
