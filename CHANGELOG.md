@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Fix issue with text areas locking up after adding API key
 - [ ] Train LLM on how to use the app → add notes to RAG from training folder
 - [ ] Add direct link to local storage in UI
+- [ ] Save pdf markups
 - [ ] Expand smoke test coverage to include additional functional areas from test plan:
   - Document ingestion automation
   - Dashboard expiring documents
