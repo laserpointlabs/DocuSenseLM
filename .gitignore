@@ -2,10 +2,12 @@ node_modules
 dist
 dist-electron
 release
+web-dist
 .DS_Store
 .env
 .env.local
 python/venv
+python/python_embed
 python/__pycache__
 documents/*.pdf
 documents/*.docx
@@ -14,3 +16,12 @@ legacy_v1
 .cache
 chroma_db
 data
+ci-test-*
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.snap
+*.appimage

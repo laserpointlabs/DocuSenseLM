@@ -5,15 +5,15 @@ Write-Host "🚀 Starting DocuSenseLM (Windows Build)..."
 Write-Host ""
 
 # Check if the build exists
-if (-not (Test-Path "release\win-unpacked\main.js")) {
+if (-not (Test-Path "release\win-unpacked\DocuSenseLM.exe")) {
     Write-Error "❌ Build not found! Run 'npm run build:windows' first."
     exit 1
 }
 
 # Check if required files exist
 $requiredFiles = @(
-    "release\win-unpacked\main.js",
-    "release\win-unpacked\resources\index.html",
+    "release\win-unpacked\DocuSenseLM.exe",
+    "release\win-unpacked\resources\web-dist\index.html",
     "release\win-unpacked\resources\config.default.yaml",
     "release\win-unpacked\resources\prompts.default.yaml",
     "release\win-unpacked\resources\python\server.py"
@@ -41,15 +41,10 @@ Write-Host "📁 Working directory: $(Get-Location)"
 Write-Host "🎮 Application: release\win-unpacked\main.js"
 Write-Host ""
 
-# Use the exact same method as the working batch file
-Push-Location "release\win-unpacked"
-try {
-    Write-Host "Starting Electron application..."
-    # Execute the batch file exactly as the user does
-    & cmd.exe /c run.bat
-} finally {
-    Pop-Location
-}
+# Launch the executable directly
+Write-Host "Starting Electron application..."
+Write-Host "Launching: release\win-unpacked\DocuSenseLM.exe"
+& "release\win-unpacked\DocuSenseLM.exe"
 
 Write-Host ""
 Write-Host "👋 DocuSenseLM closed."

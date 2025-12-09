@@ -7,8 +7,8 @@ $ErrorActionPreference = "Continue"
 Write-Host "Building DocuSenseLM for Windows (no admin privileges needed)..." -ForegroundColor Cyan
 [Console]::Out.Flush()
 
-# Clean previous builds
-Write-Host "Cleaning previous builds..."
+# Clean previous builds and test directories
+Write-Host "Cleaning previous builds and test directories..."
 # Kill any processes that might be locking files
 Write-Host "Checking for running processes..."
 $runningProcesses = Get-Process | Where-Object { $_.Name -like "*DocuSense*" -or $_.Name -like "*electron*" }
@@ -23,21 +23,28 @@ if ($runningProcesses) {
     Write-Host "No running processes found"
 }
 
-# Remove old build output
-Write-Host "Attempting to delete release folder..."
-try {
-    Remove-Item -Recurse -Force "release" -ErrorAction Stop
-    Write-Host "✅ SUCCESS: Release directory deleted!"
-} catch {
-    Write-Host "❌ Could not delete release directory: $($_.Exception.Message)"
-    Write-Host "Attempting to rename instead..."
-    try {
-        $backupName = "release.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-        Rename-Item "release" $backupName -ErrorAction Stop
-        Write-Host "✅ Renamed to $backupName - continuing with build..."
-    } catch {
-        Write-Host "❌ Could not rename release folder either: $($_.Exception.Message)"
-        Write-Host "⚠️  Continuing anyway - electron-builder should overwrite files"
+# Remove old build output and test directories
+$dirsToClean = @("release", "ci-test-new", "ci-test-pyinstaller")
+foreach ($dir in $dirsToClean) {
+    if (Test-Path $dir) {
+        Write-Host "Removing $dir directory..."
+        try {
+            Remove-Item -Recurse -Force $dir -ErrorAction Stop
+            Write-Host "✅ SUCCESS: $dir directory deleted!"
+        } catch {
+            Write-Host "❌ Could not delete $dir directory: $($_.Exception.Message)"
+            Write-Host "Attempting to rename instead..."
+            try {
+                $backupName = "$dir.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+                Rename-Item $dir $backupName -ErrorAction Stop
+                Write-Host "✅ Renamed to $backupName - continuing with build..."
+            } catch {
+                Write-Host "❌ Could not rename $dir folder either: $($_.Exception.Message)"
+                Write-Host "⚠️  Continuing anyway - electron-builder should overwrite files"
+            }
+        }
+    } else {
+        Write-Host "$dir directory not found - skipping"
     }
 }
 
@@ -51,6 +58,49 @@ if ($webExitCode -ne 0) {
     exit 1
 }
 Write-Host "SUCCESS: Web build completed" -ForegroundColor Green
+[Console]::Out.Flush()
+
+# Setup Python embeddable (relocatable)
+Write-Host "Setting up Python embeddable distribution..." -ForegroundColor Yellow
+[Console]::Out.Flush()
+
+# Download Python embeddable distribution
+$pythonUrl = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
+$pythonZip = "python-embed.zip"
+Write-Host "Downloading Python embeddable from $pythonUrl..."
+Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip
+
+# Extract to python/python_embed
+Write-Host "Extracting Python embeddable to python/python_embed..."
+Expand-Archive -Path $pythonZip -DestinationPath "python/python_embed" -Force
+Remove-Item $pythonZip
+
+# Enable pip in embeddable python
+$pthFile = Get-ChildItem "python/python_embed" -Filter "*._pth" | Select-Object -First 1
+$pthContent = Get-Content $pthFile.FullName
+$pthContent = $pthContent -replace "#import site", "import site"
+$pthContent | Set-Content $pthFile.FullName
+
+# Download get-pip.py
+Write-Host "Setting up pip in embeddable Python..."
+Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "python/python_embed/get-pip.py"
+
+# Install pip
+Push-Location "python/python_embed"
+.\python.exe get-pip.py
+
+# Install setuptools and wheel first (required for building packages)
+.\python.exe -m pip install setuptools wheel
+
+# Install dependencies
+Write-Host "Installing Python dependencies..."
+.\python.exe -m pip install -r ../requirements.txt
+
+# Cleanup
+Remove-Item get-pip.py
+Pop-Location
+
+Write-Host "SUCCESS: Python embeddable setup completed" -ForegroundColor Green
 [Console]::Out.Flush()
 
 # Build the Electron app

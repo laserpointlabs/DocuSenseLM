@@ -75,14 +75,15 @@ function startPythonBackend() {
   console.log(`isDev: ${isDev}`);
   console.log(`process.resourcesPath: ${process.resourcesPath}`);
   console.log(`__dirname: ${__dirname}`);
+  console.log(`isDistBuild(): ${isDistBuild()}`);
 
   console.log(`Starting Python backend on port ${API_PORT}...`);
-  
-  const env = { 
-      ...process.env, 
-      PORT: API_PORT.toString(), 
+
+  const env = {
+      ...process.env,
+      PORT: API_PORT.toString(),
       PYTHONUNBUFFERED: '1',
-      USER_DATA_DIR: userDataPath 
+      USER_DATA_DIR: userDataPath
   };
 
   // Determine Python executable and script path
@@ -91,6 +92,8 @@ function startPythonBackend() {
 
   const distBuild = isDistBuild();
   console.log(`DEBUG: isDev=${isDev}, distBuild=${distBuild}, condition=${isDev && !distBuild}`);
+  console.log(`DEBUG: Current working directory: ${process.cwd()}`);
+  console.log(`DEBUG: Resources path: ${process.resourcesPath}`);
   if (isDev && !distBuild) {
       // Development mode - use project Python
       pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
@@ -274,7 +277,9 @@ function startPythonBackend() {
 }
 
 app.whenReady().then(() => {
+  console.log('App is ready, starting backend...');
   startPythonBackend();
+  console.log('Creating window...');
   createWindow();
 
   app.on('activate', () => {
@@ -282,6 +287,8 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+}).catch((error) => {
+  console.error('Failed to initialize app:', error);
 });
 
 app.on('window-all-closed', () => {
