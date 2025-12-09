@@ -46,6 +46,9 @@ jobs:
           cd python/python_embed
           .\python.exe get-pip.py
           
+          # Install setuptools and wheel first (required for building packages)
+          .\python.exe -m pip install setuptools wheel
+          
           # Install dependencies
           .\python.exe -m pip install -r ../requirements.txt
           
