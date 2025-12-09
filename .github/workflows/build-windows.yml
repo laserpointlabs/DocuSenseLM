@@ -54,6 +54,28 @@ jobs:
           SKIP_NOTARIZATION: "true"
         run: npx electron-builder --win nsis dir --publish=never
 
+      - name: Test standalone backend
+        run: |
+          cd release/win-unpacked/resources/python/dist_packaged
+          $env:USER_DATA_DIR = "$env:TEMP\docusenselm_test"
+          $env:PORT = "14242"
+          $process = Start-Process -FilePath ".\server.exe" -NoNewWindow -PassThru
+          Start-Sleep 10
+          $response = Invoke-WebRequest -Uri "http://127.0.0.1:14242/health" -UseBasicParsing -ErrorAction Stop
+          if ($response.StatusCode -ne 200) {
+            Write-Error "Backend health check failed"
+            Stop-Process -Id $process.Id -Force
+            exit 1
+          }
+          $content = $response.Content | ConvertFrom-Json
+          if ($content.status -ne "ok") {
+            Write-Error "Backend status not ok"
+            Stop-Process -Id $process.Id -Force
+            exit 1
+          }
+          Write-Host "✓ Backend health check passed: $($content | ConvertTo-Json)"
+          Stop-Process -Id $process.Id -Force
+
       - name: Upload NSIS installer (if present)
         uses: actions/upload-artifact@v4
         with:
