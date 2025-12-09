@@ -16,7 +16,9 @@
     "build-and-run:windows": "npm run build:windows && npm run run:windows",
     "preview": "vite preview",
     "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\"",
-    "postinstall": "node scripts/patch-electron-builder.js"
+    "postinstall": "node scripts/patch-electron-builder.js",
+    "test:smoke": "npm run build:windows && npx playwright test tests/smoke/startup.spec.ts",
+    "verify:artifact": "powershell -ExecutionPolicy Bypass -File ./scripts/verify-ci-artifact.ps1 -Latest"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -33,6 +35,7 @@
     "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.46.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.24",
     "@types/react": "^18.2.64",

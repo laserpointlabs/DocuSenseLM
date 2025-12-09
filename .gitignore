@@ -3,6 +3,10 @@ dist
 dist-electron
 release
 web-dist
+.cursor/commands
+playwright-report
+test-results
+.cache
 .DS_Store
 .env
 .env.local
