@@ -52,9 +52,28 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
+    console.log('Window ready-to-show event fired');
     if (mainWindow) {
       mainWindow.show();
     }
+  });
+
+  // Send startup messages only after renderer finished loading (IPC ready)
+  mainWindow.webContents.once('did-finish-load', () => {
+    console.log('Window did-finish-load event fired - sending startup messages');
+    if (!mainWindow) return;
+    const send = (msg: string, delay: number) => {
+      setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.webContents.send('startup-status', msg);
+        }
+      }, delay);
+    };
+    send('Starting application...', 200);
+    send('Initializing Python backend...', 1200);
+    send('Loading configuration...', 2200);
+    send('Connecting to services...', 3800);
+    send('Starting API server...', 5200);
   });
 
   mainWindow.on('closed', () => {
@@ -185,9 +204,10 @@ function startPythonBackend() {
   
   // Spawn the Python process
   console.log(`Spawning Python process...`);
+
   const args = scriptPath ? [scriptPath] : [];
   const workingDir = scriptPath ? path.dirname(scriptPath) : path.dirname(pythonExecutable);
-  
+
   pythonProcess = spawn(pythonExecutable, args, {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -212,7 +232,7 @@ function startPythonBackend() {
         console.log(`[Python Stdout]: ${output}`);
       });
   }
-  
+
   if (pythonProcess.stderr) {
       pythonProcess.stderr.on('data', (data) => {
         const output = data.toString();
@@ -242,45 +262,72 @@ function startPythonBackend() {
   // Log process info
   console.log(`Python process spawned with PID: ${pythonProcess.pid}`);
   
-  // Poll health endpoint to verify backend started
+  // Poll health endpoint to verify backend started with exponential backoff
   let healthCheckAttempts = 0;
-  const maxHealthChecks = 30; // 30 seconds max
-  const healthCheckInterval = setInterval(() => {
+  const maxHealthChecks = 60; // Increased to 60 attempts max (up to ~4 minutes with backoff)
+  let currentDelay = 1000; // Start with 1 second
+  const maxDelay = 10000; // Cap delay at 10 seconds
+
+  // Send initial status update - but wait for window to be ready
+  console.log('Python backend starting, will send status updates when window is ready...');
+
+  const performHealthCheck = () => {
     healthCheckAttempts++;
+    console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${currentDelay}ms)`);
+
     const req = http.get(`http://127.0.0.1:${API_PORT}/health`, (res) => {
       if (res.statusCode === 200) {
         console.log(`✓ Python backend health check passed after ${healthCheckAttempts} attempts`);
-        clearInterval(healthCheckInterval);
+
+        // Send final status and ready message
         if (mainWindow) {
+          mainWindow.webContents.send('startup-status', 'Backend ready!');
           mainWindow.webContents.send('python-ready');
         }
+        return; // Success - stop checking
       }
       res.resume(); // Consume response
+      scheduleNextCheck();
     });
-    
+
     req.on('error', (error) => {
+      console.log(`Health check attempt ${healthCheckAttempts} failed: ${error.message}`);
+
       if (healthCheckAttempts >= maxHealthChecks) {
         console.error(`✗ Python backend health check failed after ${maxHealthChecks} attempts`);
         console.error(`Last error: ${error.message}`);
-        clearInterval(healthCheckInterval);
         if (mainWindow) {
-          mainWindow.webContents.send('python-error', `Backend failed to start - health check timeout: ${error.message}`);
+          mainWindow.webContents.send('startup-status', 'Backend startup failed');
+          mainWindow.webContents.send('python-error', `Backend failed to start after ${maxHealthChecks} attempts: ${error.message}`);
         }
+        return; // Stop checking
       }
-      // Otherwise continue polling
+
+      scheduleNextCheck();
     });
-    
-    req.setTimeout(1000, () => {
+
+    req.setTimeout(5000, () => { // Increased timeout to 5 seconds per request
       req.destroy();
+      scheduleNextCheck();
     });
-  }, 1000);
+  };
+
+  const scheduleNextCheck = () => {
+    // Exponential backoff with jitter
+    currentDelay = Math.min(currentDelay * 1.5 + Math.random() * 1000, maxDelay);
+    console.log(`Scheduling next health check in ${Math.round(currentDelay)}ms`);
+    setTimeout(performHealthCheck, currentDelay);
+  };
+
+  // Start the first health check
+  performHealthCheck();
 }
 
 app.whenReady().then(() => {
-  console.log('App is ready, starting backend...');
-  startPythonBackend();
-  console.log('Creating window...');
+  console.log('App is ready, creating window first...');
   createWindow();
+  console.log('Starting backend...');
+  startPythonBackend();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

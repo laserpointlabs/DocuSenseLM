@@ -23,6 +23,16 @@ interface DocumentData {
 
 import { LoadingScreen } from './components/LoadingScreen';
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      handleStartupStatus: (callback: (status: string) => void) => void;
+      handlePythonReady: (callback: () => void) => void;
+      handlePythonError: (callback: (error: string) => void) => void;
+    };
+  }
+}
+
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || "DocuSenseLM";
 const APP_VERSION = "1.0.13";
 
@@ -34,27 +44,57 @@ function App() {
   const [docToOpen, setDocToOpen] = useState<string | null>(null);
 
   useEffect(() => {
-    const initApp = async () => {
-      let retries = 0;
-      while (retries < 20) {
-        try {
-          const res = await fetch(`http://localhost:${API_PORT}/health`);
-          if (res.ok) {
-            fetchConfig();
-            fetchDocuments();
-            setIsLoading(false);
-            return;
-          }
-        } catch (e) {
-          // Ignore error, retry
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        retries++;
-      }
-      alert("Failed to connect to backend service. Please restart the application.");
-    };
+    console.log('App: Setting up IPC listeners');
+    console.log('App: window.electronAPI available:', !!window.electronAPI);
 
-    initApp();
+    // Listen for python-ready IPC message
+    if (window.electronAPI?.handlePythonReady) {
+      console.log('App: Setting up python-ready handler');
+      window.electronAPI.handlePythonReady(() => {
+        console.log('App: Received python-ready signal, initializing app...');
+        fetchConfig();
+        fetchDocuments();
+        setIsLoading(false);
+      });
+    } else {
+      console.log('App: electronAPI.handlePythonReady not available');
+    }
+
+    // Set up error listener
+    if (window.electronAPI?.handlePythonError) {
+      console.log('App: Setting up python error handler');
+      window.electronAPI.handlePythonError((error: string) => {
+        console.error('App: Received python error:', error);
+        alert(`Startup failed: ${error}`);
+      });
+    } else {
+      console.log('App: electronAPI.handlePythonError not available');
+    }
+
+    // Fallback to manual health checking ONLY if IPC is not available
+    if (!window.electronAPI?.handlePythonReady) {
+      console.log('App: IPC not available, falling back to manual health checking');
+      const initApp = async () => {
+        let retries = 0;
+        while (retries < 60) { // Increased retries to match main process
+          try {
+            const res = await fetch(`http://localhost:${API_PORT}/health`);
+            if (res.ok) {
+              fetchConfig();
+              fetchDocuments();
+              setIsLoading(false);
+              return;
+            }
+          } catch (e) {
+            // Ignore error, retry
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Longer delay
+          retries++;
+        }
+        alert("Failed to connect to backend service. Please restart the application.");
+      };
+      initApp();
+    }
 
     document.title = APP_TITLE;
 
