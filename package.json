@@ -15,7 +15,7 @@
     "run:windows": "powershell -ExecutionPolicy Bypass -File ./run-windows.ps1",
     "build-and-run:windows": "npm run build:windows && npm run run:windows",
     "preview": "vite preview",
-    "electron:dev": "npm run electron:build && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\"",
+    "electron:dev": "npm run build:electron && concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\"",
     "postinstall": "node scripts/patch-electron-builder.js",
     "test:smoke": "npm run build:windows && npx playwright test tests/smoke/startup.spec.ts",
     "verify:artifact": "powershell -ExecutionPolicy Bypass -File ./scripts/verify-ci-artifact.ps1 -Latest"

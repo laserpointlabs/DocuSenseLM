@@ -723,7 +723,10 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
     });
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [inputKey, setInputKey] = useState(0); // Key to force remount of input
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -735,11 +738,23 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
         localStorage.setItem('nda_chat_history', JSON.stringify(messages));
     }, [messages]);
 
-    const handleClear = () => {
-        if (confirm("Clear chat history?")) {
-            setMessages([{role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}]);
+    // Focus input after it's remounted (when inputKey changes)
+    useEffect(() => {
+        if (inputRef.current) {
+            inputRef.current.focus();
         }
+    }, [inputKey]);
+
+    const confirmClear = () => setShowClearConfirm(true);
+
+    const handleClear = () => {
+        setMessages([{role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}]);
+        setInput(''); // Clear input state
+        setInputKey(prev => prev + 1); // Force remount of input to prevent lockup
+        setShowClearConfirm(false);
     };
+
+    const handleCancelClear = () => setShowClearConfirm(false);
 
     const handleSend = async () => {
         if (!input.trim()) return;
@@ -776,7 +791,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold">Chat with Documents</h2>
                     <button 
-                        onClick={handleClear} 
+                        onClick={confirmClear} 
                         className="text-gray-500 hover:text-red-600 p-2 rounded hover:bg-gray-100"
                         title="Clear Chat"
                     >
@@ -837,6 +852,8 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
 
                 <div className="flex gap-2">
                     <input 
+                        key={inputKey}
+                        ref={inputRef}
                         type="text" 
                         value={input}
                         onChange={e => setInput(e.target.value)}
@@ -852,6 +869,29 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
                         Send
                     </button>
                 </div>
+
+                {showClearConfirm && (
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg shadow-xl w-[360px] max-w-full p-5 border border-gray-200">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Clear chat history?</h3>
+                            <p className="text-sm text-gray-600 mb-4">This will remove all messages in this conversation.</p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={handleCancelClear}
+                                    className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleClear}
+                                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )

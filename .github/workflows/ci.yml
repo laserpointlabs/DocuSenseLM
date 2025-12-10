@@ -60,14 +60,14 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r python/requirements.txt
           pip install pytest pytest-asyncio  # Ensure pytest is available
 
       - name: Run backend tests
         env:
           POSTGRES_URL: "sqlite:///:memory:"
           SERVICE_PROFILE: test
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/python
         continue-on-error: true
         run: |
           # Skip tests that require external services
@@ -127,20 +127,16 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r python/requirements.txt
 
       - name: Test critical imports
         env:
           POSTGRES_URL: "sqlite:///:memory:"
           SERVICE_PROFILE: test
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/python
         run: |
           FAILED=0
-          python3 -c "from api.services.answer_service import answer_service; print('✓ answer_service imports')" || { echo "⚠ answer_service import failed"; FAILED=1; }
-          python3 -c "from api.routers.answer import router; print('✓ answer router imports')" || { echo "⚠ answer router import failed"; FAILED=1; }
-          python3 -c "from api.routers.competency import router; print('✓ competency router imports')" || { echo "⚠ competency router import failed"; FAILED=1; }
-          python3 -c "from llm.llm_factory import get_llm_client; print('✓ LLM factory imports')" || { echo "⚠ LLM factory import failed"; FAILED=1; }
-          python3 -c "from api.services.metadata_service import metadata_service; print('✓ metadata_service imports')" || { echo "⚠ metadata_service import failed"; FAILED=1; }
+          python3 -c "import server; print('✓ server imports')" || { echo "⚠ server import failed"; FAILED=1; }
           if [ $FAILED -eq 1 ]; then
             echo "✗ Import tests failed - one or more critical imports failed"
             exit 1
