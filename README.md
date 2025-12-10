@@ -50,6 +50,18 @@
    npm run electron:dev
    ```
 
+## Testing (classification & OCR)
+
+- CI-safe classification test (stubbed LLM, synthetic PDFs):
+  ```bash
+  python/venv/Scripts/python.exe -m pytest tests/test_classify.py
+  ```
+- OCR dependencies (pip-only): `easyocr` and `Pillow` for scanned PDFs and classification snippets. Install in the venv:
+  ```bash
+  python/venv/Scripts/pip.exe install easyocr Pillow
+  ```
+
+
 ## Branding & White-Labeling
 
 DocuSenseLM is designed to be easily rebranded for your organization. You can customize the application name and window title by setting environment variables in your `.env` file:

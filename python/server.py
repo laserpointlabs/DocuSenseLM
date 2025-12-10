@@ -10,6 +10,7 @@ import pickletools
 import diskcache
 import webbrowser  # Ensure stdlib module is loaded for PyInstaller
 import re
+import httpx
 from typing import List, Dict, Optional
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
@@ -17,11 +18,12 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastmcp import FastMCP
-from pypdf import PdfReader
+# pypdf removed - using MCP OCR server only
 from openai import OpenAI
 from dotenv import load_dotenv
 from platformdirs import user_config_dir
 import chromadb
+from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -183,14 +185,11 @@ def initialize_openai_client():
         collection = None
         return False
 
-# Initialize ChromaDB (without embeddings initially)
-chroma_client = chromadb.PersistentClient(path=DB_DIR)
+# Initialize ChromaDB (without embeddings initially), telemetry disabled
+chroma_client = None
 openai_client = None
 openai_ef = None
 collection = None
-
-# Try to initialize OpenAI
-initialize_openai_client()
 
 # Initialize FastAPI
 app = FastAPI(title=f"{APP_NAME} API")
@@ -222,62 +221,33 @@ def save_metadata(metadata):
         json.dump(metadata, f, indent=2)
 
 def extract_text_from_pdf(filepath):
-    """
-    Extracts text using PyPDF; falls back to PyMuPDF if available.
-    Note: OCR is not performed here—scanned/image-only docs will still be empty.
-    """
-    text = ""
-    try:
-        reader = PdfReader(filepath)
-        for page in reader.pages:
-            extracted = page.extract_text() or ""
-            text += extracted + "\n"
-    except Exception as e:
-        logger.error(f"Error extracting text with PdfReader from {filepath}: {e}")
-
-    if text.strip():
-        return text
-
-    # Fallback to PyMuPDF for better text extraction (non-OCR)
-    try:
-        import fitz  # type: ignore
-
-        with fitz.open(filepath) as doc:
-            for page in doc:
-                extracted = page.get_text() or ""
-                text += extracted + "\n"
-    except Exception as e:
-        logger.warning(f"PyMuPDF fallback failed or not available for {filepath}: {e}")
-
-    return text
+    """Extract text via MCP OCR server - REQUIRED, no fallback."""
+    ocr_url = os.environ.get("MCP_OCR_URL", "http://localhost:7001")
+    endpoint = f"{ocr_url}/ocr_pdf"
+    with open(filepath, "rb") as f:
+        files = {"file": (os.path.basename(filepath), f, "application/pdf")}
+        resp = httpx.post(endpoint, files=files, timeout=120)
+    resp.raise_for_status()
+    data = resp.json()
+    pages = data.get("pages", [])
+    return "\n".join(pages)
 
 def index_document(filename: str, text: str, chunk_size: int = 1000, chunk_overlap: int = 200):
-    # Split text
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=len,
-    )
-    chunks = text_splitter.split_text(text)
-    
-    # Prepare for Chroma
-    ids = [f"{filename}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [{"filename": filename, "chunk_index": i} for i in range(len(chunks))]
-    
-    # Delete existing chunks for this file to avoid duplication
-    try:
-        collection.delete(where={"filename": filename})
-    except:
-        pass # Might not exist
-    
-    # Upsert
-    if chunks:
-        collection.upsert(
-            documents=chunks,
-            ids=ids,
-            metadatas=metadatas
-        )
-    logger.info(f"Indexed {len(chunks)} chunks for {filename}")
+    """Send chunks to MCP RAG server - REQUIRED, no fallback."""
+    rag_url = os.environ.get("MCP_RAG_URL", "http://localhost:7002")
+    endpoint = f"{rag_url}/ingest"
+    payload = {
+        "doc_id": filename,
+        "filename": filename,
+        "text": text,
+        "chunk_size": chunk_size,
+        "chunk_overlap": chunk_overlap,
+        "metadata": {},
+    }
+    resp = httpx.post(endpoint, json=payload, timeout=120)
+    resp.raise_for_status()
+    data = resp.json()
+    logger.info(f"Indexed {data.get('chunks', '?')} chunks for {filename} via RAG MCP")
 
 def get_doc_type_config(doc_type: str):
     """Return (config_for_type, resolved_doc_type) with default fallback."""
@@ -290,8 +260,8 @@ def get_doc_type_config(doc_type: str):
 
 def classify_doc_type(filename: str, filepath: str) -> str:
     """
-    LLM-first classifier (filename + first page snippet), with heuristic fallback.
-    Order: LLM -> folder hint -> header keywords -> filename keywords -> default.
+    LLM-first classifier using MCP OCR server for snippet extraction.
+    Order: LLM -> folder hint -> filename keywords -> default.
     """
     doc_types = config.get("document_types", {}) if config else {}
     known_types = set(doc_types.keys())
@@ -336,70 +306,54 @@ def classify_doc_type(filename: str, filepath: str) -> str:
                 return dt
         return None
 
-    # LLM classification if available
-    if openai_client:
-        snippet = ""
-        try:
-            import fitz  # type: ignore
-            with fitz.open(filepath) as doc:
-                if doc.page_count > 0:
-                    snippet = (doc.load_page(0).get_text() or "").strip()
-        except Exception:
-            pass
-        if not snippet:
-            try:
-                reader = PdfReader(filepath)
-                if reader.pages:
-                    snippet = (reader.pages[0].extract_text() or "").strip()
-            except Exception:
-                pass
+    def first_page_text() -> str:
+        ocr_url = os.environ.get("MCP_OCR_URL", "http://localhost:7001")
+        endpoint = f"{ocr_url}/classify_snippet"
+        with open(filepath, "rb") as f:
+            files = {"file": (os.path.basename(filepath), f, "application/pdf")}
+            resp = httpx.post(endpoint, files=files, timeout=180)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("snippet", "").strip()
 
-        if snippet:
-            type_list = ", ".join(sorted(known_types))
-            prompt = (
-                "You classify documents into one of the known types. "
-                "Return only the best type id from the list; if unsure, return 'default'.\n"
-                f"Known types: {type_list}\n"
-                f"Filename: {filename}\n"
-                f"Snippet:\n{snippet[:2000]}"
-            )
-            try:
-                resp = openai_client.chat.completions.create(
-                    model=LLM_MODEL,
-                    messages=[
-                        {"role": "system", "content": "Return only the type id from the known list."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=10,
-                    temperature=0,
-                )
-                llm_type = (resp.choices[0].message.content or "").strip()
-                if llm_type in known_types:
-                    return llm_type
-                if llm_type == "default":
-                    return pick_default()
-            except Exception as e:
-                logger.info(f"LLM classification failed for {filename}: {e}")
+    # LLM classification - REQUIRED, no fallback
+    snippet = first_page_text()
+    if not snippet:
+        logger.error(f"MCP OCR server failed to extract snippet for {filename}")
+        return pick_default()
+    
+    if not openai_client:
+        logger.error(f"OpenAI client not available for classification of {filename}")
+        return pick_default()
+    
+    type_list = ", ".join(sorted(known_types))
+    prompt = (
+        "You classify documents into one of the known types. "
+        "Return only the best type id from the list; if unsure, return 'default'.\n"
+        f"Known types: {type_list}\n"
+        f"Filename: {filename}\n"
+        f"Snippet:\n{snippet[:2000]}"
+    )
+    resp = openai_client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": "Return only the type id from the known list."},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=10,
+        temperature=0,
+    )
+    llm_type = (resp.choices[0].message.content or "").strip()
+    if llm_type in known_types:
+        return llm_type
+    if llm_type == "default":
+        return pick_default()
 
     # Folder hint
     if folder_hint in folder_map and folder_map[folder_hint]:
         return folder_map[folder_hint]
 
-    # Header keyword
-    try:
-        import fitz  # type: ignore
-        with fitz.open(filepath) as doc:
-            if doc.page_count > 0:
-                page0 = doc.load_page(0)
-                header_text = page0.get_text() or ""
-                if header_text.strip():
-                    hit = keyword_match(header_text)
-                    if hit:
-                        return hit
-    except Exception as e:
-        logger.info(f"Header classification skipped for {filename}: {e}")
-
-    # Filename keywords
+    # Filename keywords (header classification removed - use MCP OCR snippet only)
     hit = keyword_match(fname)
     if hit:
         return hit
@@ -413,17 +367,20 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
     chunk_size = ingest_cfg.get("chunk_size", 1000)
     chunk_overlap = ingest_cfg.get("chunk_overlap", 200)
 
+    # Extract text via MCP OCR server - REQUIRED, no fallback
     text = extract_text_from_pdf(filepath)
     
     if not text:
-        logger.warning(f"No text extracted from {filename}")
+        logger.error(f"MCP OCR server failed to extract text from {filename}")
+        metadata = load_metadata()
+        if filename in metadata:
+            metadata[filename]["status"] = "error"
+            metadata[filename]["error"] = "OCR extraction failed"
+            save_metadata(metadata)
         return
 
-    # 1. Index into Vector Store
-    try:
-        index_document(filename, text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    except Exception as e:
-        logger.error(f"Indexing failed for {filename}: {e}")
+    # 1. Index into Vector Store via MCP RAG server - REQUIRED, no fallback
+    index_document(filename, text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
     # 2. Run Competency Questions
     questions = doc_cfg.get("capture_fields") or doc_cfg.get("competency_questions", [])
@@ -440,19 +397,17 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
             questions_list=questions_list_str
         )
         
-        try:
-            response = openai_client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-            content = response.choices[0].message.content
-            answers = json.loads(content)
-        except Exception as e:
-            logger.error(f"LLM processing failed: {e}")
+        # LLM extraction - REQUIRED, no fallback
+        response = openai_client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content
+        answers = json.loads(content)
     
     # Update metadata
     metadata = load_metadata()

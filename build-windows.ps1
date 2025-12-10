@@ -96,12 +96,25 @@ Push-Location "python/python_embed"
 Write-Host "Installing Python dependencies..."
 .\python.exe -m pip install -r ../requirements.txt
 
+# Download EasyOCR models to tools/easyocr_models
+Write-Host "Downloading EasyOCR models..."
+$modelsDir = "..\..\tools\easyocr_models"
+New-Item -ItemType Directory -Force -Path $modelsDir | Out-Null
+$env:EASYOCR_MODELS_DIR = (Resolve-Path $modelsDir).Path
+.\python.exe ..\download_easyocr_models.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARNING: EasyOCR model download failed, but continuing build..." -ForegroundColor Yellow
+    Write-Host "Models will be downloaded on first use at runtime." -ForegroundColor Yellow
+}
+
 # Cleanup
 Remove-Item get-pip.py
 Pop-Location
 
 Write-Host "SUCCESS: Python embeddable setup completed" -ForegroundColor Green
 [Console]::Out.Flush()
+
+# (Tesseract download removed; OCR now uses easyocr via pip, no external installer)
 
 # Build the Electron app
 Write-Host "Building Electron app..." -ForegroundColor Yellow
@@ -203,6 +216,11 @@ if ($exeCreated) {
     if (Test-Path "build\icon.png") {
         Copy-Item "build\icon.png" -Destination "release\win-unpacked\" -ErrorAction SilentlyContinue
     }
+    # Copy EasyOCR models if they were downloaded
+    if (Test-Path "tools\easyocr_models") {
+        Write-Host "Copying EasyOCR models..."
+        Copy-Item "tools\easyocr_models" -Destination "release\win-unpacked\resources\" -Recurse -Force -ErrorAction SilentlyContinue
+    }
     
     # Copy and modify package.json for the release directory
     Write-Host "Copying package.json..."
@@ -218,19 +236,20 @@ if ($exeCreated) {
     
     # Copy additional files that electron-builder might not include
     Write-Host "Copying additional resources..."
+    $resourcesPath = "release\win-unpacked\resources"
+    if (-not (Test-Path $resourcesPath)) {
+        New-Item -ItemType Directory -Force -Path $resourcesPath | Out-Null
+    }
     if (Test-Path "config.default.yaml") {
-        $resourcesPath = "release\win-unpacked\resources"
-        if (-not (Test-Path $resourcesPath)) {
-            New-Item -ItemType Directory -Force -Path $resourcesPath | Out-Null
-        }
         Copy-Item "config.default.yaml" -Destination $resourcesPath -ErrorAction SilentlyContinue
     }
     if (Test-Path "prompts.default.yaml") {
-        $resourcesPath = "release\win-unpacked\resources"
-        if (-not (Test-Path $resourcesPath)) {
-            New-Item -ItemType Directory -Force -Path $resourcesPath | Out-Null
-        }
         Copy-Item "prompts.default.yaml" -Destination $resourcesPath -ErrorAction SilentlyContinue
+    }
+    # Copy EasyOCR models if they were downloaded
+    if (Test-Path "tools\easyocr_models") {
+        Write-Host "Copying EasyOCR models..."
+        Copy-Item "tools\easyocr_models" -Destination $resourcesPath -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 [Console]::Out.Flush()
