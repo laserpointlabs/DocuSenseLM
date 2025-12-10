@@ -9,7 +9,9 @@ import datetime
 import pickletools
 import diskcache
 import webbrowser  # Ensure stdlib module is loaded for PyInstaller
+import re
 from typing import List, Dict, Optional
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,23 +77,42 @@ prompts_config = load_prompts_config()
 
 # Load configuration
 def load_app_config():
-    # Try loading user override first
-    user_config = os.path.join(USER_DATA_DIR, "config.yaml")
-    if os.path.exists(user_config):
-        try:
-            with open(user_config, "r") as f:
-                return yaml.safe_load(f)
-        except Exception as e:
-            logger.error(f"Failed to load user config: {e}")
-    
-    # Fallback to default
-    default_config = os.path.join(BASE_DIR, "config.default.yaml")
+    """
+    Load user config if present, and merge in any missing document_types from the default.
+    User-defined types override defaults; defaults fill gaps (including 'default' type).
+    """
+    default_path = os.path.join(BASE_DIR, "config.default.yaml")
     try:
-        with open(default_config, "r") as f:
-            return yaml.safe_load(f)
+        with open(default_path, "r") as f:
+            default_cfg = yaml.safe_load(f) or {}
     except Exception as e:
         logger.error(f"Failed to load default config: {e}")
-        return {"document_types": {}, "dashboard": {}}
+        default_cfg = {"document_types": {}, "dashboard": {}}
+
+    user_cfg = {}
+    user_config_path = os.path.join(USER_DATA_DIR, "config.yaml")
+    if os.path.exists(user_config_path):
+        try:
+            with open(user_config_path, "r") as f:
+                user_cfg = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.error(f"Failed to load user config: {e}")
+
+    merged = dict(default_cfg)
+    # Merge document_types deeply (defaults + user overrides/additions)
+    default_dt = default_cfg.get("document_types", {}) or {}
+    user_dt = user_cfg.get("document_types", {}) or {}
+    merged_dt = dict(default_dt)
+    merged_dt.update(user_dt)
+    merged["document_types"] = merged_dt
+
+    # Merge other top-level keys (user overrides)
+    for k, v in user_cfg.items():
+        if k == "document_types":
+            continue
+        merged[k] = v
+
+    return merged
 
 config = load_app_config()
 
@@ -201,21 +222,40 @@ def save_metadata(metadata):
         json.dump(metadata, f, indent=2)
 
 def extract_text_from_pdf(filepath):
+    """
+    Extracts text using PyPDF; falls back to PyMuPDF if available.
+    Note: OCR is not performed here—scanned/image-only docs will still be empty.
+    """
+    text = ""
     try:
         reader = PdfReader(filepath)
-        text = ""
         for page in reader.pages:
-            text += page.extract_text() + "\n"
-        return text
+            extracted = page.extract_text() or ""
+            text += extracted + "\n"
     except Exception as e:
-        logger.error(f"Error extracting text from {filepath}: {e}")
-        return ""
+        logger.error(f"Error extracting text with PdfReader from {filepath}: {e}")
 
-def index_document(filename: str, text: str):
+    if text.strip():
+        return text
+
+    # Fallback to PyMuPDF for better text extraction (non-OCR)
+    try:
+        import fitz  # type: ignore
+
+        with fitz.open(filepath) as doc:
+            for page in doc:
+                extracted = page.get_text() or ""
+                text += extracted + "\n"
+    except Exception as e:
+        logger.warning(f"PyMuPDF fallback failed or not available for {filepath}: {e}")
+
+    return text
+
+def index_document(filename: str, text: str, chunk_size: int = 1000, chunk_overlap: int = 200):
     # Split text
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
         length_function=len,
     )
     chunks = text_splitter.split_text(text)
@@ -239,8 +279,140 @@ def index_document(filename: str, text: str):
         )
     logger.info(f"Indexed {len(chunks)} chunks for {filename}")
 
+def get_doc_type_config(doc_type: str):
+    """Return (config_for_type, resolved_doc_type) with default fallback."""
+    doc_types = config.get("document_types", {}) if config else {}
+    if doc_type in doc_types:
+        return doc_types[doc_type], doc_type
+    if "default" in doc_types:
+        return doc_types["default"], "default"
+    return {}, doc_type
+
+def classify_doc_type(filename: str, filepath: str) -> str:
+    """
+    LLM-first classifier (filename + first page snippet), with heuristic fallback.
+    Order: LLM -> folder hint -> header keywords -> filename keywords -> default.
+    """
+    doc_types = config.get("document_types", {}) if config else {}
+    known_types = set(doc_types.keys())
+    fname = filename.lower()
+    folder_hint = Path(filepath).parent.name.lower()
+
+    folder_map = {
+        "ndas": "nda",
+        "nda": "nda",
+        "distributor_agreements": "distributor_agreement",
+        "agreements": None,  # ambiguous catch-all
+    }
+
+    keyword_map = [
+        ("non-disclosure agreement", "nda"),
+        ("mutual non-disclosure agreement", "nda"),
+        ("confidentiality agreement", "nda"),
+        ("sales agreement", "sales_agreement"),
+        ("distributor agreement", "distributor_agreement"),
+        ("distribution agreement", "distributor_agreement"),
+        ("first amendment", "distributor_agreement_amendment"),
+        ("amendment", "distributor_agreement_amendment"),
+        ("letter of intent", "letter_of_intent"),
+        ("loi", "letter_of_intent"),
+        ("supply agreement", "supplier_agreement"),
+        ("service agreement", "service_agreement"),
+        ("maintenance agreement", "service_agreement"),
+        ("warehouse management agreement", "service_agreement"),
+        ("master terms agreement", "master_terms_agreement"),
+        ("master services agreement", "service_agreement"),
+    ]
+
+    def pick_default():
+        if "default" in known_types:
+            return "default"
+        return next(iter(known_types), "default")
+
+    def keyword_match(text: str):
+        low = text.lower()
+        for needle, dt in keyword_map:
+            if dt in known_types and needle in low:
+                return dt
+        return None
+
+    # LLM classification if available
+    if openai_client:
+        snippet = ""
+        try:
+            import fitz  # type: ignore
+            with fitz.open(filepath) as doc:
+                if doc.page_count > 0:
+                    snippet = (doc.load_page(0).get_text() or "").strip()
+        except Exception:
+            pass
+        if not snippet:
+            try:
+                reader = PdfReader(filepath)
+                if reader.pages:
+                    snippet = (reader.pages[0].extract_text() or "").strip()
+            except Exception:
+                pass
+
+        if snippet:
+            type_list = ", ".join(sorted(known_types))
+            prompt = (
+                "You classify documents into one of the known types. "
+                "Return only the best type id from the list; if unsure, return 'default'.\n"
+                f"Known types: {type_list}\n"
+                f"Filename: {filename}\n"
+                f"Snippet:\n{snippet[:2000]}"
+            )
+            try:
+                resp = openai_client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": "Return only the type id from the known list."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=10,
+                    temperature=0,
+                )
+                llm_type = (resp.choices[0].message.content or "").strip()
+                if llm_type in known_types:
+                    return llm_type
+                if llm_type == "default":
+                    return pick_default()
+            except Exception as e:
+                logger.info(f"LLM classification failed for {filename}: {e}")
+
+    # Folder hint
+    if folder_hint in folder_map and folder_map[folder_hint]:
+        return folder_map[folder_hint]
+
+    # Header keyword
+    try:
+        import fitz  # type: ignore
+        with fitz.open(filepath) as doc:
+            if doc.page_count > 0:
+                page0 = doc.load_page(0)
+                header_text = page0.get_text() or ""
+                if header_text.strip():
+                    hit = keyword_match(header_text)
+                    if hit:
+                        return hit
+    except Exception as e:
+        logger.info(f"Header classification skipped for {filename}: {e}")
+
+    # Filename keywords
+    hit = keyword_match(fname)
+    if hit:
+        return hit
+
+    return pick_default()
+
 async def process_document_background(filename: str, filepath: str, doc_type: str):
     logger.info(f"Processing {filename}...")
+    doc_cfg, resolved_doc_type = get_doc_type_config(doc_type)
+    ingest_cfg = doc_cfg.get("ingest", {}) if doc_cfg else {}
+    chunk_size = ingest_cfg.get("chunk_size", 1000)
+    chunk_overlap = ingest_cfg.get("chunk_overlap", 200)
+
     text = extract_text_from_pdf(filepath)
     
     if not text:
@@ -249,15 +421,15 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
 
     # 1. Index into Vector Store
     try:
-        index_document(filename, text)
+        index_document(filename, text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     except Exception as e:
         logger.error(f"Indexing failed for {filename}: {e}")
 
     # 2. Run Competency Questions
-    questions = config.get("document_types", {}).get(doc_type, {}).get("competency_questions", [])
+    questions = doc_cfg.get("capture_fields") or doc_cfg.get("competency_questions", [])
     answers = {}
     
-    if questions and openai_client.api_key:
+    if questions and openai_client and getattr(openai_client, "api_key", None):
         system_prompt = prompts_config.get("prompts", {}).get("competency_extraction", {}).get("system", "You are a legal document assistant. Respond in JSON.")
         user_prompt_template = prompts_config.get("prompts", {}).get("competency_extraction", {}).get("user", "Analyze the text:\n{document_text}\n\nQuestions:\n{questions_list}")
         
@@ -287,6 +459,7 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
     if filename in metadata:
         metadata[filename]["status"] = "processed"
         metadata[filename]["competency_answers"] = answers
+        metadata[filename]["doc_type"] = resolved_doc_type
         save_metadata(metadata)
     
     logger.info(f"Finished processing {filename}")
@@ -494,19 +667,24 @@ async def restore_data(file: UploadFile = File(...)):
     return {"status": "restored", "message": "Data restored successfully. Please restart the application if you see issues."}
 
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", background_tasks: BackgroundTasks = None):
+async def upload_document(file: UploadFile = File(...), doc_type: str = "auto", background_tasks: BackgroundTasks = None):
     filename = file.filename
     filepath = os.path.join(DOCUMENTS_DIR, filename)
     
     # Save file
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    # Resolve doc_type (user override if not auto)
+    resolved_doc_type = doc_type
+    if doc_type == "auto" or not doc_type:
+        resolved_doc_type = classify_doc_type(filename, filepath)
     
     # Init metadata
     metadata = load_metadata()
     metadata[filename] = {
         "filename": filename,
-        "doc_type": doc_type,
+        "doc_type": resolved_doc_type,
         "upload_date": datetime.datetime.now().isoformat(),
         "status": "pending",
         "workflow_status": "in_review",
@@ -515,9 +693,9 @@ async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", b
     save_metadata(metadata)
     
     # Process
-    background_tasks.add_task(process_document_background, filename, filepath, doc_type)
+    background_tasks.add_task(process_document_background, filename, filepath, resolved_doc_type)
     
-    return {"status": "uploaded", "filename": filename}
+    return {"status": "uploaded", "filename": filename, "doc_type": resolved_doc_type}
 
 @app.post("/reprocess/{filename}")
 async def reprocess_document(filename: str, background_tasks: BackgroundTasks):
@@ -538,6 +716,28 @@ async def reprocess_document(filename: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_document_background, filename, filepath, doc_type)
     
     return {"status": "reprocessing_started", "filename": filename}
+
+@app.post("/documents/{filename}/type")
+async def update_document_type(filename: str, new_doc_type: str, background_tasks: BackgroundTasks):
+    filepath = os.path.join(DOCUMENTS_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    metadata = load_metadata()
+    if filename not in metadata:
+        raise HTTPException(status_code=404, detail="Metadata not found")
+
+    doc_cfg, resolved_doc_type = get_doc_type_config(new_doc_type)
+    if not doc_cfg and new_doc_type != "default":
+        raise HTTPException(status_code=400, detail="Unknown doc_type")
+
+    metadata[filename]["doc_type"] = resolved_doc_type
+    metadata[filename]["status"] = "reprocessing"
+    save_metadata(metadata)
+
+    background_tasks.add_task(process_document_background, filename, filepath, resolved_doc_type)
+
+    return {"status": "doc_type_updated", "filename": filename, "doc_type": resolved_doc_type}
 
 @app.post("/status/{filename}")
 async def update_status(filename: str, request: UpdateStatusRequest):

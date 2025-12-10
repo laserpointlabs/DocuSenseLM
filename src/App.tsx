@@ -376,7 +376,7 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
 
 function DocumentsView({ config, documents, refresh, initialPreview, onClearPreview }: { config: Config | null, documents: Record<string, DocumentData>, refresh: () => void, initialPreview: string | null, onClearPreview?: () => void }) {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [selectedType, setSelectedType] = useState("nda");
+    const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({});
     const [previewDoc, setPreviewDoc] = useState<string | null>(initialPreview);
     const [reprocessing, setReprocessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState(initialPreview || ""); // Default search to preview doc if set
@@ -405,7 +405,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             formData.append("file", file);
             
             try {
-                await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                await fetch(`http://localhost:${API_PORT}/upload?doc_type=auto`, {
                     method: "POST",
                     body: formData
                 });
@@ -431,6 +431,18 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             alert("Failed to start reprocessing");
         } finally {
             setReprocessing(false);
+        }
+    };
+
+    const handleChangeType = async (filename: string, newType: string) => {
+        setTypeOverrides(prev => ({ ...prev, [filename]: newType }));
+        try {
+            await fetch(`http://localhost:${API_PORT}/documents/${encodeURIComponent(filename)}/type?new_doc_type=${encodeURIComponent(newType)}`, {
+                method: "POST"
+            });
+            refresh();
+        } catch (err) {
+            console.error(`Error changing type for ${filename}:`, err);
         }
     };
 
@@ -493,7 +505,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 formData.append("file", file);
                 
                 try {
-                    await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                    await fetch(`http://localhost:${API_PORT}/upload?doc_type=auto`, {
                         method: "POST",
                         body: formData
                     });
@@ -538,15 +550,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                     >
                         {showArchived ? 'Show Active' : 'Show Archived'}
                     </button>
-                    <select 
-                        value={selectedType} 
-                        onChange={e => setSelectedType(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    >
-                        {config && Object.keys(config.document_types).map(key => (
-                            <option key={key} value={key}>{config.document_types[key].name}</option>
-                        ))}
-                    </select>
+                    <div className="px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg bg-gray-50">
+                        Auto-classify on upload
+                    </div>
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
@@ -608,48 +614,65 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                             </span>
                                         </div>
                                     </td>
-                                    <td className="p-4 flex gap-2">
-                                        <button 
-                                            className="p-1 hover:bg-gray-200 rounded text-blue-600"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setPreviewDoc(doc.filename);
-                                            }}
-                                            title="View"
-                                        >
-                                            <Eye size={18} />
-                                        </button>
-                                        <button 
-                                            className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-blue-600"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleReprocess(doc.filename);
-                                            }}
-                                            disabled={reprocessing}
-                                            title="Reprocess & Re-index"
-                                        >
-                                            <RefreshCw size={18} className={reprocessing ? "animate-spin" : ""} />
-                                        </button>
-                                        <button 
-                                            className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-orange-600"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleArchive(doc.filename);
-                                            }}
-                                            title={doc.archived ? "Restore" : "Archive"}
-                                        >
-                                            <Archive size={18} />
-                                        </button>
-                                        <button 
-                                            className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-red-600"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDelete(doc.filename);
-                                            }}
-                                            title="Delete"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
+                                    <td className="p-4">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                                <select
+                                                    className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                                                    value={typeOverrides[doc.filename] || doc.doc_type}
+                                                    onChange={(e) => handleChangeType(doc.filename, e.target.value)}
+                                                >
+                                                    {config && Object.keys(config.document_types).map(key => (
+                                                        <option key={key} value={key}>{config.document_types[key].name}</option>
+                                                    ))}
+                                                    <option value="default">Default</option>
+                                                </select>
+                                                <span className="text-xs text-gray-500">Set type & reprocess</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    className="p-1 hover:bg-gray-200 rounded text-blue-600"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setPreviewDoc(doc.filename);
+                                                    }}
+                                                    title="View"
+                                                >
+                                                    <Eye size={18} />
+                                                </button>
+                                                <button 
+                                                    className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-blue-600"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleReprocess(doc.filename);
+                                                    }}
+                                                    disabled={reprocessing}
+                                                    title="Reprocess & Re-index"
+                                                >
+                                                    <RefreshCw size={18} className={reprocessing ? "animate-spin" : ""} />
+                                                </button>
+                                                <button 
+                                                    className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-orange-600"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleArchive(doc.filename);
+                                                    }}
+                                                    title={doc.archived ? "Restore" : "Archive"}
+                                                >
+                                                    <Archive size={18} />
+                                                </button>
+                                                <button 
+                                                    className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-red-600"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDelete(doc.filename);
+                                                    }}
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
