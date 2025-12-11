@@ -376,7 +376,6 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
 
 function DocumentsView({ config, documents, refresh, initialPreview, onClearPreview }: { config: Config | null, documents: Record<string, DocumentData>, refresh: () => void, initialPreview: string | null, onClearPreview?: () => void }) {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [selectedType, setSelectedType] = useState("nda");
     const [previewDoc, setPreviewDoc] = useState<string | null>(initialPreview);
     const [reprocessing, setReprocessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState(initialPreview || ""); // Default search to preview doc if set
@@ -405,7 +404,8 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             formData.append("file", file);
             
             try {
-                await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                // doc_type is auto-classified by MCP; send 'auto' hint
+                await fetch(`http://localhost:${API_PORT}/upload?doc_type=auto`, {
                     method: "POST",
                     body: formData
                 });
@@ -493,7 +493,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 formData.append("file", file);
                 
                 try {
-                    await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                    await fetch(`http://localhost:${API_PORT}/upload?doc_type=auto`, {
                         method: "POST",
                         body: formData
                     });
@@ -538,15 +538,6 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                     >
                         {showArchived ? 'Show Active' : 'Show Archived'}
                     </button>
-                    <select 
-                        value={selectedType} 
-                        onChange={e => setSelectedType(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    >
-                        {config && Object.keys(config.document_types).map(key => (
-                            <option key={key} value={key}>{config.document_types[key].name}</option>
-                        ))}
-                    </select>
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
@@ -591,7 +582,32 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             {filteredDocs.map(doc => (
                                 <tr key={doc.filename} className="hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewDoc(doc.filename)}>
                                     <td className="p-4 font-medium">{doc.filename}</td>
-                                    <td className="p-4 capitalize text-sm">{doc.doc_type.replace('_', ' ')}</td>
+                                    <td className="p-4 capitalize text-sm">
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={doc.doc_type || 'auto'}
+                                                onChange={async (e) => {
+                                                    const newType = e.target.value;
+                                                    try {
+                                                        await fetch(`http://localhost:${API_PORT}/documents/${encodeURIComponent(doc.filename)}/doc_type`, {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ doc_type: newType })
+                                                        });
+                                                        refresh();
+                                                    } catch (err) {
+                                                        console.error("Failed to update doc type", err);
+                                                    }
+                                                }}
+                                                className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                                            >
+                                                <option value="auto">Auto (MCP)</option>
+                                                {config && Object.keys(config.document_types).map(key => (
+                                                    <option key={key} value={key}>{config.document_types[key].name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </td>
                                     <td className="p-4">
                                         <div className="flex flex-col gap-1">
                                             <span className={`px-2 py-1 rounded-full text-xs w-fit ${
