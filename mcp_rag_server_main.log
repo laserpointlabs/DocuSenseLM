@@ -1,0 +1,12 @@
+C:\Users\engin\AppData\Local\Programs\Python\Python312\Lib\site-packages\chromadb\utils\embedding_functions\openai_embedding_function.py:54: DeprecationWarning: Direct api_key configuration will not be persisted. Please use environment variables via api_key_env_var for persistent storage.
+  warnings.warn(
+C:\Users\engin\AppData\Local\Programs\Python\Python312\Lib\site-packages\websockets\legacy\__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+  warnings.warn(  # deprecated in 14.0 - 2024-11-09
+C:\Users\engin\AppData\Local\Programs\Python\Python312\Lib\site-packages\uvicorn\protocols\websockets\websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+  from websockets.server import WebSocketServerProtocol
+INFO:     Started server process [10252]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:7002 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57964 - "GET /query HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:57982 - "POST /ingest HTTP/1.1" 200 OK

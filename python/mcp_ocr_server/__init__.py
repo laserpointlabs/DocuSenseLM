@@ -1,0 +1,1 @@
+# MCP OCR Server package

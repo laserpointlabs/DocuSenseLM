@@ -13,6 +13,7 @@ test-results
 python/venv
 python/python_embed
 python/__pycache__
+tools/easyocr_models
 documents/*.pdf
 documents/*.docx
 documents/metadata.json
