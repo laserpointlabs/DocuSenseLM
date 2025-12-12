@@ -1,4 +1,6 @@
 import os
+# Disable ChromaDB telemetry (must be set before importing chromadb)
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
 import sys
 import yaml
 import json
@@ -254,7 +256,9 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
         logger.error(f"Indexing failed for {filename}: {e}")
 
     # 2. Run Competency Questions
-    questions = config.get("document_types", {}).get(doc_type, {}).get("competency_questions", [])
+    doc_config = config.get("document_types", {}).get(doc_type, {})
+    # Support both old and new config field names
+    questions = doc_config.get("competency_questions") or doc_config.get("capture_fields", [])
     answers = {}
     
     if questions and openai_client.api_key:
@@ -298,6 +302,9 @@ class ChatRequest(BaseModel):
 
 class UpdateStatusRequest(BaseModel):
     status: str
+
+class UpdateDocTypeRequest(BaseModel):
+    doc_type: str
 
 # --- Endpoints ---
 
@@ -544,11 +551,22 @@ async def update_status(filename: str, request: UpdateStatusRequest):
     metadata = load_metadata()
     if filename not in metadata:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     metadata[filename]["workflow_status"] = request.status
     save_metadata(metadata)
-    
+
     return {"status": "updated", "filename": filename, "new_status": request.status}
+
+@app.post("/type/{filename}")
+async def update_doc_type(filename: str, request: UpdateDocTypeRequest):
+    metadata = load_metadata()
+    if filename not in metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    metadata[filename]["doc_type"] = request.doc_type
+    save_metadata(metadata)
+
+    return {"status": "updated", "filename": filename, "new_doc_type": request.doc_type}
 
 @app.post("/archive/{filename}")
 async def archive_document(filename: str):

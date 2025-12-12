@@ -48,10 +48,12 @@ function App() {
     console.log('App: window.electronAPI available:', !!window.electronAPI);
 
     // Listen for python-ready IPC message
+    let pythonReadyReceived = false;
     if (window.electronAPI?.handlePythonReady) {
       console.log('App: Setting up python-ready handler');
       window.electronAPI.handlePythonReady(() => {
         console.log('App: Received python-ready signal, initializing app...');
+        pythonReadyReceived = true;
         fetchConfig();
         fetchDocuments();
         setIsLoading(false);
@@ -71,30 +73,40 @@ function App() {
       console.log('App: electronAPI.handlePythonError not available');
     }
 
-    // Fallback to manual health checking ONLY if IPC is not available
-    if (!window.electronAPI?.handlePythonReady) {
-      console.log('App: IPC not available, falling back to manual health checking');
-      const initApp = async () => {
-        let retries = 0;
-        while (retries < 60) { // Increased retries to match main process
-          try {
-            const res = await fetch(`http://localhost:${API_PORT}/health`);
-            if (res.ok) {
-              fetchConfig();
-              fetchDocuments();
-              setIsLoading(false);
-              return;
-            }
-          } catch (e) {
-            // Ignore error, retry
-          }
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Longer delay
-          retries++;
+    // Fallback to manual health checking if IPC is not available OR if signal doesn't come within 10 seconds
+    const initApp = async () => {
+      // Wait up to 10 seconds for IPC signal if available
+      if (window.electronAPI?.handlePythonReady) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        if (pythonReadyReceived) {
+          console.log('App: IPC signal received, skipping health check fallback');
+          return;
         }
-        alert("Failed to connect to backend service. Please restart the application.");
-      };
-      initApp();
-    }
+        console.log('App: IPC signal timeout, falling back to health check');
+      }
+      
+      console.log('App: Starting manual health checking');
+      let retries = 0;
+      while (retries < 30) {
+        try {
+          const res = await fetch(`http://localhost:${API_PORT}/health`);
+          if (res.ok) {
+            console.log('App: Health check passed, initializing app');
+            fetchConfig();
+            fetchDocuments();
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          // Ignore error, retry
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        retries++;
+      }
+      console.error('App: Failed to connect to backend after all retries');
+      setIsLoading(false); // Show the app anyway, let user see the error
+    };
+    initApp();
 
     document.title = APP_TITLE;
 
@@ -376,11 +388,20 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
 
 function DocumentsView({ config, documents, refresh, initialPreview, onClearPreview }: { config: Config | null, documents: Record<string, DocumentData>, refresh: () => void, initialPreview: string | null, onClearPreview?: () => void }) {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [selectedType, setSelectedType] = useState("nda");
     const [previewDoc, setPreviewDoc] = useState<string | null>(initialPreview);
     const [reprocessing, setReprocessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState(initialPreview || ""); // Default search to preview doc if set
     const [showArchived, setShowArchived] = useState(false);
+    const [editingType, setEditingType] = useState<string | null>(null);
+    const [filterDocType, setFilterDocType] = useState<string>(""); // Filter by document type
+    
+    // Upload modal state
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+    const [selectedType, setSelectedType] = useState<string>("");
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<Record<string, 'uploading' | 'uploaded' | 'processing' | 'error'>>({});
+    const isUploadingRef = useRef(false);
 
     useEffect(() => {
         if (initialPreview) {
@@ -395,41 +416,149 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         if (onClearPreview) onClearPreview();
     };
 
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return;
+    // Handle file selection - show modal instead of uploading immediately
+    const handleFileSelection = (files: File[]) => {
+        // Filter to only PDF and DOCX files
+        const validFiles = files.filter(file => 
+            file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx')
+        );
         
-        const files = Array.from(e.target.files);
-        
-        for (const file of files) {
-            const formData = new FormData();
-            formData.append("file", file);
-            
-            try {
-                await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
-                    method: "POST",
-                    body: formData
-                });
-            } catch (err) {
-                console.error(`Error uploading ${file.name}:`, err);
-            }
+        if (validFiles.length === 0) {
+            alert('Please select PDF or DOCX files only.');
+            return;
         }
         
-        refresh();
+        // Set default type to first available type if config is loaded
+        if (config && Object.keys(config.document_types).length > 0) {
+            setSelectedType(Object.keys(config.document_types)[0]);
+        }
+        
+        setPendingFiles(validFiles);
+        setShowUploadModal(true);
+    };
+
+    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.length) return;
+        handleFileSelection(Array.from(e.target.files));
+        // Reset input so same file can be selected again
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    // Actually perform the upload after type is selected
+    const performUpload = async () => {
+        if (!selectedType || pendingFiles.length === 0 || isUploadingRef.current) {
+            if (!selectedType || pendingFiles.length === 0) {
+                alert('Please select a document type.');
+            }
+            return;
+        }
+
+        isUploadingRef.current = true;
+        setUploading(true);
+        const progress: Record<string, 'uploading' | 'uploaded' | 'processing' | 'error'> = {};
+        const filesToUpload = [...pendingFiles]; // Store copy in case state changes
+        filesToUpload.forEach(file => {
+            progress[file.name] = 'uploading';
+        });
+        setUploadProgress(progress);
+        
+        let uploadCompleted = false;
+        const timeoutId = setTimeout(() => {
+            if (!uploadCompleted) {
+                console.warn('Upload timeout - closing modal');
+                cleanupUpload();
+            }
+        }, 30000); // 30 second timeout
+        
+        try {
+            // Upload files sequentially to show progress
+            for (let i = 0; i < filesToUpload.length; i++) {
+                const file = filesToUpload[i];
+                const formData = new FormData();
+                formData.append("file", file);
+                
+                try {
+                    const response = await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                        method: "POST",
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        setUploadProgress(prev => ({ ...prev, [file.name]: 'uploaded' }));
+                        // Small delay to show uploaded status before moving to processing
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        setUploadProgress(prev => ({ ...prev, [file.name]: 'processing' }));
+                    } else {
+                        setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
+                    }
+                } catch (err) {
+                    console.error(`Error uploading ${file.name}:`, err);
+                    setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
+                }
+            }
+            
+            uploadCompleted = true;
+            clearTimeout(timeoutId);
+            
+            // Refresh to get updated document list
+            refresh();
+            
+            // Wait a moment then close modal and show success
+            await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (err) {
+            console.error('Upload error:', err);
+            uploadCompleted = true;
+            clearTimeout(timeoutId);
+        } finally {
+            cleanupUpload();
+        }
+    };
+
+    const cleanupUpload = () => {
+        // Clear state in a way that doesn't conflict with React's rendering
+        setUploadProgress({});
+        setSelectedType("");
+        setPendingFiles([]);
+        setUploading(false);
+        isUploadingRef.current = false;
+        // Close modal after state is cleared
+        setShowUploadModal(false);
+        // Refresh again to show final status after a brief delay
+        setTimeout(() => refresh(), 500);
+    };
+
+    const cancelUpload = () => {
+        if (uploading && !confirm('Upload is in progress. Are you sure you want to cancel? Files already uploaded will remain.')) {
+            return;
+        }
+        // Allow cancel even during upload (user can force close)
+        cleanupUpload();
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
     };
 
     const handleReprocess = async (filename: string) => {
         if (!confirm(`Are you sure you want to re-process ${filename}? This will re-index it and run competency questions again.`)) return;
-        
+
         setReprocessing(true);
         try {
-            await fetch(`http://localhost:${API_PORT}/reprocess/${filename}`, {
+            const response = await fetch(`http://localhost:${API_PORT}/reprocess/${filename}`, {
                 method: "POST"
             });
-            refresh();
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            // Wait a moment to ensure the backend has started processing
+            setTimeout(() => {
+                refresh();
+                setReprocessing(false);
+            }, 1000);
         } catch (err) {
             console.error(err);
             alert("Failed to start reprocessing");
-        } finally {
             setReprocessing(false);
         }
     };
@@ -441,6 +570,21 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ status })
             });
+            refresh();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const updateDocType = async (filename: string, docType: string) => {
+        try {
+            await fetch(`http://localhost:${API_PORT}/type/${filename}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ doc_type: docType })
+            });
+            // Automatically reprocess to extract new competency answers for the new type
+            await handleReprocess(filename);
             refresh();
         } catch (err) {
             console.error(err);
@@ -467,41 +611,26 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         }
     };
 
-    const filteredDocs = Object.values(documents).filter(doc => {
-        const matchesSearch = doc.filename.toLowerCase().includes(searchTerm.toLowerCase());
+    const filteredDocs = Object.values(documents || {}).filter(doc => {
+        if (!doc) return false;
+        // Search matches filename OR document type name
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = !searchTerm || 
+            (doc.filename?.toLowerCase().includes(searchLower) ?? false) ||
+            (config?.document_types[doc.doc_type]?.name?.toLowerCase().includes(searchLower) ?? false);
         const matchesArchive = showArchived ? doc.archived : !doc.archived;
-        return matchesSearch && matchesArchive;
+        const matchesType = !filterDocType || doc.doc_type === filterDocType;
+        return matchesSearch && matchesArchive && matchesType;
     });
 
     const [isDragging, setIsDragging] = useState(false);
-
-    // ... existing handlers ...
 
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
         
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const files = Array.from(e.dataTransfer.files);
-            
-            for (const file of files) {
-                if (!file.name.toLowerCase().endsWith('.pdf') && !file.name.toLowerCase().endsWith('.docx')) {
-                    continue;
-                }
-
-                const formData = new FormData();
-                formData.append("file", file);
-                
-                try {
-                    await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
-                        method: "POST",
-                        body: formData
-                    });
-                } catch (err) {
-                    console.error(`Error uploading ${file.name}:`, err);
-                }
-            }
-            refresh();
+            handleFileSelection(Array.from(e.dataTransfer.files));
         }
     };
 
@@ -516,42 +645,45 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     };
 
     return (
-        <div className="space-y-6 h-full flex flex-col">
-            <h2 className="text-2xl font-bold flex justify-between items-center">
-                <span>Documents</span>
-                <div className="flex gap-2">
+        <div className="space-y-4 h-full flex flex-col">
+            <div className="flex justify-between items-center gap-4">
+                <h2 className="text-xl font-bold">Documents</h2>
+                <div className="flex gap-1.5 items-center flex-wrap">
                     <div className="relative">
-                        <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                        <Search className="absolute left-2 top-1.5 text-gray-400" size={14} />
                         <input 
                             type="text" 
                             placeholder="Search..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="pl-7 pr-2 py-1.5 w-40 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                     </div>
-                    <button 
-                        onClick={() => setShowArchived(!showArchived)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium border ${
-                            showArchived ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300'
-                        }`}
+                    <select
+                        value={filterDocType}
+                        onChange={(e) => setFilterDocType(e.target.value)}
+                        className="border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white min-w-[120px]"
                     >
-                        {showArchived ? 'Show Active' : 'Show Archived'}
-                    </button>
-                    <select 
-                        value={selectedType} 
-                        onChange={e => setSelectedType(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    >
+                        <option value="">All Types</option>
                         {config && Object.keys(config.document_types).map(key => (
-                            <option key={key} value={key}>{config.document_types[key].name}</option>
+                            <option key={key} value={key}>
+                                {config.document_types[key].name}
+                            </option>
                         ))}
                     </select>
                     <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                        onClick={() => setShowArchived(!showArchived)}
+                        className={`px-2.5 py-1.5 rounded text-xs font-medium border whitespace-nowrap ${
+                            showArchived ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300'
+                        }`}
                     >
-                        <Upload size={18} /> Upload New
+                        {showArchived ? 'Active' : 'Archived'}
+                    </button>
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded flex items-center gap-1.5 text-xs font-medium whitespace-nowrap"
+                    >
+                        <Upload size={14} /> Upload
                     </button>
                     <input 
                         type="file" 
@@ -562,7 +694,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         onChange={handleUpload}
                     />
                 </div>
-            </h2>
+            </div>
 
             <div className="flex-1 flex gap-6 min-h-0">
                 {/* Document List */}
@@ -578,11 +710,32 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         </div>
                     )}
                     {!isDragging && (
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                            <tr>
-                                <th className="p-4 font-semibold text-gray-600">Document Name</th>
-                                <th className="p-4 font-semibold text-gray-600">Type</th>
+                        <div key="document-list">
+                            <div 
+                                className={`p-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between transition-all ${(filterDocType || searchTerm) ? 'opacity-100' : 'opacity-0 h-0 p-0 overflow-hidden border-0'}`}
+                            >
+                                <div className="text-sm text-gray-600">
+                                    Showing <span className="font-semibold text-gray-900">{filteredDocs.length}</span> of <span className="font-semibold text-gray-900">{Object.values(documents || {}).length}</span> document{Object.values(documents || {}).length !== 1 ? 's' : ''}
+                                    <span className="ml-2">
+                                        {filterDocType && <span className="text-blue-600">• Type: {config?.document_types[filterDocType]?.name || filterDocType}</span>}
+                                        {searchTerm && <span className="text-blue-600">• Search: "{searchTerm}"</span>}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setFilterDocType("");
+                                        setSearchTerm("");
+                                    }}
+                                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                                >
+                                    Clear filters
+                                </button>
+                            </div>
+                            <table className="w-full text-left">
+                            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                                <tr>
+                                    <th className="p-4 font-semibold text-gray-600">Document Name</th>
+                                    <th className="p-4 font-semibold text-gray-600">Type</th>
                                 <th className="p-4 font-semibold text-gray-600">Status</th>
                                 <th className="p-4 font-semibold text-gray-600">Actions</th>
                             </tr>
@@ -591,7 +744,29 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             {filteredDocs.map(doc => (
                                 <tr key={doc.filename} className="hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewDoc(doc.filename)}>
                                     <td className="p-4 font-medium">{doc.filename}</td>
-                                    <td className="p-4 capitalize text-sm">{doc.doc_type.replace('_', ' ')}</td>
+                                    <td className="p-4 text-sm" onClick={(e) => { e.stopPropagation(); setEditingType(doc.filename); }}>
+                                        {editingType === doc.filename ? (
+                                            <select
+                                                value={doc.doc_type}
+                                                onChange={(e) => {
+                                                    updateDocType(doc.filename, e.target.value);
+                                                    setEditingType(null);
+                                                }}
+                                                onBlur={() => setEditingType(null)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                autoFocus
+                                                className="border border-gray-300 rounded px-2 py-1 text-sm w-full"
+                                            >
+                                                {config && Object.keys(config.document_types).map(key => (
+                                                    <option key={key} value={key}>{config.document_types[key].name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <span className="capitalize cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                                                {doc.doc_type.replace('_', ' ')}
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="p-4">
                                         <div className="flex flex-col gap-1">
                                             <span className={`px-2 py-1 rounded-full text-xs w-fit ${
@@ -653,8 +828,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                     </td>
                                 </tr>
                             ))}
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                        </div>
                     )}
                 </div>
 
@@ -710,6 +886,148 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                     </div>
                 )}
             </div>
+
+            {/* Upload Modal */}
+            <Modal
+                isOpen={showUploadModal}
+                onClose={uploading ? () => {
+                    if (confirm('Upload is in progress. Close anyway? Files already uploaded will remain.')) {
+                        cleanupUpload();
+                    }
+                } : cancelUpload}
+                title={uploading ? "Uploading Documents" : "Select Document Type"}
+                hideCloseButton={false}
+            >
+                <div className="space-y-6">
+                    {!uploading ? (
+                        <>
+                            <div>
+                                <p className="text-sm text-gray-600 mb-4">
+                                    {pendingFiles.length} file{pendingFiles.length !== 1 ? 's' : ''} selected for upload:
+                                </p>
+                                <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto border border-gray-200">
+                                    <ul className="space-y-1 text-sm">
+                                        {pendingFiles.map((file, index) => (
+                                            <li key={index} className="text-gray-700 flex items-center gap-2">
+                                                <File size={14} className="text-gray-400" />
+                                                <span className="truncate">{file.name}</span>
+                                                <span className="text-gray-400 text-xs">({(file.size / 1024).toFixed(1)} KB)</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Document Type <span className="text-red-500">*</span>
+                                </label>
+                                {config && Object.keys(config.document_types).length > 0 ? (
+                                    <select
+                                        value={selectedType}
+                                        onChange={(e) => setSelectedType(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        autoFocus
+                                    >
+                                        <option value="">-- Select a document type --</option>
+                                        {Object.keys(config.document_types).map(key => (
+                                            <option key={key} value={key}>
+                                                {config.document_types[key].name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <p className="text-sm text-gray-500">Loading document types...</p>
+                                )}
+                                <p className="text-xs text-gray-500 mt-2">
+                                    Note: All selected files will be uploaded with the same document type.
+                                </p>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                                <button
+                                    onClick={cancelUpload}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={performUpload}
+                                    disabled={!selectedType}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <Upload size={16} />
+                                    Upload {pendingFiles.length} File{pendingFiles.length !== 1 ? 's' : ''}
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <RefreshCw className="animate-spin text-blue-600" size={20} />
+                                    <p className="text-sm font-medium text-gray-700">
+                                        Uploading and processing documents...
+                                    </p>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto border border-gray-200 space-y-3">
+                                    {pendingFiles.map((file, index) => {
+                                        const status = uploadProgress[file.name] || 'uploading';
+                                        return (
+                                            <div key={index} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                                                <div className="flex-shrink-0">
+                                                    {status === 'uploading' && (
+                                                        <RefreshCw className="animate-spin text-blue-600" size={16} />
+                                                    )}
+                                                    {status === 'uploaded' && (
+                                                        <Check className="text-green-600" size={16} />
+                                                    )}
+                                                    {status === 'processing' && (
+                                                        <RefreshCw className="animate-spin text-orange-600" size={16} />
+                                                    )}
+                                                    {status === 'error' && (
+                                                        <AlertCircle className="text-red-600" size={16} />
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-sm font-medium text-gray-700 truncate">
+                                                        {file.name}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {status === 'uploading' && 'Uploading file...'}
+                                                        {status === 'uploaded' && 'File uploaded successfully'}
+                                                        {status === 'processing' && 'Processing document (extracting data, indexing...)'}
+                                                        {status === 'error' && 'Upload failed'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-xs text-blue-800">
+                                    <strong>Note:</strong> Documents are being processed in the background. 
+                                    This includes text extraction, RAG indexing, and competency question analysis. 
+                                    You can close this dialog and continue working - processing will continue.
+                                </p>
+                            </div>
+                            <div className="flex justify-end pt-2">
+                                <button
+                                    onClick={() => {
+                                        if (confirm('Close upload dialog? Files already uploaded will continue processing.')) {
+                                            cleanupUpload();
+                                        }
+                                    }}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Close Dialog
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </Modal>
         </div>
     )
 }
