@@ -8,8 +8,15 @@ import http from 'http';
 const isDev = !app.isPackaged;
 
 // Helper function to check if running from dist directory
+// In dev mode, __dirname is dist-electron, but we want to treat that as dev
+// Only treat as dist build if it's in a release/win-unpacked directory or packaged
 function isDistBuild(): boolean {
-  return __dirname.includes('dist') || __dirname.includes('win-unpacked');
+  // If packaged, it's definitely a dist build
+  if (app.isPackaged) return true;
+  // dist-electron is dev mode, not a dist build
+  if (__dirname.includes('dist-electron')) return false;
+  // Check if we're in a release directory (built app)
+  return __dirname.includes('win-unpacked') || __dirname.includes('release');
 }
 
 // Enable remote debugging for MCP server
@@ -21,6 +28,7 @@ let pythonProcess: ChildProcess | null = null;
 const API_PORT = 14242;
 
 function createWindow() {
+  const distBuild = isDistBuild();
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -30,14 +38,18 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      // Disable web security in dev mode to avoid CSP issues with Vite
+      webSecurity: !(isDev && !distBuild),
     },
   });
 
-  const distBuild = isDistBuild();
   if (isDev && !distBuild) {
     // True dev mode - Vite dev server is running
+    console.log('Dev mode: Loading from http://localhost:5173');
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
+    // Show window immediately in dev mode
+    mainWindow.show();
   } else {
     // Production or dist build - load from file system
     const htmlPath = distBuild
@@ -57,6 +69,35 @@ function createWindow() {
       mainWindow.show();
     }
   });
+
+  // Log any navigation/load errors
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`Failed to load: ${validatedURL}`);
+    console.error(`Error: ${errorCode} - ${errorDescription}`);
+  });
+
+  // Log console messages from renderer
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levelStr = ['log', 'warning', 'error', 'debug', 'info'][level] || 'unknown';
+    console.log(`[Renderer ${levelStr}]: ${message} (${sourceId}:${line})`);
+  });
+
+  // Log all console output (only in production, skip in dev to avoid conflicts with Vite HMR)
+  if (!isDev || distBuild) {
+    mainWindow.webContents.on('did-finish-load', () => {
+      mainWindow?.webContents.executeJavaScript(`
+        if (typeof window.__electronConsoleOverridden === 'undefined') {
+          window.__electronConsoleOverridden = true;
+          const originalLog = console.log;
+          const originalError = console.error;
+          const originalWarn = console.warn;
+          console.log = (...args) => { originalLog(...args); window.electron?.log('log', args.join(' ')); };
+          console.error = (...args) => { originalError(...args); window.electron?.log('error', args.join(' ')); };
+          console.warn = (...args) => { originalWarn(...args); window.electron?.log('warn', args.join(' ')); };
+        }
+      `).catch(() => {});
+    });
+  }
 
   // Send startup messages only after renderer finished loading (IPC ready)
   mainWindow.webContents.once('did-finish-load', () => {

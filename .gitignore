@@ -13,6 +13,8 @@ test-results
 python/venv
 python/python_embed
 python/__pycache__
+**/__pycache__/
+tests/__pycache__/
 documents/*.pdf
 documents/*.docx
 documents/metadata.json
@@ -29,3 +31,39 @@ ci-test-*
 *.rpm
 *.snap
 *.appimage
+
+# Large model files and tools
+tools/
+*.pth
+*.pt
+*.onnx
+*.h5
+*.pb
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+dev-output.txt

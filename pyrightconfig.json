@@ -1,0 +1,30 @@
+{
+  "exclude": [
+    "**/node_modules",
+    "**/dist",
+    "**/dist-electron",
+    "**/release",
+    "**/web-dist",
+    "**/tools",
+    "**/__pycache__",
+    "**/venv",
+    "**/python_embed",
+    "**/.git",
+    "**/.cursor",
+    "**/playwright-report",
+    "**/test-results",
+    "**/.cache",
+    "**/chroma_db",
+    "**/data",
+    "**/build",
+    "**/*.pth",
+    "**/*.pt",
+    "**/*.onnx",
+    "**/*.h5",
+    "**/*.pb"
+  ],
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.12"
+}
+
