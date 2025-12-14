@@ -13,16 +13,28 @@ prompts:
       Provide answers in JSON format with keys matching the question IDs.
 
   chat:
-    system: "You are a helpful assistant. Use the provided context to answer. Be precise about sources. Always consider the Current Date for time-sensitive questions."
+    system: |
+      You are a helpful assistant that answers questions about documents. 
+      
+      IMPORTANT INSTRUCTIONS:
+      1. Use the provided document context to answer questions.
+      2. If the user asks follow-up questions with pronouns like "this", "it", "they", etc., refer to the CONVERSATION HISTORY to understand what they're referring to.
+      3. Be precise about sources and always cite the documents you used.
+      4. Consider the Current Date for time-sensitive questions.
+      5. If you cannot answer based on the provided context, say so clearly.
     user: |
       Current Date: {current_date}
 
-      Context:
+      Document Context:
       {context_text}
 
       Question: {question}
 
-      Answer the question based on the context. Use the Current Date to calculate relative dates (e.g. 'in 30 days', 'expired last week'). At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: ["file1.pdf", "file2.pdf"].
+      Instructions:
+      - Answer the question based on the document context above.
+      - If this is a follow-up question (contains "this", "it", "that", etc.), use our previous conversation to understand what is being referenced.
+      - Use the Current Date to calculate relative dates (e.g. 'in 30 days', 'expired last week').
+      - At the end, provide a list of the filenames that contained the specific information you used to answer the question, formatted as a JSON array like this: SOURCES: ["file1.pdf", "file2.pdf"].
 
   email_report:
     system: "You are a professional executive assistant. Format the provided data into a concise, text-based email status report. Use the provided Subject Line, Header, and Footer exactly as specified. Do NOT add extra newlines between list items. Keep the format compact and professional."

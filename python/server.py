@@ -227,6 +227,189 @@ mcp = FastMCP(APP_NAME)
 
 # --- Helpers ---
 
+# Common English stop words to exclude from keyword extraction
+STOP_WORDS = {
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does',
+    'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can',
+    'this', 'that', 'these', 'those', 'what', 'which', 'who', 'whom', 'where', 'when',
+    'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some',
+    'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just',
+    'about', 'after', 'before', 'between', 'into', 'through', 'during', 'above', 'below',
+    'from', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once'
+}
+
+def extract_keywords(query: str) -> List[str]:
+    """
+    Extract meaningful keywords from a query for keyword-based search.
+    Filters out stop words and very short words.
+    """
+    import re
+    # Tokenize and clean
+    words = re.findall(r'\b[a-zA-Z]+\b', query.lower())
+    # Filter: remove stop words and words <= 2 chars
+    keywords = [w for w in words if w not in STOP_WORDS and len(w) > 2]
+    return keywords
+
+def keyword_search(query: str, all_chunks: List[Dict], n_results: int = 20) -> List[Dict]:
+    """
+    Perform keyword-based search using TF-like scoring.
+    Returns chunks ranked by keyword match score.
+    
+    Args:
+        query: The search query
+        all_chunks: List of dicts with 'id', 'doc', 'metadata'
+        n_results: Max results to return
+    
+    Returns:
+        List of chunk dicts with added 'keyword_score' field, sorted by score descending
+    """
+    keywords = extract_keywords(query)
+    if not keywords:
+        return []
+    
+    scored_chunks = []
+    for chunk in all_chunks:
+        doc_lower = chunk['doc'].lower()
+        
+        # Calculate keyword score
+        score = 0
+        matched_keywords = []
+        for kw in keywords:
+            # Count occurrences (term frequency)
+            count = doc_lower.count(kw)
+            if count > 0:
+                # Log-scaled TF to avoid over-counting repeated terms
+                import math
+                score += 1 + math.log(count)
+                matched_keywords.append(kw)
+        
+        # Bonus for having multiple different keywords (coverage)
+        if len(matched_keywords) > 1:
+            score *= (1 + 0.2 * len(matched_keywords))
+        
+        if score > 0:
+            chunk_copy = chunk.copy()
+            chunk_copy['keyword_score'] = score
+            chunk_copy['matched_keywords'] = matched_keywords
+            scored_chunks.append(chunk_copy)
+    
+    # Sort by score descending
+    scored_chunks.sort(key=lambda x: -x['keyword_score'])
+    return scored_chunks[:n_results]
+
+def hybrid_search_rrf(query: str, collection, n_results: int = 10, k: int = 60) -> List[Dict]:
+    """
+    Perform hybrid search using Reciprocal Rank Fusion (RRF).
+    Combines semantic vector search with keyword-based search.
+    
+    RRF Score = Σ 1/(k + rank) for each ranking where document appears
+    
+    Args:
+        query: The search query
+        collection: ChromaDB collection
+        n_results: Number of final results to return
+        k: RRF constant (default 60, higher = more weight to lower ranks)
+    
+    Returns:
+        List of chunk dicts sorted by combined RRF score
+    """
+    if collection is None:
+        logger.warning("Collection is None, cannot perform hybrid search")
+        return []
+    
+    # Retrieve more candidates for fusion
+    semantic_n = n_results * 3
+    keyword_n = n_results * 3
+    
+    # 1. Semantic Search (vector-based)
+    semantic_results = collection.query(
+        query_texts=[query],
+        n_results=semantic_n,
+        include=['documents', 'metadatas', 'distances']
+    )
+    
+    # 2. Get all chunks for keyword search (we'll score them)
+    all_chunks_result = collection.get(include=['documents', 'metadatas'])
+    all_chunks = []
+    if all_chunks_result and all_chunks_result.get('ids'):
+        for i, doc_id in enumerate(all_chunks_result['ids']):
+            all_chunks.append({
+                'id': doc_id,
+                'doc': all_chunks_result['documents'][i],
+                'metadata': all_chunks_result['metadatas'][i] if all_chunks_result['metadatas'] else {}
+            })
+    
+    # 3. Keyword Search
+    keyword_results = keyword_search(query, all_chunks, n_results=keyword_n)
+    
+    # 4. Build RRF scores
+    rrf_scores = {}  # doc_id -> {'score': float, 'chunk_data': dict}
+    
+    # Process semantic results
+    if semantic_results and semantic_results.get('documents') and len(semantic_results['documents']) > 0:
+        for rank, (doc, meta, dist) in enumerate(zip(
+            semantic_results['documents'][0],
+            semantic_results['metadatas'][0] if semantic_results.get('metadatas') else [{}] * len(semantic_results['documents'][0]),
+            semantic_results['distances'][0] if semantic_results.get('distances') else [0] * len(semantic_results['documents'][0])
+        )):
+            # Create a unique ID for the chunk (using content hash since IDs aren't returned in query)
+            chunk_id = hash(doc[:200])  # Use first 200 chars as ID proxy
+            
+            rrf_contribution = 1.0 / (k + rank)
+            
+            if chunk_id not in rrf_scores:
+                rrf_scores[chunk_id] = {
+                    'score': 0,
+                    'semantic_rank': rank + 1,
+                    'keyword_rank': None,
+                    'semantic_distance': dist,
+                    'doc': doc,
+                    'metadata': meta,
+                    'filename': meta.get('filename', 'unknown') if meta else 'unknown'
+                }
+            rrf_scores[chunk_id]['score'] += rrf_contribution
+            rrf_scores[chunk_id]['semantic_rank'] = rank + 1
+    
+    # Process keyword results
+    for rank, chunk in enumerate(keyword_results):
+        chunk_id = hash(chunk['doc'][:200])
+        
+        rrf_contribution = 1.0 / (k + rank)
+        
+        if chunk_id not in rrf_scores:
+            rrf_scores[chunk_id] = {
+                'score': 0,
+                'semantic_rank': None,
+                'keyword_rank': rank + 1,
+                'semantic_distance': None,
+                'doc': chunk['doc'],
+                'metadata': chunk['metadata'],
+                'filename': chunk['metadata'].get('filename', 'unknown') if chunk['metadata'] else 'unknown'
+            }
+        rrf_scores[chunk_id]['score'] += rrf_contribution
+        rrf_scores[chunk_id]['keyword_rank'] = rank + 1
+        rrf_scores[chunk_id]['keyword_score'] = chunk.get('keyword_score', 0)
+        rrf_scores[chunk_id]['matched_keywords'] = chunk.get('matched_keywords', [])
+    
+    # 5. Sort by RRF score and return top n
+    sorted_results = sorted(rrf_scores.values(), key=lambda x: -x['score'])
+    
+    # Log hybrid search results
+    logger.info(f"=== HYBRID SEARCH (RRF) RESULTS ===")
+    logger.info(f"Query: '{query}'")
+    logger.info(f"Semantic candidates: {len(semantic_results['documents'][0]) if semantic_results.get('documents') else 0}")
+    logger.info(f"Keyword candidates: {len(keyword_results)}")
+    logger.info(f"Unique chunks after fusion: {len(rrf_scores)}")
+    
+    for i, result in enumerate(sorted_results[:n_results]):
+        sem_rank = result.get('semantic_rank', '-')
+        kw_rank = result.get('keyword_rank', '-')
+        kw_matches = result.get('matched_keywords', [])
+        logger.info(f"  #{i+1}: RRF={result['score']:.4f}, sem_rank={sem_rank}, kw_rank={kw_rank}, file={result['filename'][:40]}, kw_matches={kw_matches}")
+    
+    return sorted_results[:n_results]
+
 def load_metadata():
     if os.path.exists(METADATA_FILE):
         try:
@@ -604,8 +787,13 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
 
 # --- Models ---
 
+class ChatMessage(BaseModel):
+    role: str  # 'user' or 'assistant'
+    content: str
+
 class ChatRequest(BaseModel):
     question: str
+    history: Optional[List[ChatMessage]] = None  # Previous conversation turns
 
 class UpdateStatusRequest(BaseModel):
     status: str
@@ -1143,24 +1331,43 @@ async def chat(request: ChatRequest):
                 forced_context_files.append(filename)
                 break
     
-    # Perform vector search - OpenAI embeddings handle semantic matching
-    logger.info(f"Searching vector database for: '{request.question}'")
+    # Expand query using conversation history if the query is vague (contains pronouns)
+    search_query = request.question
+    vague_indicators = ['this', 'that', 'it', 'they', 'these', 'those', 'here', 'there']
+    query_words = request.question.lower().split()
+    is_vague_query = any(word in vague_indicators for word in query_words) and len(query_words) < 15
     
-    # For queries about specific services/pricing, retrieve more chunks to ensure we get the right one
-    query_lower = request.question.lower()
+    if is_vague_query and request.history and len(request.history) > 0:
+        # Extract key terms from recent conversation history to enhance the search
+        logger.info(f"Detected vague query with pronouns, expanding using conversation history...")
+        
+        # Get the last few messages to extract context
+        recent_history = request.history[-4:]  # Last 2 turns (4 messages)
+        history_text = " ".join([msg.content for msg in recent_history])
+        
+        # Extract keywords from history
+        history_keywords = extract_keywords(history_text)
+        
+        # Combine current query with history keywords for a richer search
+        if history_keywords:
+            # Add top keywords from history to the search query
+            top_history_keywords = history_keywords[:5]  # Top 5 keywords from history
+            search_query = f"{request.question} {' '.join(top_history_keywords)}"
+            logger.info(f"Expanded search query: '{search_query}' (added keywords: {top_history_keywords})")
+    
+    # Perform HYBRID SEARCH using Reciprocal Rank Fusion (RRF)
+    # Combines semantic vector search with keyword-based search for better results
+    logger.info(f"Performing hybrid search (RRF) for: '{search_query}'")
+    
+    # Determine how many results we need based on query type
+    query_lower = search_query.lower()
     is_pricing_query = any(word in query_lower for word in ['pay', 'cost', 'price', 'fee', 'charge', 'hour', 'rate', 'per'])
-    n_results = 15 if is_pricing_query else 5  # Retrieve more chunks for pricing queries
+    n_results = 8 if is_pricing_query else 5  # Get more results for pricing queries
     
-    results = collection.query(
-        query_texts=[request.question],
-        n_results=n_results,
-        include=['documents', 'metadatas', 'distances']
-    )
+    # Run hybrid search with the (possibly expanded) query
+    hybrid_results = hybrid_search_rrf(search_query, collection, n_results=n_results * 2)
     
-    num_chunks = len(results['documents'][0]) if results['documents'] and len(results['documents']) > 0 else 0
-    logger.info(f"Vector search returned {num_chunks} chunks (is_pricing_query={is_pricing_query})")
-    
-    # 2. Build Context - Only include highly relevant chunks
+    # 2. Build Context from hybrid search results
     context_text = ""
     retrieved_files = set()
     
@@ -1173,81 +1380,60 @@ async def chat(request: ChatRequest):
             retrieved_files.add(filename)
             logger.info(f"Forced context: Added full text from {filename} ({len(text)} chars)")
 
-    # Add Vector Context - filter by distance threshold
-    # For cosine distance: lower is better (0 = identical, 1 = orthogonal)
-    # OpenAI embeddings typically have distances 0.3-0.7 for good matches
-    # 0.5 is too strict - increasing to 0.75 to include more relevant results
-    DISTANCE_THRESHOLD = 0.75  # Include chunks with distance < 0.75
-    
-    # Initialize relevant_chunks outside the if block
-    relevant_chunks = []
-    query_keywords = set(word.lower() for word in request.question.split() if len(word) > 3)
-    
-    if results['documents'] and len(results['documents']) > 0:
-        distances = results.get('distances', [[]])[0] if results.get('distances') else []
-        logger.info(f"Processing {num_chunks} retrieved chunks with distances: {distances}")
-        
-        # Filter chunks by distance threshold and prioritize chunks with key terms
-        
-        for i, doc in enumerate(results['documents'][0]):
-            meta = results['metadatas'][0][i] if results['metadatas'] and len(results['metadatas']) > 0 and i < len(results['metadatas'][0]) else {}
-            filename = meta.get('filename', 'unknown')
-            distance = distances[i] if i < len(distances) else 999.0
-            
-            chunk_preview = doc[:150] if len(doc) > 150 else doc
-            logger.info(f"Chunk {i+1}: distance={distance:.4f}, filename={filename[:40]}, preview: {chunk_preview}...")
-            
-            # Check if chunk contains key terms from query (boost relevance)
-            doc_lower = doc.lower()
-            keyword_matches = sum(1 for kw in query_keywords if kw in doc_lower)
-            has_price_info = any(term in doc_lower for term in ['$', 'dollar', 'per hour', 'per man', 'rate', 'cost', 'fee'])
-            
-            # For pricing queries, prioritize chunks with both the service term AND price info
-            if is_pricing_query:
-                has_service_term = any(kw in doc_lower for kw in query_keywords)
-                if has_service_term and has_price_info:
-                    # Boost this chunk by reducing its effective distance
-                    effective_distance = distance * 0.7  # Boost chunks with both service and price
-                    logger.info(f"  -> BOOSTED (has service term + price info, effective distance: {effective_distance:.4f})")
-                else:
-                    effective_distance = distance
-            else:
-                effective_distance = distance
-            
-            # Only include chunks below distance threshold
-            if effective_distance < DISTANCE_THRESHOLD:
-                relevant_chunks.append({
-                    'doc': doc,
-                    'filename': filename,
-                    'distance': effective_distance,  # Use effective distance for sorting
-                    'original_distance': distance,
-                    'keyword_matches': keyword_matches,
-                    'has_price_info': has_price_info
-                })
-                logger.info(f"  -> INCLUDED (effective distance {effective_distance:.4f} < threshold {DISTANCE_THRESHOLD}, keywords={keyword_matches}, has_price={has_price_info})")
-            else:
-                logger.info(f"  -> EXCLUDED (effective distance {effective_distance:.4f} >= threshold {DISTANCE_THRESHOLD})")
-        
-        # Sort by effective distance, then by keyword matches, then by price info
-        relevant_chunks.sort(key=lambda x: (x['distance'], -x['keyword_matches'], -x['has_price_info']))
-        
-        # For pricing queries, include more chunks to ensure we get the right pricing info
-        max_chunks = 5 if is_pricing_query else 3
-        for chunk_info in relevant_chunks[:max_chunks]:
-            filename = chunk_info['filename']
-            
-            # Skip if we already have this document from forced context
-            if filename in retrieved_files:
-                continue
-            
-            retrieved_files.add(filename)
-            context_text += f"--- Excerpt from {filename} ---\n{chunk_info['doc']}\n\n"
-            logger.info(f"Added chunk from {filename} (effective distance: {chunk_info['distance']:.4f}, original: {chunk_info['original_distance']:.4f})")
-        
-        logger.info(f"Final: Added {min(len(relevant_chunks), max_chunks)} chunks from {len(retrieved_files)} documents")
+    # Add hybrid search results
+    # Apply distance threshold to filter out semantically distant chunks
+    # Chunks matched ONLY via keyword (no semantic match) are still included
+    DISTANCE_THRESHOLD = 0.5  # Stricter threshold - lower = more similar required
+    # For vague follow-up queries, only use top 1 result to avoid noise from unrelated docs
+    if is_vague_query:
+        max_chunks = 1
+    elif is_pricing_query:
+        max_chunks = 5
     else:
-        logger.warning(f"No documents retrieved from vector search for query: '{request.question}'")
-        relevant_chunks = []  # Initialize to avoid unbound variable
+        max_chunks = 3
+    chunks_added = 0
+    relevant_chunks = []
+    
+    logger.info(f"=== FILTERING HYBRID RESULTS (threshold={DISTANCE_THRESHOLD}) ===")
+    for result in hybrid_results:
+        if chunks_added >= max_chunks:
+            break
+            
+        filename = result.get('filename', 'unknown')
+        doc = result.get('doc', '')
+        semantic_distance = result.get('semantic_distance')
+        matched_keywords = result.get('matched_keywords', [])
+        has_keyword_match = matched_keywords and len(matched_keywords) > 0
+        
+        logger.info(f"  Evaluating: {filename[:50]} | dist={semantic_distance} | keywords={matched_keywords}")
+        
+        # Filter: If chunk only has semantic match (no keyword match), require low distance
+        # If chunk has keyword match, include it even if semantic distance is high
+        if semantic_distance is not None and not has_keyword_match:
+            if semantic_distance > DISTANCE_THRESHOLD:
+                logger.info(f"  -> SKIPPED: distance {semantic_distance:.3f} > {DISTANCE_THRESHOLD}, no keywords")
+                continue
+        
+        logger.info(f"  -> INCLUDED")
+        
+        # Skip if we already have this document from forced context
+        if filename in retrieved_files:
+            continue
+        
+        retrieved_files.add(filename)
+        context_text += f"--- Excerpt from {filename} ---\n{doc}\n\n"
+        chunks_added += 1
+        
+        # Track for logging
+        relevant_chunks.append(result)
+        
+        sem_rank = result.get('semantic_rank', '-')
+        kw_rank = result.get('keyword_rank', '-')
+        rrf_score = result.get('score', 0)
+        matched_kw = result.get('matched_keywords', [])
+        logger.info(f"Added chunk from {filename} (RRF={rrf_score:.4f}, sem_rank={sem_rank}, kw_rank={kw_rank}, keywords={matched_kw})")
+    
+    logger.info(f"Final: Added {chunks_added} chunks from {len(retrieved_files)} documents via hybrid search")
     
     logger.info(f"RAG retrieved context from {len(retrieved_files)} files: {retrieved_files}")
     logger.info(f"Total context length: {len(context_text)} characters")
@@ -1259,32 +1445,48 @@ async def chat(request: ChatRequest):
     # Also log full context length and number of documents
     logger.info(f"=== RETRIEVAL SUMMARY ===")
     logger.info(f"  Query: '{request.question}'")
-    logger.info(f"  Chunks retrieved: {num_chunks}")
-    logger.info(f"  Chunks after filtering: {len(relevant_chunks) if 'relevant_chunks' in locals() else 0}")
+    logger.info(f"  Hybrid search candidates: {len(hybrid_results)}")
+    logger.info(f"  Chunks included in context: {len(relevant_chunks)}")
     logger.info(f"  Documents included: {len(retrieved_files)}")
     logger.info(f"  Context size: {len(context_text)} chars")
     logger.info(f"  Files: {list(retrieved_files)}")
     
-    # 3. Call LLM
+    # 3. Call LLM with conversation history
     current_date = datetime.datetime.now().strftime("%A, %B %d, %Y")
     
     system_prompt = prompts_config.get("prompts", {}).get("chat", {}).get("system", "You are a helpful assistant.")
     user_prompt_template = prompts_config.get("prompts", {}).get("chat", {}).get("user", "Context:\n{context_text}\n\nQuestion: {question}")
     
+    # Build the current user message with context
     user_prompt = user_prompt_template.format(
         current_date=current_date,
         context_text=context_text,
         question=request.question
     )
     
-    logger.info(f"=== USER PROMPT BEING SENT (first 2000 chars) ===\n{user_prompt[:2000]}\n=== END USER PROMPT PREVIEW ===")
+    # Build messages array with conversation history
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history if provided (limit to last 10 turns to manage token usage)
+    if request.history:
+        history_count = min(len(request.history), 10)
+        logger.info(f"Including {history_count} previous messages from conversation history")
+        
+        for msg in request.history[-10:]:  # Last 10 messages
+            role = "user" if msg.role == "user" else "assistant"
+            messages.append({"role": role, "content": msg.content})
+    
+    # Add the current question with context
+    messages.append({"role": "user", "content": user_prompt})
+    
+    logger.info(f"=== LLM REQUEST ===")
+    logger.info(f"  Total messages: {len(messages)} (1 system + {len(messages)-2} history + 1 current)")
+    logger.info(f"  Current prompt (first 2000 chars): {user_prompt[:2000]}")
+    logger.info(f"=== END LLM REQUEST PREVIEW ===")
     
     response = openai_client.chat.completions.create(
         model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        messages=messages
     )
     
     content = response.choices[0].message.content

@@ -1372,8 +1372,19 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
 
     const handleSend = async () => {
         if (!input.trim()) return;
-        
+
         const userMsg = input;
+        
+        // Build conversation history for the API (exclude sources, map 'ai' to 'assistant')
+        // Only include the last 10 message pairs to avoid token limits
+        const historyForApi = messages
+            .filter(m => m.role === 'user' || m.role === 'ai')
+            .slice(-20)  // Last 20 messages (10 pairs)
+            .map(m => ({
+                role: m.role === 'ai' ? 'assistant' : 'user',
+                content: m.content
+            }));
+        
         setMessages(prev => [...prev, {role: 'user', content: userMsg}]);
         setInput('');
         setLoading(true);
@@ -1383,12 +1394,13 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    question: userMsg
+                    question: userMsg,
+                    history: historyForApi  // Send conversation history
                 })
             });
             const data = await res.json();
             setMessages(prev => [...prev, {
-                role: 'ai', 
+                role: 'ai',
                 content: data.answer || "Sorry, I couldn't get an answer.",
                 sources: data.sources
             }]);
