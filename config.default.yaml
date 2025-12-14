@@ -6,6 +6,7 @@ document_types:
   nda:
     name: "Non-Disclosure Agreement"
     extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
     competency_questions:
       - id: "party_names"
         question: "Who are the parties entering into this agreement?"
@@ -27,6 +28,7 @@ document_types:
   supplier_agreement:
     name: "Supplier Agreement"
     extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
     competency_questions:
       - id: "supplier_name"
         question: "Who is the supplier?"
@@ -34,12 +36,229 @@ document_types:
       - id: "effective_date"
         question: "What is the effective date?"
         type: "date"
+      - id: "term_length"
+        question: "What is the term length?"
+        type: "text"
       - id: "expiration_date"
         question: "When does the agreement expire? Return in YYYY-MM-DD format."
         type: "date"
         dashboard_metric: true
       - id: "payment_terms"
         question: "What are the payment terms (e.g. Net 30)?"
+        type: "text"
+      - id: "auto_renewal"
+        question: "Is there auto-renewal? If so, what is the renewal term?"
+        type: "text"
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+
+  service_agreement:
+    name: "Service Agreement"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "services_scope"
+        question: "What services are covered (scope/locations)?"
+        type: "text"
+      - id: "effective_date"
+        question: "What is the effective date?"
+        type: "date"
+      - id: "term_length"
+        question: "What is the term length?"
+        type: "text"
+      - id: "expiration_date"
+        question: "When does the agreement end/expire?"
+        type: "date"
+        dashboard_metric: true
+      - id: "payment_terms"
+        question: "What are the payment terms?"
+        type: "text"
+      - id: "auto_renewal"
+        question: "Is there auto-renewal? If so, what is the renewal term?"
+        type: "text"
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+
+  master_terms_agreement:
+    name: "Master Terms Agreement"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "agreement_scope"
+        question: "What is the scope of this master agreement?"
+        type: "text"
+      - id: "effective_date"
+        question: "What is the effective date?"
+        type: "date"
+      - id: "term_length"
+        question: "What is the term length?"
+        type: "text"
+      - id: "expiration_date"
+        question: "When does the agreement expire?"
+        type: "date"
+        dashboard_metric: true
+      - id: "auto_renewal"
+        question: "Is there auto-renewal? If so, what is the renewal term?"
+        type: "text"
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+      - id: "governing_law"
+        question: "What is the governing law/jurisdiction?"
+        type: "text"
+
+  letter_of_intent:
+    name: "Letter of Intent"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "subject_matter"
+        question: "What is the subject matter or transaction?"
+        type: "text"
+      - id: "effective_date"
+        question: "What is the effective date?"
+        type: "date"
+      - id: "exclusivity_period"
+        question: "Is there an exclusivity period? If so, how long?"
+        type: "text"
+      - id: "expiration_date"
+        question: "When does the LOI expire?"
+        type: "date"
+        dashboard_metric: true
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+      - id: "governing_law"
+        question: "What is the governing law/jurisdiction?"
+        type: "text"
+
+  sales_agreement:
+    name: "Sales Agreement"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "products_scope"
+        question: "What products/scope are covered?"
+        type: "text"
+      - id: "territory"
+        question: "What territory applies (if any)?"
+        type: "text"
+      - id: "effective_date"
+        question: "What is the effective date?"
+        type: "date"
+      - id: "term_length"
+        question: "What is the term length?"
+        type: "text"
+      - id: "expiration_date"
+        question: "When does the agreement expire?"
+        type: "date"
+        dashboard_metric: true
+      - id: "pricing_terms"
+        question: "What pricing/payment terms apply?"
+        type: "text"
+      - id: "auto_renewal"
+        question: "Is there auto-renewal? If so, what is the renewal term?"
+        type: "text"
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+
+  distributor_agreement:
+    name: "Distributor Agreement"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "territory"
+        question: "What territory/region is covered?"
+        type: "text"
+      - id: "product_lines"
+        question: "What products/lines are covered?"
+        type: "text"
+      - id: "effective_date"
+        question: "What is the effective date?"
+        type: "date"
+      - id: "term_length"
+        question: "What is the term length?"
+        type: "text"
+      - id: "expiration_date"
+        question: "When does the agreement expire?"
+        type: "date"
+        dashboard_metric: true
+      - id: "performance_obligations"
+        question: "What performance/volume obligations apply?"
+        type: "text"
+      - id: "auto_renewal"
+        question: "Is there auto-renewal? If so, what is the renewal term?"
+        type: "text"
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+
+  distributor_agreement_amendment:
+    name: "Distributor Agreement Amendment"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "amendment_effective_date"
+        question: "What is the effective date of this amendment?"
+        type: "date"
+      - id: "amended_sections"
+        question: "Which sections/terms are being amended?"
+        type: "text"
+      - id: "term_impact"
+        question: "Does this amendment change the term length?"
+        type: "text"
+      - id: "expiration_date"
+        question: "If changed, what is the new expiration date?"
+        type: "date"
+        dashboard_metric: true
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
+        type: "text"
+
+  default:
+    name: "General Document"
+    extensions: [".pdf", ".docx"]
+    show_on_dashboard: true
+    competency_questions:
+      - id: "party_names"
+        question: "Who are the parties?"
+        type: "text"
+      - id: "effective_date"
+        question: "What is the effective date?"
+        type: "date"
+      - id: "term_length"
+        question: "What is the term length?"
+        type: "text"
+      - id: "expiration_date"
+        question: "When does this document expire?"
+        type: "date"
+        dashboard_metric: true
+      - id: "auto_renewal"
+        question: "Is there auto-renewal? If so, what is the renewal term?"
+        type: "text"
+      - id: "notice_period"
+        question: "What is the notice period to terminate or not renew?"
         type: "text"
 
 workflow_statuses:

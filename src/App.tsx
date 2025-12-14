@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, CheckCircle, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Modal } from './components/Modal';
+import { Modal, ConfirmModal, AlertModal } from './components/Modal';
 
 const API_PORT = 14242;
 
@@ -18,6 +18,7 @@ interface DocumentData {
   status: string;
   workflow_status?: string;
   archived?: boolean;
+  show_on_dashboard?: boolean;
   competency_answers: Record<string, any>;
 }
 
@@ -65,10 +66,11 @@ function App() {
     // Set up error listener
     if (window.electronAPI?.handlePythonError) {
       console.log('App: Setting up python error handler');
-      window.electronAPI.handlePythonError((error: string) => {
-        console.error('App: Received python error:', error);
-        alert(`Startup failed: ${error}`);
-      });
+        window.electronAPI.handlePythonError((error: string) => {
+            console.error('App: Received python error:', error);
+            // Can't use setShowAlert here as it's outside component scope
+            // Will be handled by the error display in the component
+        });
     } else {
       console.log('App: electronAPI.handlePythonError not available');
     }
@@ -129,6 +131,13 @@ function App() {
       .then(setDocuments)
       .catch(console.error);
   };
+
+  // Refresh config when switching to dashboard tab to pick up any config changes
+  useEffect(() => {
+    if (activeTab === 'dashboard') {
+      fetchConfig();
+    }
+  }, [activeTab]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -196,6 +205,10 @@ function App() {
                     setDocToOpen(filename);
                     setActiveTab('documents');
                 }}
+                onRefreshConfig={() => {
+                  console.log('[App] Refreshing config for dashboard');
+                  fetchConfig();
+                }}
             />
         )}
         {activeTab === 'documents' && (
@@ -238,11 +251,15 @@ function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, labe
   );
 }
 
-function DashboardView({ config, documents, onOpenDocument }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void }) {
+function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: { config: Config | null, documents: Record<string, DocumentData>, onOpenDocument: (filename: string) => void, onRefreshConfig?: () => void }) {
   const [report, setReport] = useState<string | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
 
+
   if (!config) return <div>Loading configuration...</div>;
+  
+  // Debug: Log config to see what we're working with
+  console.log('[Dashboard] Config loaded:', JSON.stringify(config.document_types, null, 2));
   
   const handleGenerateReport = async () => {
       setGeneratingReport(true);
@@ -250,15 +267,34 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
           const res = await fetch(`http://localhost:${API_PORT}/report`, { method: "POST" });
           const data = await res.json();
           setReport(data.report);
-      } catch (e) {
-          console.error(e);
-          alert("Failed to generate report");
-      } finally {
+        } catch (e) {
+            console.error(e);
+            setShowAlert({ title: "Error", message: "Failed to generate report" });
+        } finally {
           setGeneratingReport(false);
       }
   };
   
-  const docList = Object.values(documents);
+  // Filter documents based on their document type's show_on_dashboard setting from config
+  const docList = Object.values(documents).filter(d => {
+    const docTypeConfig = config.document_types[d.doc_type];
+    if (!docTypeConfig) {
+      console.log(`[Dashboard] No config for doc_type: ${d.doc_type}, hiding document ${d.filename}`);
+      return false; // Hide if document type not in config
+    }
+    // Handle both boolean false and string "false" - default to true if not specified
+    const showOnDashboard = docTypeConfig.show_on_dashboard;
+    // Explicitly check for false values (boolean false, string "false", null, undefined treated as true)
+    const shouldShow = showOnDashboard !== false && 
+                       showOnDashboard !== "false" && 
+                       showOnDashboard !== "False" &&
+                       showOnDashboard !== null &&
+                       showOnDashboard !== undefined;
+    if (!shouldShow) {
+      console.log(`[Dashboard] Hiding document ${d.filename} - doc_type: ${d.doc_type}, show_on_dashboard:`, showOnDashboard, `(type: ${typeof showOnDashboard})`);
+    }
+    return shouldShow;
+  });
 
   const getExpiringCount = (type: string, days: number) => {
     return docList.filter(d => {
@@ -296,14 +332,29 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Dashboard</h2>
-        <button 
-            onClick={handleGenerateReport}
-            disabled={generatingReport}
-            className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-        >
-            {generatingReport ? <RefreshCw className="animate-spin" size={16} /> : <FileText size={16} />}
-            Generate Status Report
-        </button>
+        <div className="flex gap-2">
+          {onRefreshConfig && (
+            <button 
+                onClick={() => {
+                  console.log('[Dashboard] Manual config refresh triggered');
+                  onRefreshConfig();
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium"
+                title="Refresh config from server"
+            >
+                <RefreshCw size={16} />
+                Refresh Config
+            </button>
+          )}
+          <button 
+              onClick={handleGenerateReport}
+              disabled={generatingReport}
+              className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+          >
+              {generatingReport ? <RefreshCw className="animate-spin" size={16} /> : <FileText size={16} />}
+              Generate Status Report
+          </button>
+        </div>
       </div>
 
       <Modal
@@ -340,7 +391,22 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
       </Modal>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {Object.entries(config.document_types).map(([key, type]: [string, any]) => {
+        {Object.entries(config.document_types)
+          .filter(([key, type]: [string, any]) => {
+            // Handle both boolean false and string "false" - default to true if not specified
+            const showOnDashboard = type.show_on_dashboard;
+            // Explicitly check for false values (boolean false, string "false", null/undefined treated as true)
+            const shouldShow = showOnDashboard !== false && 
+                               showOnDashboard !== "false" && 
+                               showOnDashboard !== "False" &&
+                               showOnDashboard !== null &&
+                               showOnDashboard !== undefined;
+            if (!shouldShow) {
+              console.log(`[Dashboard] Hiding document type card: ${key}, show_on_dashboard:`, showOnDashboard, `(type: ${typeof showOnDashboard})`);
+            }
+            return shouldShow;
+          })
+          .map(([key, type]: [string, any]) => {
           const count = docList.filter(d => d.doc_type === key).length;
           const expiring = getExpiringCount(key, 90);
           const expiringDocs = getExpiringDocs(key, 90);
@@ -389,7 +455,7 @@ function DashboardView({ config, documents, onOpenDocument }: { config: Config |
 function DocumentsView({ config, documents, refresh, initialPreview, onClearPreview }: { config: Config | null, documents: Record<string, DocumentData>, refresh: () => void, initialPreview: string | null, onClearPreview?: () => void }) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [previewDoc, setPreviewDoc] = useState<string | null>(initialPreview);
-    const [reprocessing, setReprocessing] = useState(false);
+    const [reprocessingFilename, setReprocessingFilename] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState(initialPreview || ""); // Default search to preview doc if set
     const [showArchived, setShowArchived] = useState(false);
     const [editingType, setEditingType] = useState<string | null>(null);
@@ -400,8 +466,14 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
     const [selectedType, setSelectedType] = useState<string>("");
     const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState<Record<string, 'uploading' | 'uploaded' | 'processing' | 'error'>>({});
+    const [uploadProgress, setUploadProgress] = useState<Record<string, 'uploading' | 'uploaded' | 'processing' | 'completed' | 'error'>>({});
+    const [monitoringProcessing, setMonitoringProcessing] = useState(false);
     const isUploadingRef = useRef(false);
+    const [showCancelUploadConfirm, setShowCancelUploadConfirm] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<{filename: string, type: 'document' | 'template'} | null>(null);
+    const [showReprocessConfirm, setShowReprocessConfirm] = useState<string | null>(null);
+    const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+    const [showAlert, setShowAlert] = useState<{title: string, message: string} | null>(null);
 
     useEffect(() => {
         if (initialPreview) {
@@ -424,7 +496,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         );
         
         if (validFiles.length === 0) {
-            alert('Please select PDF or DOCX files only.');
+            setShowAlert({ title: "Invalid File Type", message: "Please select PDF or DOCX files only." });
             return;
         }
         
@@ -450,27 +522,19 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const performUpload = async () => {
         if (!selectedType || pendingFiles.length === 0 || isUploadingRef.current) {
             if (!selectedType || pendingFiles.length === 0) {
-                alert('Please select a document type.');
+                setShowAlert({ title: "Missing Information", message: "Please select a document type." });
             }
             return;
         }
 
         isUploadingRef.current = true;
         setUploading(true);
-        const progress: Record<string, 'uploading' | 'uploaded' | 'processing' | 'error'> = {};
+        const progress: Record<string, 'uploading' | 'uploaded' | 'processing' | 'completed' | 'error'> = {};
         const filesToUpload = [...pendingFiles]; // Store copy in case state changes
         filesToUpload.forEach(file => {
             progress[file.name] = 'uploading';
         });
         setUploadProgress(progress);
-        
-        let uploadCompleted = false;
-        const timeoutId = setTimeout(() => {
-            if (!uploadCompleted) {
-                console.warn('Upload timeout - closing modal');
-                cleanupUpload();
-            }
-        }, 30000); // 30 second timeout
         
         try {
             // Upload files sequentially to show progress
@@ -499,38 +563,139 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
             
-            uploadCompleted = true;
-            clearTimeout(timeoutId);
-            
             // Refresh to get updated document list
             refresh();
             
-            // Wait a moment then close modal and show success
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Set uploading to false so modal can be closed manually, but keep it open to monitor processing
+            setUploading(false);
+            setMonitoringProcessing(true);
+            
+            // Poll for processing completion - don't close modal until all files are actually processed
+            const pollProcessingStatus = async () => {
+                const maxAttempts = 180; // 3 minutes max
+                let attempts = 0;
+                
+                const checkStatus = async () => {
+                    attempts++;
+                    try {
+                        const response = await fetch(`http://localhost:${API_PORT}/documents`);
+                        const docs = await response.json();
+                        
+                        // Check status of all uploaded files
+                        let allProcessed = true;
+                        let hasErrors = false;
+                        const statuses: Record<string, string> = {};
+                        
+                        filesToUpload.forEach(file => {
+                            const doc = docs[file.name];
+                            if (!doc) {
+                                // Document not found yet, still processing
+                                allProcessed = false;
+                                statuses[file.name] = 'not_found';
+                            } else {
+                                statuses[file.name] = doc.status;
+                                
+                                if (doc.status === 'processed') {
+                                    // This one is done - mark as completed
+                                    setUploadProgress(prev => {
+                                        if (prev[file.name] !== 'error' && prev[file.name] !== 'completed') {
+                                            return { ...prev, [file.name]: 'completed' };
+                                        }
+                                        return prev;
+                                    });
+                                    // allProcessed stays true if this is processed (it starts as true)
+                                } else if (doc.status === 'error' || doc.status === 'failed') {
+                                    // Error state - counts as "done" for closing purposes
+                                    setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
+                                    hasErrors = true;
+                                    // Error counts as processed for closing modal (allProcessed stays true)
+                                } else {
+                                    // Still processing (pending, processing, reprocessing)
+                                    console.log(`[Upload Poll] ${file.name}: still processing (${doc.status})`);
+                                    allProcessed = false;
+                                }
+                            }
+                        });
+                        
+                        // If all are processed, close modal immediately
+                        if (allProcessed) {
+                            // IMPORTANT: Keep monitoringProcessing true while closing modal
+                            // This ensures the processing view stays visible until modal closes
+                            // Modal component checks isOpen immediately, so modal will close
+                            // but React might render once more with monitoringProcessing still true
+                            setShowUploadModal(false);
+                            refresh(); // Final refresh
+                            // Clear state after modal has fully closed
+                            // Modal.tsx has "if (!isOpen) return null" so it closes immediately
+                            // But we keep monitoringProcessing true to prevent showing initial screen
+                            setTimeout(() => {
+                                setMonitoringProcessing(false);
+                                setUploadProgress({});
+                                setSelectedType("");
+                                setPendingFiles([]);
+                                setUploading(false);
+                                isUploadingRef.current = false;
+                            }, 100); // Very short delay - just enough for React to process the close
+                            return;
+                        }
+                        
+                        if (attempts >= maxAttempts) {
+                            setMonitoringProcessing(false);
+                            refresh(); // Final refresh
+                            cleanupUpload();
+                            setShowAlert({ 
+                                title: "Processing Timeout", 
+                                message: "Some documents are still processing. They will continue in the background. Check their status in the documents list." 
+                            });
+                            return;
+                        }
+                        
+                        // Check again in 2 seconds
+                        setTimeout(checkStatus, 2000);
+                    } catch (err) {
+                        console.error("[Upload] Error checking processing status:", err);
+                        // On error, wait a bit and try again
+                        if (attempts < maxAttempts) {
+                            setTimeout(checkStatus, 2000);
+                        } else {
+                            setMonitoringProcessing(false);
+                            cleanupUpload();
+                        }
+                    }
+                };
+                
+                // Start checking after a brief delay to let backend update status
+                setTimeout(checkStatus, 2000);
+            };
+            
+            // Start polling for processing completion
+            pollProcessingStatus();
         } catch (err) {
             console.error('Upload error:', err);
-            uploadCompleted = true;
-            clearTimeout(timeoutId);
-        } finally {
+            setUploading(false);
+            setMonitoringProcessing(false);
             cleanupUpload();
         }
     };
 
     const cleanupUpload = () => {
-        // Clear state in a way that doesn't conflict with React's rendering
-        setUploadProgress({});
-        setSelectedType("");
-        setPendingFiles([]);
-        setUploading(false);
-        isUploadingRef.current = false;
-        // Close modal after state is cleared
+        // Close modal first to avoid showing initial state
         setShowUploadModal(false);
-        // Refresh again to show final status after a brief delay
-        setTimeout(() => refresh(), 500);
+        // Clear state after modal closes (in next render cycle)
+        setTimeout(() => {
+            setUploadProgress({});
+            setSelectedType("");
+            setPendingFiles([]);
+            setUploading(false);
+            setMonitoringProcessing(false);
+            isUploadingRef.current = false;
+            refresh(); // Final refresh
+        }, 100);
     };
 
     const cancelUpload = () => {
-        if (uploading && !confirm('Upload is in progress. Are you sure you want to cancel? Files already uploaded will remain.')) {
+        if (uploading) {
+            setShowCancelUploadConfirm(true);
             return;
         }
         // Allow cancel even during upload (user can force close)
@@ -540,26 +705,105 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         }
     };
 
-    const handleReprocess = async (filename: string) => {
-        if (!confirm(`Are you sure you want to re-process ${filename}? This will re-index it and run competency questions again.`)) return;
+    const handleCancelUploadConfirm = () => {
+        setShowCancelUploadConfirm(false);
+        cleanupUpload();
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
 
-        setReprocessing(true);
+    const handleReprocess = async (filename: string) => {
+        setShowReprocessConfirm(filename);
+    };
+
+    const confirmReprocess = async () => {
+        const filename = showReprocessConfirm;
+        if (!filename) return;
+        setShowReprocessConfirm(null);
+        setReprocessingFilename(filename);
+        
         try {
-            const response = await fetch(`http://localhost:${API_PORT}/reprocess/${filename}`, {
+            // URL encode the filename to handle spaces and special characters
+            const encodedFilename = encodeURIComponent(filename);
+            const url = `http://localhost:${API_PORT}/reprocess/${encodedFilename}`;
+            console.log(`[Reprocess] Calling API: ${url}`);
+            
+            const response = await fetch(url, {
                 method: "POST"
             });
+            
+            console.log(`[Reprocess] Response status: ${response.status}`);
+            
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const errorText = await response.text();
+                console.error(`[Reprocess] Error response: ${errorText}`);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
-            // Wait a moment to ensure the backend has started processing
-            setTimeout(() => {
-                refresh();
-                setReprocessing(false);
-            }, 1000);
+            
+            const result = await response.json();
+            console.log(`[Reprocess] Success:`, result);
+            
+            // Poll for status updates until processing completes
+            const pollStatus = async () => {
+                let attempts = 0;
+                const maxAttempts = 120; // 2 minutes max (120 * 1 second)
+                
+                const checkStatus = async () => {
+                    attempts++;
+                    try {
+                        // Fetch documents directly to get latest status
+                        const response = await fetch(`http://localhost:${API_PORT}/documents`);
+                        const docs = await response.json();
+                        const currentDoc = docs[filename];
+                        
+                        // Also update the local state
+                        refresh();
+                        
+                        // Check if processing is complete
+                        if (currentDoc && currentDoc.status === 'processed') {
+                            setReprocessingFilename(null);
+                            refresh(); // Final refresh to update UI
+                            return; // Done
+                        }
+                        
+                        // If document doesn't exist, stop polling
+                        if (!currentDoc) {
+                            console.warn(`Document ${filename} not found in API response`);
+                            setReprocessingFilename(null);
+                            return;
+                        }
+                        
+                        // If still processing and haven't exceeded max attempts, check again
+                        if (attempts < maxAttempts && (currentDoc.status === 'processing' || currentDoc.status === 'reprocessing')) {
+                            setTimeout(checkStatus, 1000); // Check again in 1 second
+                        } else {
+                            // Timeout or unknown status
+                            setReprocessingFilename(null);
+                            refresh(); // Final refresh
+                            if (attempts >= maxAttempts) {
+                                setShowAlert({ title: "Timeout", message: `Reprocessing ${filename} is taking longer than expected (${maxAttempts} seconds). It may still be processing in the background. Check the status again in a moment.` });
+                            } else {
+                                // Unknown status - might be an error
+                                setShowAlert({ title: "Status Unknown", message: `Reprocessing ${filename} completed with status: ${currentDoc.status}. Check the document status.` });
+                            }
+                        }
+                    } catch (err) {
+                        console.error("[Reprocess] Error checking status:", err);
+                        setReprocessingFilename(null);
+                    }
+                };
+                
+                // Start checking after a brief delay to let backend update status
+                console.log(`[Reprocess] Starting status polling for ${filename}`);
+                setTimeout(checkStatus, 500);
+            };
+            
+            pollStatus();
         } catch (err) {
-            console.error(err);
-            alert("Failed to start reprocessing");
-            setReprocessing(false);
+            console.error("[Reprocess] Failed to start reprocessing:", err);
+            setShowAlert({ title: "Error", message: `Failed to start reprocessing: ${err instanceof Error ? err.message : String(err)}` });
+            setReprocessingFilename(null);
         }
     };
 
@@ -601,13 +845,20 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     };
 
     const handleDelete = async (filename: string) => {
-        if (!confirm(`Are you sure you want to permanently delete ${filename}?`)) return;
+        setShowDeleteConfirm({ filename, type: 'document' });
+    };
+
+    const confirmDelete = async () => {
+        const confirmData = showDeleteConfirm;
+        if (!confirmData) return;
+        setShowDeleteConfirm(null);
         try {
-            await fetch(`http://localhost:${API_PORT}/documents/${filename}`, { method: "DELETE" });
+            await fetch(`http://localhost:${API_PORT}/documents/${confirmData.filename}`, { method: "DELETE" });
             refresh();
-            if (previewDoc === filename) setPreviewDoc(null);
+            if (previewDoc === confirmData.filename) setPreviewDoc(null);
         } catch (err) {
             console.error(err);
+            setShowAlert({ title: "Error", message: "Failed to delete document" });
         }
     };
 
@@ -800,10 +1051,10 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                                 e.stopPropagation();
                                                 handleReprocess(doc.filename);
                                             }}
-                                            disabled={reprocessing}
+                                            disabled={reprocessingFilename === doc.filename}
                                             title="Reprocess & Re-index"
                                         >
-                                            <RefreshCw size={18} className={reprocessing ? "animate-spin" : ""} />
+                                            <RefreshCw size={18} className={reprocessingFilename === doc.filename ? "animate-spin" : ""} />
                                         </button>
                                         <button 
                                             className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-orange-600"
@@ -891,15 +1142,13 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             <Modal
                 isOpen={showUploadModal}
                 onClose={uploading ? () => {
-                    if (confirm('Upload is in progress. Close anyway? Files already uploaded will remain.')) {
-                        cleanupUpload();
-                    }
+                    setShowCancelUploadConfirm(true);
                 } : cancelUpload}
-                title={uploading ? "Uploading Documents" : "Select Document Type"}
+                title={uploading ? "Uploading Documents" : monitoringProcessing ? "Processing Documents" : "Select Document Type"}
                 hideCloseButton={false}
             >
                 <div className="space-y-6">
-                    {!uploading ? (
+                    {!uploading && !monitoringProcessing ? (
                         <>
                             <div>
                                 <p className="text-sm text-gray-600 mb-4">
@@ -965,9 +1214,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         <>
                             <div>
                                 <div className="flex items-center gap-3 mb-4">
-                                    <RefreshCw className="animate-spin text-blue-600" size={20} />
+                                    <RefreshCw className={`animate-spin ${uploading ? 'text-blue-600' : 'text-orange-600'}`} size={20} />
                                     <p className="text-sm font-medium text-gray-700">
-                                        Uploading and processing documents...
+                                        {uploading ? 'Uploading documents...' : monitoringProcessing ? 'Processing documents (extracting data, indexing, analyzing...)' : 'Upload complete'}
                                     </p>
                                 </div>
                                 <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto border border-gray-200 space-y-3">
@@ -997,6 +1246,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                                         {status === 'uploading' && 'Uploading file...'}
                                                         {status === 'uploaded' && 'File uploaded successfully'}
                                                         {status === 'processing' && 'Processing document (extracting data, indexing...)'}
+                                                        {status === 'completed' && 'Processing complete!'}
                                                         {status === 'error' && 'Upload failed'}
                                                     </div>
                                                 </div>
@@ -1015,19 +1265,65 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             <div className="flex justify-end pt-2">
                                 <button
                                     onClick={() => {
-                                        if (confirm('Close upload dialog? Files already uploaded will continue processing.')) {
+                                        // Only allow closing if not actively uploading
+                                        if (!uploading && !monitoringProcessing) {
+                                            cleanupUpload();
+                                        } else if (uploading) {
+                                            setShowCancelUploadConfirm(true);
+                                        } else {
+                                            // During processing monitoring, allow closing but warn
                                             cleanupUpload();
                                         }
                                     }}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={uploading}
                                 >
-                                    Close Dialog
+                                    {uploading ? 'Uploading...' : monitoringProcessing ? 'Processing... (Click to close)' : 'Close Dialog'}
                                 </button>
                             </div>
                         </>
                     )}
                 </div>
             </Modal>
+
+            <ConfirmModal
+                isOpen={showCancelUploadConfirm}
+                onConfirm={handleCancelUploadConfirm}
+                onCancel={() => setShowCancelUploadConfirm(false)}
+                title="Cancel Upload?"
+                message="Upload is in progress. Are you sure you want to cancel? Files already uploaded will remain."
+                confirmText="Yes, Cancel"
+                cancelText="Continue Upload"
+                confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
+            />
+
+            <ConfirmModal
+                isOpen={!!showReprocessConfirm}
+                onConfirm={confirmReprocess}
+                onCancel={() => setShowReprocessConfirm(null)}
+                title="Reprocess Document?"
+                message={`Are you sure you want to re-process ${showReprocessConfirm}? This will re-index it and run competency questions again.`}
+                confirmText="Reprocess"
+                cancelText="Cancel"
+            />
+
+            <ConfirmModal
+                isOpen={!!showDeleteConfirm && showDeleteConfirm.type === 'document'}
+                onConfirm={confirmDelete}
+                onCancel={() => setShowDeleteConfirm(null)}
+                title="Delete Document?"
+                message={`Are you sure you want to permanently delete ${showDeleteConfirm?.filename}?`}
+                confirmText="Delete"
+                cancelText="Cancel"
+                confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
+            />
+
+            <AlertModal
+                isOpen={!!showAlert}
+                onClose={() => setShowAlert(null)}
+                title={showAlert?.title || ""}
+                message={showAlert?.message || ""}
+            />
         </div>
     )
 }
@@ -1218,6 +1514,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
 function TemplatesView() {
     const [templates, setTemplates] = useState<string[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<{filename: string, type: 'document' | 'template'} | null>(null);
 
     useEffect(() => {
         fetchTemplates();
@@ -1248,9 +1545,15 @@ function TemplatesView() {
     };
 
     const handleDelete = async (filename: string) => {
-        if (!confirm(`Delete template ${filename}?`)) return;
+        setShowDeleteConfirm({ filename, type: 'template' });
+    };
+
+    const confirmDeleteTemplate = async () => {
+        const confirmData = showDeleteConfirm;
+        if (!confirmData || confirmData.type !== 'template') return;
+        setShowDeleteConfirm(null);
         try {
-            await fetch(`http://localhost:${API_PORT}/templates/${filename}`, { method: "DELETE" });
+            await fetch(`http://localhost:${API_PORT}/templates/${confirmData.filename}`, { method: "DELETE" });
             fetchTemplates();
         } catch (err) {
             console.error(err);
@@ -1306,6 +1609,17 @@ function TemplatesView() {
                     </div>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={!!showDeleteConfirm && showDeleteConfirm.type === 'template'}
+                onConfirm={confirmDeleteTemplate}
+                onCancel={() => setShowDeleteConfirm(null)}
+                title="Delete Template?"
+                message={`Are you sure you want to delete template ${showDeleteConfirm?.filename}?`}
+                confirmText="Delete"
+                cancelText="Cancel"
+                confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
+            />
         </div>
     );
 }
@@ -1313,6 +1627,7 @@ function TemplatesView() {
 function SettingsView() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const pendingApiKeyRef = useRef<string>("");
     const [selectedFile, setSelectedFile] = useState("config.yaml");
     const [isSaving, setIsSaving] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -1321,12 +1636,12 @@ function SettingsView() {
     const [apiKeyMasked, setApiKeyMasked] = useState("");
     const [savingApiKey, setSavingApiKey] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
+    const [showApiKeyOverwriteConfirm, setShowApiKeyOverwriteConfirm] = useState(false);
+    const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+    const [showAlert, setShowAlert] = useState<{title: string, message: string} | null>(null);
+    const [fileContent, setFileContent] = useState("");
 
-    // Fetch API key status on component mount and when selectedFile changes
-    useEffect(() => {
-        fetchFileContent(selectedFile);
-    }, [selectedFile]);
-    
+    // Fetch API key status on component mount
     useEffect(() => {
         fetchApiKeyStatus();
     }, []); // Run once on mount
@@ -1351,28 +1666,25 @@ function SettingsView() {
     };
 
     useEffect(() => {
-        if (isEditorOpen && textareaRef.current) {
+        if (isEditorOpen) {
             fetchFileContent(selectedFile);
         }
-    }, [isEditorOpen]);
+    }, [isEditorOpen, selectedFile]);
 
     const fetchFileContent = async (filename: string) => {
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/${filename}`);
             const data = await res.json();
-            if (textareaRef.current) {
-                textareaRef.current.value = data.content;
-            }
+            setFileContent(data.content);
         } catch (err) {
             console.error(err);
+            setFileContent("");
         }
     };
 
     const handleSaveFile = async () => {
-        if (!textareaRef.current) return;
-        
         setIsSaving(true);
-        const content = textareaRef.current.value;
+        const content = fileContent;
         
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/${selectedFile}`, {
@@ -1381,9 +1693,14 @@ function SettingsView() {
                 body: JSON.stringify({ content })
             });
             if (!res.ok) throw new Error();
-            // Success
+            setShowAlert({ title: "Success", message: "File saved successfully!" });
+            // Refresh API key status if config.yaml was saved
+            if (selectedFile === "config.yaml") {
+                fetchApiKeyStatus();
+            }
         } catch (err) {
             console.error("Failed to save:", err);
+            setShowAlert({ title: "Error", message: "Failed to save file. Please try again." });
         } finally {
             setIsSaving(false);
         }
@@ -1395,11 +1712,11 @@ function SettingsView() {
                 method: "POST"
             });
             const data = await res.json();
-            if (textareaRef.current) {
-                textareaRef.current.value = data.content;
-            }
+            setFileContent(data.content);
+            setShowAlert({ title: "Success", message: "File reset to default values." });
         } catch (err) {
             console.error("Failed to reset:", err);
+            setShowAlert({ title: "Error", message: "Failed to reset file. Please try again." });
         }
     };
 
@@ -1410,11 +1727,11 @@ function SettingsView() {
             });
             if (!res.ok) throw new Error();
             const data = await res.json();
-            if (textareaRef.current) {
-                textareaRef.current.value = data.content;
-            }
+            setFileContent(data.content);
+            setShowAlert({ title: "Success", message: "File restored from last saved backup." });
         } catch (err) {
             console.error("No backup found:", err);
+            setShowAlert({ title: "Error", message: "No backup found to restore." });
         }
     };
 
@@ -1424,23 +1741,21 @@ function SettingsView() {
 
     const handleSaveApiKey = async () => {
         if (!apiKey.trim()) {
-            alert("Please enter an API key");
+            setShowAlert({ title: "Missing API Key", message: "Please enter an API key" });
             return;
         }
         
         // Warn if overwriting existing key
         if (apiKeySet) {
-            const confirmOverwrite = confirm(
-                `You already have an API key configured (${apiKeyMasked}).\n\n` +
-                "Do you want to replace it with the new key?\n\n" +
-                "Click OK to replace, or Cancel to keep the existing key."
-            );
-            if (!confirmOverwrite) {
-                setApiKey("");
-                return;
-            }
+            pendingApiKeyRef.current = apiKey.trim();
+            setShowApiKeyOverwriteConfirm(true);
+            return;
         }
         
+        await performSaveApiKey(apiKey.trim());
+    };
+
+    const performSaveApiKey = async (keyToSave: string) => {
         setSavingApiKey(true);
         try {
             // Get current config
@@ -1453,7 +1768,7 @@ function SettingsView() {
             let updated = false;
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].trim().startsWith('openai_api_key:')) {
-                    lines[i] = `  openai_api_key: "${apiKey.trim()}"`;
+                    lines[i] = `  openai_api_key: "${keyToSave}"`;
                     updated = true;
                     break;
                 }
@@ -1461,7 +1776,7 @@ function SettingsView() {
             
             // If api section doesn't exist, add it at the top
             if (!updated) {
-                const apiSection = `# API Configuration\napi:\n  openai_api_key: "${apiKey.trim()}"\n\n`;
+                const apiSection = `# API Configuration\napi:\n  openai_api_key: "${keyToSave}"\n\n`;
                 content = apiSection + content;
             } else {
                 content = lines.join('\n');
@@ -1476,23 +1791,39 @@ function SettingsView() {
             
             if (!saveRes.ok) throw new Error("Failed to save");
             
-            alert("API key saved successfully! The application will now use this key for OpenAI features.");
+            setShowAlert({ title: "Success", message: "API key saved successfully! The application will now use this key for OpenAI features." });
             setApiKey("");
             setShowApiKey(false);
             fetchApiKeyStatus();
         } catch (err) {
             console.error("Failed to save API key:", err);
-            alert("Failed to save API key. Please try again.");
+            setShowAlert({ title: "Error", message: "Failed to save API key. Please try again." });
         } finally {
             setSavingApiKey(false);
+        }
+    };
+
+    const confirmApiKeyOverwrite = () => {
+        setShowApiKeyOverwriteConfirm(false);
+        const keyToSave = pendingApiKeyRef.current;
+        pendingApiKeyRef.current = "";
+        if (keyToSave) {
+            performSaveApiKey(keyToSave);
         }
     };
     
     const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
-        if (!confirm("WARNING: This will overwrite all current data with the backup. Continue?")) return;
+        setShowRestoreConfirm(true);
+        // Store file reference for later use
+        (handleRestore as any).pendingFile = e.target.files[0];
+    };
 
-        const file = e.target.files[0];
+    const confirmRestore = async () => {
+        setShowRestoreConfirm(false);
+        const file = (handleRestore as any).pendingFile;
+        if (!file) return;
+
         const formData = new FormData();
         formData.append("file", file);
 
@@ -1502,11 +1833,13 @@ function SettingsView() {
                 body: formData
             });
             const data = await res.json();
-            alert(data.message);
-            window.location.reload(); // Reload to refresh data
+            setShowAlert({ title: "Restore Complete", message: data.message });
+            setTimeout(() => {
+                window.location.reload(); // Reload to refresh data
+            }, 2000);
         } catch (err) {
             console.error(err);
-            alert("Failed to restore backup.");
+            setShowAlert({ title: "Error", message: "Failed to restore backup." });
         }
     };
 
@@ -1671,7 +2004,8 @@ function SettingsView() {
                         </div>
                         <textarea
                             ref={textareaRef}
-                            defaultValue=""
+                            value={fileContent}
+                            onChange={(e) => setFileContent(e.target.value)}
                             className="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white caret-black resize-y"
                             spellCheck={false}
                         />
@@ -1721,6 +2055,38 @@ function SettingsView() {
                     Please ensure you have backed up your current data before restoring.
                 </p>
             </div>
+
+            <ConfirmModal
+                isOpen={showApiKeyOverwriteConfirm}
+                onConfirm={confirmApiKeyOverwrite}
+                onCancel={() => {
+                    setShowApiKeyOverwriteConfirm(false);
+                    pendingApiKeyRef.current = "";
+                }}
+                title="Replace API Key?"
+                message={`You already have an API key configured (${apiKeyMasked}).\n\nDo you want to replace it with the new key?`}
+                confirmText="Replace"
+                cancelText="Keep Existing"
+                confirmButtonClass="bg-orange-600 hover:bg-orange-700 text-white"
+            />
+
+            <ConfirmModal
+                isOpen={showRestoreConfirm}
+                onConfirm={confirmRestore}
+                onCancel={() => setShowRestoreConfirm(false)}
+                title="Restore Backup?"
+                message="WARNING: This will overwrite all current data with the backup. Continue?"
+                confirmText="Yes, Restore"
+                cancelText="Cancel"
+                confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
+            />
+
+            <AlertModal
+                isOpen={!!showAlert}
+                onClose={() => setShowAlert(null)}
+                title={showAlert?.title || ""}
+                message={showAlert?.message || ""}
+            />
         </div>
     );
 }

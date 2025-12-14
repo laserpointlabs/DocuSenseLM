@@ -10,3 +10,7 @@ python-dotenv
 chromadb
 langchain-text-splitters
 pyinstaller
+easyocr
+PyMuPDF
+Pillow
+numpy

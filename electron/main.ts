@@ -157,10 +157,10 @@ function startPythonBackend() {
   if (isDev && !distBuild) {
       // Development mode - use project Python
       pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
-      const venvPath = process.platform === 'win32' 
+      const venvPath = process.platform === 'win32'
           ? path.join(__dirname, '../python/venv/Scripts/python.exe')
           : path.join(__dirname, '../python/venv/bin/python');
-      
+
       if (fs.existsSync(venvPath)) {
           console.log(`Using venv python: ${venvPath}`);
           pythonExecutable = venvPath;
