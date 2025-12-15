@@ -2,7 +2,7 @@ name: CI Smoke (Windows)
 
 on:
   push:
-    branches: [ "main", "fix/**", "feat/**", "chore/**" ]
+    branches: [ "main", "fix/**", "feat/**", "feature/**", "chore/**" ]
   pull_request:
 
 jobs:
