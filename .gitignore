@@ -42,6 +42,9 @@ tools/
 
 # Python cache and build artifacts
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 *.py[cod]
 *$py.class
 *.so
