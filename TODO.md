@@ -15,7 +15,7 @@
 [x] - Improve sort and search on document page.
 [x] - Improve how a user sets the document type prior to drag and drop this might naturally be corrected when we improve the collections on the document page. 
 
-[ ] - Fix builk drag and drop from desktop. 
+[x] - Fix builk drag and drop from desktop. (Verified working - no changes needed) 
 [x] - Add Show/Hide status to config file to all user to control display of document type on the dashboard and document collections area
 [ ] - Implement deployment and automatic updates
 [ ] - Build github download, new features, and update page
