@@ -15,13 +15,15 @@
 [x] - Improve sort and search on document page.
 [x] - Improve how a user sets the document type prior to drag and drop this might naturally be corrected when we improve the collections on the document page. 
 
-
 [ ] - Fix builk drag and drop from desktop. 
 [x] - Add Show/Hide status to config file to all user to control display of document type on the dashboard and document collections area
 [ ] - Implement deployment and automatic updates
 [ ] - Build github download, new features, and update page
 [/] - Improve status of processing when adding new file and when reprocessing document (still a bit flaky)
 [x] - Extracted data seems like it no longer working (FIXED: Hybrid search + conversation memory)
+[ ] - When clearning chat history make sure its actually removed
+[ ] - Verify chat history length under normal operation
+[ ] - Save pdf markups
 
 Release Management:
 [x] - Create release tagging scripts (create-release-tag.sh/.ps1)
