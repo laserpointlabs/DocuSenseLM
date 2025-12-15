@@ -71,24 +71,168 @@ jobs:
       - name: Test embeddable Python backend
         run: |
           cd release/win-unpacked/resources/python
+          
+          # Verify required files exist
+          Write-Host "=== Verifying build structure ==="
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Contents of current directory:"
+          Get-ChildItem | Select-Object Name, Mode | Format-Table | Write-Host
+          
+          if (-not (Test-Path "python_embed\python.exe")) {
+            Write-Error "python_embed\python.exe not found"
+            Write-Host "Contents of python_embed directory:"
+            if (Test-Path "python_embed") {
+              Get-ChildItem python_embed | Select-Object Name | Out-String | Write-Host
+            } else {
+              Write-Host "python_embed directory does not exist"
+            }
+            exit 1
+          }
+          if (-not (Test-Path "server.py")) {
+            Write-Error "server.py not found"
+            Get-ChildItem | Select-Object Name | Out-String | Write-Host
+            exit 1
+          }
+          
+          # Check for config files in parent directory (resources/)
+          Write-Host "Checking for config files in parent directory..."
+          $parentDir = (Get-Item ..).FullName
+          Write-Host "Parent directory: $parentDir"
+          if (Test-Path "..\config.default.yaml") {
+            Write-Host "✓ config.default.yaml found in parent directory"
+          } else {
+            Write-Host "⚠ config.default.yaml not found in parent directory"
+          }
+          if (Test-Path "..\prompts.default.yaml") {
+            Write-Host "✓ prompts.default.yaml found in parent directory"
+          } else {
+            Write-Host "⚠ prompts.default.yaml not found in parent directory"
+          }
+          
+          Write-Host "✓ Required files found"
+          
+          # Set up environment
           $env:USER_DATA_DIR = "$env:TEMP\docusenselm_test"
           $env:PORT = "14242"
-          $process = Start-Process -FilePath "python_embed\python.exe" -ArgumentList "server.py" -NoNewWindow -PassThru
-          Start-Sleep 15
-          $response = Invoke-WebRequest -Uri "http://127.0.0.1:14242/health" -UseBasicParsing -ErrorAction Stop
-          if ($response.StatusCode -ne 200) {
-            Write-Error "Backend health check failed"
-            Stop-Process -Id $process.Id -Force
-            exit 1
+          $env:PYTHONUNBUFFERED = "1"
+          
+          # Create output files for logging
+          $stdoutFile = "$env:TEMP\python_backend_stdout.txt"
+          $stderrFile = "$env:TEMP\python_backend_stderr.txt"
+          
+          Write-Host "=== Testing Python import ==="
+          # Test if Python can import required modules
+          $importTest = & python_embed\python.exe -c "import sys; import fastapi; import uvicorn; print('✓ Core imports successful')" 2>&1
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Python import test failed: $importTest"
+              exit 1
           }
-          $content = $response.Content | ConvertFrom-Json
-          if ($content.status -ne "ok") {
-            Write-Error "Backend status not ok"
-            Stop-Process -Id $process.Id -Force
-            exit 1
+          Write-Host $importTest
+          
+          Write-Host "=== Starting Python backend ==="
+          Write-Host "Working directory: $(Get-Location)"
+          Write-Host "Python executable: $(Resolve-Path python_embed\python.exe)"
+          
+          # Start Python process with output redirection
+          $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+          $processInfo.FileName = "python_embed\python.exe"
+          $processInfo.Arguments = "server.py"
+          $processInfo.WorkingDirectory = (Get-Location).Path
+          $processInfo.UseShellExecute = $false
+          $processInfo.RedirectStandardOutput = $true
+          $processInfo.RedirectStandardError = $true
+          $processInfo.CreateNoWindow = $true
+          
+          # Copy current environment variables
+          foreach ($key in [System.Environment]::GetEnvironmentVariables().Keys) {
+              $processInfo.EnvironmentVariables[$key] = [System.Environment]::GetEnvironmentVariable($key)
           }
-          Write-Host "✓ Backend health check passed: $($content | ConvertTo-Json)"
-          Stop-Process -Id $process.Id -Force
+          
+          # Set custom environment variables
+          $processInfo.EnvironmentVariables["USER_DATA_DIR"] = $env:USER_DATA_DIR
+          $processInfo.EnvironmentVariables["PORT"] = $env:PORT
+          $processInfo.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
+          
+          $process = New-Object System.Diagnostics.Process
+          $process.StartInfo = $processInfo
+          
+          # Redirect output to files
+          $stdoutWriter = [System.IO.StreamWriter]::new($stdoutFile)
+          $stderrWriter = [System.IO.StreamWriter]::new($stderrFile)
+          $process.add_OutputDataReceived({ param($sender, $e) if ($e.Data) { $stdoutWriter.WriteLine($e.Data); $stdoutWriter.Flush() } })
+          $process.add_ErrorDataReceived({ param($sender, $e) if ($e.Data) { $stderrWriter.WriteLine($e.Data); $stderrWriter.Flush() } })
+          
+          try {
+              $process.Start() | Out-Null
+              $process.BeginOutputReadLine()
+              $process.BeginErrorReadLine()
+              
+              Write-Host "Python backend started with PID: $($process.Id)"
+          } catch {
+              Write-Error "Failed to start Python process: $($_.Exception.Message)"
+              exit 1
+          }
+          
+          # Give the process a moment to initialize
+          Start-Sleep -Seconds 3
+          
+          # Wait for health endpoint with retries
+          $maxAttempts = 30
+          $attempt = 0
+          $healthCheckPassed = $false
+          
+          while ($attempt -lt $maxAttempts) {
+              $attempt++
+              Start-Sleep -Seconds 2
+              
+              # Check if process is still running
+              if ($process.HasExited) {
+                  Write-Error "Python process exited unexpectedly with code $($process.ExitCode)"
+                  Write-Host "=== STDOUT ==="
+                  Get-Content $stdoutFile -ErrorAction SilentlyContinue | Write-Host
+                  Write-Host "=== STDERR ==="
+                  Get-Content $stderrFile -ErrorAction SilentlyContinue | Write-Host
+                  exit 1
+              }
+              
+              try {
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:14242/health" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+                  if ($response.StatusCode -eq 200) {
+                      $content = $response.Content | ConvertFrom-Json
+                      if ($content.status -eq "ok") {
+                          Write-Host "✓ Backend health check passed after $attempt attempts"
+                          Write-Host "Response: $($content | ConvertTo-Json)"
+                          $healthCheckPassed = $true
+                          break
+                      }
+                  }
+              } catch {
+                  Write-Host "Health check attempt $attempt/$maxAttempts failed: $($_.Exception.Message)"
+              }
+          }
+          
+          # Cleanup
+          $stdoutWriter.Close()
+          $stderrWriter.Close()
+          
+          if (-not $healthCheckPassed) {
+              Write-Error "Backend health check failed after $maxAttempts attempts"
+              Write-Host "=== STDOUT ==="
+              Get-Content $stdoutFile -ErrorAction SilentlyContinue | Write-Host
+              Write-Host "=== STDERR ==="
+              Get-Content $stderrFile -ErrorAction SilentlyContinue | Write-Host
+              if (-not $process.HasExited) {
+                  Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              }
+              exit 1
+          }
+          
+          # Stop the process
+          if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+          
+          Write-Host "✓ Test completed successfully"
 
       - name: Upload NSIS installer (if present)
         uses: actions/upload-artifact@v4
