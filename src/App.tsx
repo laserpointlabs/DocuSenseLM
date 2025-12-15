@@ -268,8 +268,8 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
           const data = await res.json();
           setReport(data.report);
         } catch (e) {
-            console.error(e);
-            setShowAlert({ title: "Error", message: "Failed to generate report" });
+            console.error("Failed to generate report:", e);
+            // Error is logged, user can retry
         } finally {
           setGeneratingReport(false);
       }
@@ -472,7 +472,6 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const [showCancelUploadConfirm, setShowCancelUploadConfirm] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<{filename: string, type: 'document' | 'template'} | null>(null);
     const [showReprocessConfirm, setShowReprocessConfirm] = useState<string | null>(null);
-    const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
     const [showAlert, setShowAlert] = useState<{title: string, message: string} | null>(null);
     const [showEditMetadataModal, setShowEditMetadataModal] = useState(false);
     const [editingMetadataFilename, setEditingMetadataFilename] = useState<string | null>(null);
@@ -589,7 +588,6 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         
                         // Check status of all uploaded files
                         let allProcessed = true;
-                        let hasErrors = false;
                         const statuses: Record<string, string> = {};
                         
                         filesToUpload.forEach(file => {
@@ -613,7 +611,6 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                 } else if (doc.status === 'error' || doc.status === 'failed') {
                                     // Error state - counts as "done" for closing purposes
                                     setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
-                                    hasErrors = true;
                                     // Error counts as processed for closing modal (allProcessed stays true)
                                 } else {
                                     // Still processing (pending, processing, reprocessing)
@@ -1575,7 +1572,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             
                             return (
                                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                                    {fields.map((field: any, index: number) => {
+                                    {fields.map((field: any) => {
                                         const fieldId = field.id;
                                         const fieldValue = editingMetadata[fieldId] || "";
                                         const originalValue = originalMetadata?.[fieldId] || "";
