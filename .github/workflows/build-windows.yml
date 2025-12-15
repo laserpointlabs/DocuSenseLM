@@ -122,13 +122,13 @@ jobs:
           
           Write-Host "=== Testing Python import ==="
           # Test if Python can import required modules
-          $importResult = & python_embed\python.exe -c "import sys; import fastapi; import uvicorn; print('✓ Core imports successful')" 2>&1
+          $importResult = & python_embed\python.exe -c "import sys; import fastapi; import uvicorn; print('Core imports successful')" 2>&1
           $importExitCode = $LASTEXITCODE
           if ($importExitCode -ne 0) {
               Write-Error "Python import test failed with exit code ${importExitCode}: $importResult"
               exit 1
           }
-          Write-Host $importResult
+          Write-Host "✓ $importResult"
           
           Write-Host "=== Starting Python backend ==="
           Write-Host "Working directory: $(Get-Location)"
