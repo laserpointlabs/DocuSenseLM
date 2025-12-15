@@ -132,13 +132,20 @@ jobs:
           
           Write-Host "=== Starting Python backend ==="
           Write-Host "Working directory: $(Get-Location)"
-          Write-Host "Python executable: $(Resolve-Path python_embed\python.exe)"
+          
+          # Resolve absolute paths
+          $pythonExePath = (Resolve-Path "python_embed\python.exe").Path
+          $serverPyPath = (Resolve-Path "server.py").Path
+          $workingDir = (Get-Location).Path
+          
+          Write-Host "Python executable: $pythonExePath"
+          Write-Host "Server script: $serverPyPath"
           
           # Start Python process with output redirection
           $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-          $processInfo.FileName = "python_embed\python.exe"
-          $processInfo.Arguments = "server.py"
-          $processInfo.WorkingDirectory = (Get-Location).Path
+          $processInfo.FileName = $pythonExePath
+          $processInfo.Arguments = $serverPyPath
+          $processInfo.WorkingDirectory = $workingDir
           $processInfo.UseShellExecute = $false
           $processInfo.RedirectStandardOutput = $true
           $processInfo.RedirectStandardError = $true
