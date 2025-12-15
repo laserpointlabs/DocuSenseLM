@@ -164,18 +164,32 @@ jobs:
           $process = New-Object System.Diagnostics.Process
           $process.StartInfo = $processInfo
           
-          # Redirect output to files
-          $stdoutWriter = [System.IO.StreamWriter]::new($stdoutFile)
-          $stderrWriter = [System.IO.StreamWriter]::new($stderrFile)
-          $process.add_OutputDataReceived({ param($sender, $e) if ($e.Data) { $stdoutWriter.WriteLine($e.Data); $stdoutWriter.Flush() } })
-          $process.add_ErrorDataReceived({ param($sender, $e) if ($e.Data) { $stderrWriter.WriteLine($e.Data); $stderrWriter.Flush() } })
-          
+          # Start process and redirect output to files synchronously
           try {
               $process.Start() | Out-Null
-              $process.BeginOutputReadLine()
-              $process.BeginErrorReadLine()
-              
               Write-Host "Python backend started with PID: $($process.Id)"
+              
+              # Read output asynchronously using background jobs
+              $stdoutJob = Start-Job -ScriptBlock {
+                  param($processId, $outputFile)
+                  $proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
+                  if ($proc) {
+                      $proc.StandardOutput | ForEach-Object {
+                          Add-Content -Path $outputFile -Value $_ -ErrorAction SilentlyContinue
+                      }
+                  }
+              } -ArgumentList $process.Id, $stdoutFile
+              
+              $stderrJob = Start-Job -ScriptBlock {
+                  param($processId, $errorFile)
+                  $proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
+                  if ($proc) {
+                      $proc.StandardError | ForEach-Object {
+                          Add-Content -Path $errorFile -Value $_ -ErrorAction SilentlyContinue
+                      }
+                  }
+              } -ArgumentList $process.Id, $stderrFile
+              
           } catch {
               Write-Error "Failed to start Python process: $($_.Exception.Message)"
               exit 1
@@ -218,10 +232,6 @@ jobs:
                   Write-Host "Health check attempt $attempt/$maxAttempts failed: $($_.Exception.Message)"
               }
           }
-          
-          # Cleanup
-          $stdoutWriter.Close()
-          $stderrWriter.Close()
           
           if (-not $healthCheckPassed) {
               Write-Error "Backend health check failed after $maxAttempts attempts"
