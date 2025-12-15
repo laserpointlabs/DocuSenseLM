@@ -122,12 +122,13 @@ jobs:
           
           Write-Host "=== Testing Python import ==="
           # Test if Python can import required modules
-          $importTest = & python_embed\python.exe -c "import sys; import fastapi; import uvicorn; print('✓ Core imports successful')" 2>&1
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Python import test failed: $importTest"
+          $importResult = & python_embed\python.exe -c "import sys; import fastapi; import uvicorn; print('✓ Core imports successful')" 2>&1
+          $importExitCode = $LASTEXITCODE
+          if ($importExitCode -ne 0) {
+              Write-Error "Python import test failed with exit code $importExitCode: $importResult"
               exit 1
           }
-          Write-Host $importTest
+          Write-Host $importResult
           
           Write-Host "=== Starting Python backend ==="
           Write-Host "Working directory: $(Get-Location)"
@@ -144,8 +145,8 @@ jobs:
           $processInfo.CreateNoWindow = $true
           
           # Copy current environment variables
-          foreach ($key in [System.Environment]::GetEnvironmentVariables().Keys) {
-              $processInfo.EnvironmentVariables[$key] = [System.Environment]::GetEnvironmentVariable($key)
+          foreach ($key in [System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::Process).Keys) {
+              $processInfo.EnvironmentVariables[$key] = [System.Environment]::GetEnvironmentVariable($key, [System.EnvironmentVariableTarget]::Process)
           }
           
           # Set custom environment variables
