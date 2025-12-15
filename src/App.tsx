@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, CheckCircle, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, CheckCircle, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight, Edit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Modal, ConfirmModal, AlertModal } from './components/Modal';
@@ -474,6 +474,12 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const [showReprocessConfirm, setShowReprocessConfirm] = useState<string | null>(null);
     const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
     const [showAlert, setShowAlert] = useState<{title: string, message: string} | null>(null);
+    const [showEditMetadataModal, setShowEditMetadataModal] = useState(false);
+    const [editingMetadataFilename, setEditingMetadataFilename] = useState<string | null>(null);
+    const [editingMetadata, setEditingMetadata] = useState<Record<string, any> | null>(null);
+    const [originalMetadata, setOriginalMetadata] = useState<Record<string, any> | null>(null);
+    const [savingMetadata, setSavingMetadata] = useState(false);
+    const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
     useEffect(() => {
         if (initialPreview) {
@@ -862,6 +868,208 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         }
     };
 
+    const handleSaveMetadata = async () => {
+        if (!editingMetadataFilename || !editingMetadata) return;
+        
+        setSavingMetadata(true);
+        try {
+            const encodedFilename = encodeURIComponent(editingMetadataFilename);
+            const response = await fetch(`http://localhost:${API_PORT}/metadata/${encodedFilename}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ competency_answers: editingMetadata })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            // Success
+            setToast({ message: "Metadata updated successfully", type: "success" });
+            setTimeout(() => setToast(null), 3000);
+            setShowEditMetadataModal(false);
+            setEditingMetadataFilename(null);
+            setEditingMetadata(null);
+            setOriginalMetadata(null);
+            refresh();
+        } catch (err) {
+            console.error("[Save Metadata] Error:", err);
+            const errorMessage = err instanceof Error ? err.message : "Failed to save metadata";
+            setToast({ message: errorMessage, type: "error" });
+            setTimeout(() => setToast(null), 5000);
+            setShowAlert({ title: "Error", message: errorMessage });
+        } finally {
+            setSavingMetadata(false);
+        }
+    };
+
+    // Utility function to parse various date formats and convert to YYYY-MM-DD
+    const parseDateForInput = (dateStr: string): string => {
+        if (!dateStr || typeof dateStr !== 'string') return "";
+        
+        const trimmed = dateStr.trim();
+        if (!trimmed) return "";
+        
+        // Already in YYYY-MM-DD format
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return trimmed;
+        }
+        
+        const monthNames: Record<string, number> = {
+            'jan': 0, 'january': 0, 'feb': 1, 'february': 1, 'mar': 2, 'march': 2,
+            'apr': 3, 'april': 3, 'may': 4, 'jun': 5, 'june': 5,
+            'jul': 6, 'july': 6, 'aug': 7, 'august': 7, 'sep': 8, 'september': 8,
+            'oct': 9, 'october': 9, 'nov': 10, 'november': 10, 'dec': 11, 'december': 11
+        };
+        
+        // Try parsing various formats
+        // DD-MMM-YYYY (e.g., "31-Oct-2025")
+        let match = trimmed.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+        if (match) {
+            const day = parseInt(match[1], 10);
+            const month = monthNames[match[2].toLowerCase()];
+            const year = parseInt(match[3], 10);
+            if (month !== undefined && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime()) && date.getDate() === day) {
+                    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+            }
+        }
+        
+        // MMM DD, YYYY (e.g., "Oct 31, 2025")
+        match = trimmed.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
+        if (match) {
+            const month = monthNames[match[1].toLowerCase()];
+            const day = parseInt(match[2], 10);
+            const year = parseInt(match[3], 10);
+            if (month !== undefined && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime()) && date.getDate() === day) {
+                    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+            }
+        }
+        
+        // MMMM DD, YYYY (e.g., "October 31, 2025")
+        match = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+        if (match) {
+            const month = monthNames[match[1].toLowerCase()];
+            const day = parseInt(match[2], 10);
+            const year = parseInt(match[3], 10);
+            if (month !== undefined && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime()) && date.getDate() === day) {
+                    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+            }
+        }
+        
+        // DD MMM YYYY (e.g., "31 Oct 2025")
+        match = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+        if (match) {
+            const day = parseInt(match[1], 10);
+            const month = monthNames[match[2].toLowerCase()];
+            const year = parseInt(match[3], 10);
+            if (month !== undefined && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime()) && date.getDate() === day) {
+                    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+            }
+        }
+        
+        // DD/MM/YYYY or MM/DD/YYYY
+        match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (match) {
+            const first = parseInt(match[1], 10);
+            const second = parseInt(match[2], 10);
+            const third = parseInt(match[3], 10);
+            
+            // Heuristic: if first > 12, it's DD/MM/YYYY, else MM/DD/YYYY
+            let day: number, month: number, year: number;
+            if (first > 12) {
+                day = first;
+                month = second - 1;
+                year = third;
+            } else {
+                month = first - 1;
+                day = second;
+                year = third;
+            }
+            
+            if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime()) && date.getDate() === day && date.getMonth() === month) {
+                    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+            }
+        }
+        
+        // YYYY/MM/DD
+        match = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+        if (match) {
+            const year = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10) - 1;
+            const day = parseInt(match[3], 10);
+            if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime()) && date.getDate() === day && date.getMonth() === month) {
+                    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+            }
+        }
+        
+        // Try native Date parsing as fallback
+        const parsed = new Date(trimmed);
+        if (!isNaN(parsed.getTime())) {
+            const year = parsed.getFullYear();
+            const month = parsed.getMonth();
+            const day = parsed.getDate();
+            // Validate the parsed date makes sense (not too far in past/future)
+            if (year >= 1000 && year <= 9999 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+                return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            }
+        }
+        
+        // If all parsing fails, return empty string
+        return "";
+    };
+
+    const handleOpenEditMetadata = (filename: string) => {
+        const doc = documents[filename];
+        if (!doc) return;
+        
+        setEditingMetadataFilename(filename);
+        // Get all fields from config for this document type
+        const docType = doc.doc_type;
+        const docConfig = config?.document_types[docType];
+        const fields = docConfig?.competency_questions || [];
+        
+        // Initialize with existing values or empty strings
+        const initialMetadata: Record<string, any> = {};
+        fields.forEach((field: any) => {
+            const rawValue = doc.competency_answers?.[field.id] || "";
+            // For date fields, parse and convert to YYYY-MM-DD format
+            if (field.type === "date" && rawValue) {
+                initialMetadata[field.id] = parseDateForInput(String(rawValue));
+            } else {
+                initialMetadata[field.id] = rawValue;
+            }
+        });
+        
+        // Store original for change detection
+        setOriginalMetadata(JSON.parse(JSON.stringify(initialMetadata)));
+        setEditingMetadata(initialMetadata);
+        setShowEditMetadataModal(true);
+    };
+
+    const hasMetadataChanges = (): boolean => {
+        if (!editingMetadata || !originalMetadata) return false;
+        return JSON.stringify(editingMetadata) !== JSON.stringify(originalMetadata);
+    };
+
     const filteredDocs = Object.values(documents || {}).filter(doc => {
         if (!doc) return false;
         // Search matches filename OR document type name
@@ -1102,7 +1310,19 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                              />
                         </div>
                         <div className="p-4 border-t border-gray-100 bg-gray-50 text-sm overflow-auto max-h-48">
-                            <h4 className="font-bold text-gray-700 mb-2">Extracted Data</h4>
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-bold text-gray-700">Extracted Data</h4>
+                                {documents[previewDoc] && (
+                                    <button
+                                        onClick={() => handleOpenEditMetadata(previewDoc)}
+                                        className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-xs font-medium"
+                                        title="Edit metadata"
+                                    >
+                                        <Edit size={14} />
+                                        Edit
+                                    </button>
+                                )}
+                            </div>
                             {documents[previewDoc]?.competency_answers ? (
                                 <ul className="space-y-1">
                                     {Object.entries(documents[previewDoc].competency_answers).map(([k, v]) => (
@@ -1317,6 +1537,145 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 cancelText="Cancel"
                 confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
             />
+
+            {/* Edit Metadata Modal */}
+            {showEditMetadataModal && editingMetadataFilename && editingMetadata && (
+                <Modal
+                    isOpen={showEditMetadataModal}
+                    onClose={() => {
+                        // Check if there are unsaved changes
+                        if (hasMetadataChanges() && !savingMetadata) {
+                            if (confirm("You have unsaved changes. Are you sure you want to close?")) {
+                                setShowEditMetadataModal(false);
+                                setEditingMetadataFilename(null);
+                                setEditingMetadata(null);
+                                setOriginalMetadata(null);
+                            }
+                        } else {
+                            setShowEditMetadataModal(false);
+                            setEditingMetadataFilename(null);
+                            setEditingMetadata(null);
+                            setOriginalMetadata(null);
+                        }
+                    }}
+                    title={`Edit Metadata - ${editingMetadataFilename}`}
+                >
+                    <div className="space-y-4">
+                        {(() => {
+                            const doc = documents[editingMetadataFilename];
+                            if (!doc || !config) return null;
+                            
+                            const docType = doc.doc_type;
+                            const docConfig = config.document_types[docType];
+                            const fields = docConfig?.competency_questions || [];
+                            
+                            if (fields.length === 0) {
+                                return <p className="text-gray-500">No fields configured for this document type.</p>;
+                            }
+                            
+                            return (
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                                    {fields.map((field: any, index: number) => {
+                                        const fieldId = field.id;
+                                        const fieldValue = editingMetadata[fieldId] || "";
+                                        const originalValue = originalMetadata?.[fieldId] || "";
+                                        const hasChanged = String(fieldValue) !== String(originalValue);
+                                        
+                                        return (
+                                            <div key={fieldId} className={`${hasChanged ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'} border rounded-lg p-3`}>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    {field.question}
+                                                </label>
+                                                {field.type === "date" ? (
+                                                    <input
+                                                        type="date"
+                                                        value={fieldValue ? String(fieldValue).substring(0, 10) : ""}
+                                                        onChange={(e) => {
+                                                            setEditingMetadata({
+                                                                ...editingMetadata,
+                                                                [fieldId]: e.target.value
+                                                            });
+                                                        }}
+                                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                ) : (
+                                                    <textarea
+                                                        value={String(fieldValue)}
+                                                        onChange={(e) => {
+                                                            setEditingMetadata({
+                                                                ...editingMetadata,
+                                                                [fieldId]: e.target.value
+                                                            });
+                                                        }}
+                                                        rows={fieldValue && fieldValue.length > 50 ? 3 : 1}
+                                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                                                        placeholder={`Enter ${field.question.toLowerCase()}`}
+                                                    />
+                                                )}
+                                                {hasChanged && (
+                                                    <p className="text-xs text-blue-600 mt-1">Modified</p>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+                        
+                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                            <button
+                                onClick={() => {
+                                    if (hasMetadataChanges() && !savingMetadata) {
+                                        if (confirm("You have unsaved changes. Are you sure you want to close?")) {
+                                            setShowEditMetadataModal(false);
+                                            setEditingMetadataFilename(null);
+                                            setEditingMetadata(null);
+                                            setOriginalMetadata(null);
+                                        }
+                                    } else {
+                                        setShowEditMetadataModal(false);
+                                        setEditingMetadataFilename(null);
+                                        setEditingMetadata(null);
+                                        setOriginalMetadata(null);
+                                    }
+                                }}
+                                disabled={savingMetadata}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveMetadata}
+                                disabled={savingMetadata || !hasMetadataChanges()}
+                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {savingMetadata ? (
+                                    <>
+                                        <RefreshCw className="animate-spin" size={16} />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    "Save"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+                    toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                } animate-in fade-in slide-in-from-top-2 duration-300`}>
+                    {toast.type === 'success' ? (
+                        <CheckCircle size={20} />
+                    ) : (
+                        <AlertCircle size={20} />
+                    )}
+                    <span className="font-medium">{toast.message}</span>
+                </div>
+            )}
 
             <AlertModal
                 isOpen={!!showAlert}

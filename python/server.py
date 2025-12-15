@@ -11,7 +11,7 @@ import datetime
 import pickletools
 import diskcache
 import webbrowser  # Ensure stdlib module is loaded for PyInstaller
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -801,6 +801,9 @@ class UpdateStatusRequest(BaseModel):
 class UpdateDocTypeRequest(BaseModel):
     doc_type: str
 
+class UpdateMetadataRequest(BaseModel):
+    competency_answers: Dict[str, Any]
+
 # --- Endpoints ---
 
 @app.get("/health")
@@ -1108,6 +1111,22 @@ async def archive_document(filename: str):
     save_metadata(metadata)
     
     return {"status": "updated", "filename": filename, "archived": not current_status}
+
+@app.post("/metadata/{filename}")
+async def update_metadata(filename: str, request: UpdateMetadataRequest):
+    metadata = load_metadata()
+    if filename not in metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Validate competency_answers is a dictionary
+    if not isinstance(request.competency_answers, dict):
+        raise HTTPException(status_code=400, detail="competency_answers must be a dictionary")
+    
+    # Update competency_answers
+    metadata[filename]["competency_answers"] = request.competency_answers
+    save_metadata(metadata)
+    
+    return {"status": "updated", "filename": filename, "competency_answers": request.competency_answers}
 
 @app.delete("/documents/{filename}")
 async def delete_document(filename: str):
