@@ -22,3 +22,8 @@
 [ ] - Build github download, new features, and update page
 [/] - Improve status of processing when adding new file and when reprocessing document (still a bit flaky)
 [x] - Extracted data seems like it no longer working (FIXED: Hybrid search + conversation memory)
+
+Release Management:
+[x] - Create release tagging scripts (create-release-tag.sh/.ps1)
+[x] - Tag v1.0.14: CI workflow fixes and TypeScript error resolution
+[ ] - Ensure all TODO items get tagged when completed
