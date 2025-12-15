@@ -125,7 +125,7 @@ jobs:
           $importResult = & python_embed\python.exe -c "import sys; import fastapi; import uvicorn; print('✓ Core imports successful')" 2>&1
           $importExitCode = $LASTEXITCODE
           if ($importExitCode -ne 0) {
-              Write-Error "Python import test failed with exit code $importExitCode: $importResult"
+              Write-Error "Python import test failed with exit code ${importExitCode}: $importResult"
               exit 1
           }
           Write-Host $importResult
