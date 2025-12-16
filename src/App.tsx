@@ -32,6 +32,7 @@ declare global {
       handlePythonError: (callback: (error: string) => void) => void;
       getUserDataPath?: () => Promise<string>;
       openUserDataFolder?: () => Promise<{ success: boolean; path: string; error: string | null }>;
+      downloadBackup?: () => Promise<{ success: boolean; filename?: string; error?: string }>;
     };
   }
 }
@@ -2045,6 +2046,7 @@ function SettingsView() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const pendingApiKeyRef = useRef<string>("");
+    const pendingRestoreFileRef = useRef<File | null>(null);
     const [selectedFile, setSelectedFile] = useState("config.yaml");
     const [isSaving, setIsSaving] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -2192,7 +2194,25 @@ function SettingsView() {
     };
 
     const handleBackup = () => {
-        window.open(`http://localhost:${API_PORT}/backup`, '_blank');
+        // Use Electron download manager if available (avoids blank windows and properly handles save dialog)
+        if (window.electronAPI?.downloadBackup) {
+            console.log('Using Electron downloadBackup...');
+            window.electronAPI.downloadBackup().catch((err: any) => {
+                console.error('Backup download failed:', err);
+                setShowAlert({ title: "Backup Failed", message: "Failed to download backup. Please try again." });
+            });
+            return;
+        }
+
+        // Fallback (non-Electron): trigger download without opening a new tab.
+        console.log('Using iframe fallback for backup download...');
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = `http://localhost:${API_PORT}/backup`;
+        document.body.appendChild(iframe);
+        setTimeout(() => {
+            try { document.body.removeChild(iframe); } catch { /* ignore */ }
+        }, 1000);
     };
 
     const handleSaveApiKey = async () => {
@@ -2269,32 +2289,45 @@ function SettingsView() {
     };
     
     const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return;
+        console.log('handleRestore called, files:', e.target.files);
+        if (!e.target.files?.length) {
+            console.log('No files selected');
+            return;
+        }
+        console.log('Setting restore confirm modal to true, file:', e.target.files[0].name);
+        pendingRestoreFileRef.current = e.target.files[0];
         setShowRestoreConfirm(true);
-        // Store file reference for later use
-        (handleRestore as any).pendingFile = e.target.files[0];
     };
 
     const confirmRestore = async () => {
+        console.log('confirmRestore called');
         setShowRestoreConfirm(false);
-        const file = (handleRestore as any).pendingFile;
-        if (!file) return;
+        const file = pendingRestoreFileRef.current;
+        if (!file) {
+            console.log('No pending file found in ref');
+            return;
+        }
+        console.log('Got pending file from ref:', file.name);
 
+        console.log('Starting restore with file:', file.name);
         const formData = new FormData();
         formData.append("file", file);
 
         try {
+            console.log('Calling /restore endpoint...');
             const res = await fetch(`http://localhost:${API_PORT}/restore`, {
                 method: "POST",
                 body: formData
             });
+            console.log('Restore response status:', res.status);
             const data = await res.json();
+            console.log('Restore response data:', data);
             setShowAlert({ title: "Restore Complete", message: data.message });
             setTimeout(() => {
                 window.location.reload(); // Reload to refresh data
             }, 2000);
         } catch (err) {
-            console.error(err);
+            console.error('Restore error:', err);
             setShowAlert({ title: "Error", message: "Failed to restore backup." });
         }
     };

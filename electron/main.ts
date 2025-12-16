@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -398,4 +398,113 @@ ipcMain.handle('open-user-data-folder', async () => {
   // openPath returns an empty string on success, otherwise an error message
   const result = await shell.openPath(p);
   return { success: result === "", path: p, error: result || null };
+});
+
+// Download backup without opening a new window. This uses Electron's download manager,
+// so we can reliably know when the user finished saving the file.
+ipcMain.handle('download-backup', async () => {
+  if (!mainWindow) {
+    return { success: false, error: 'Main window not ready' };
+  }
+
+  const url = `http://localhost:${API_PORT}/backup`;
+
+  try {
+    const wc = mainWindow.webContents;
+    const ses = wc.session;
+
+    return await new Promise<{ success: boolean; filename?: string; error?: string }>((resolve) => {
+      const onWillDownload = (_event: Electron.Event, item: Electron.DownloadItem) => {
+        // Only handle the backup download we just initiated.
+        if (item.getURL() !== url) return;
+
+        const filename = item.getFilename();
+        
+        console.log('[Backup Download] will-download triggered for:', filename);
+        
+        // Set a temporary path immediately to prevent Electron's default save dialog
+        const tempPath = path.join(app.getPath('temp'), filename);
+        console.log('[Backup Download] Setting temp path:', tempPath);
+        item.setSavePath(tempPath);
+
+        // Track both the download completion and user's save choice
+        let downloadComplete = false;
+        let downloadState: 'completed' | 'cancelled' | 'interrupted' = 'cancelled';
+        let userChosenPath: string | null = null;
+        let dialogComplete = false;
+
+        const tryFinalize = () => {
+          // Only finalize when BOTH download and dialog are done
+          if (!downloadComplete || !dialogComplete) return;
+
+          ses.removeListener('will-download', onWillDownload);
+
+          if (downloadState === 'completed' && userChosenPath) {
+            // Move file from temp to user's chosen location
+            console.log('[Backup Download] Finalizing: moving from', tempPath, 'to', userChosenPath);
+            try {
+              if (fs.existsSync(userChosenPath)) {
+                console.log('[Backup Download] Removing existing file at destination');
+                fs.unlinkSync(userChosenPath); // Remove existing file
+              }
+              if (!fs.existsSync(tempPath)) {
+                throw new Error('Temp file does not exist');
+              }
+              fs.renameSync(tempPath, userChosenPath);
+              console.log('[Backup Download] File saved successfully');
+              resolve({ success: true, filename });
+            } catch (e: any) {
+              console.error('[Backup Download] Error saving file:', e);
+              resolve({ success: false, error: `Failed to save file: ${e.message}` });
+              try { fs.unlinkSync(tempPath); } catch {}
+            }
+          } else {
+            // Download failed or user canceled
+            try {
+              if (fs.existsSync(tempPath)) {
+                fs.unlinkSync(tempPath);
+              }
+            } catch (e) {
+              console.error('Failed to clean up temp file:', e);
+            }
+            resolve({ success: false, error: downloadState === 'completed' ? 'User canceled' : `Download ${downloadState}` });
+          }
+        };
+
+        // Show save dialog
+        dialog.showSaveDialog(mainWindow!, {
+          title: 'Save Backup',
+          defaultPath: path.join(app.getPath('downloads'), filename),
+          filters: [{ name: 'ZIP', extensions: ['zip'] }],
+        }).then(({ canceled, filePath }) => {
+          if (!canceled && filePath) {
+            userChosenPath = filePath;
+          }
+          dialogComplete = true;
+          tryFinalize();
+        }).catch((e) => {
+          console.error('Save dialog error:', e);
+          dialogComplete = true;
+          tryFinalize();
+        });
+
+        // Track download completion
+        item.once('done', (_e, state) => {
+          console.log('[Backup Download] Download done, state:', state);
+          console.log('[Backup Download] Temp file exists:', fs.existsSync(tempPath));
+          if (fs.existsSync(tempPath)) {
+            console.log('[Backup Download] Temp file size:', fs.statSync(tempPath).size);
+          }
+          downloadComplete = true;
+          downloadState = state as 'completed' | 'cancelled' | 'interrupted';
+          tryFinalize();
+        });
+      };
+
+      ses.on('will-download', onWillDownload);
+      wc.downloadURL(url);
+    });
+  } catch (e: any) {
+    return { success: false, error: e?.message || String(e) };
+  }
 });

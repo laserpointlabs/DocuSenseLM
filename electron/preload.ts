@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getApiPort: () => ipcRenderer.invoke('get-api-port'),
   getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
   openUserDataFolder: () => ipcRenderer.invoke('open-user-data-folder'),
+  downloadBackup: () => ipcRenderer.invoke('download-backup'),
 
   // Handle startup status messages
   handleStartupStatus: (callback: (status: string) => void) => {

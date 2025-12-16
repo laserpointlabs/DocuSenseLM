@@ -11,9 +11,10 @@ import datetime
 import pickletools
 import diskcache
 import webbrowser  # Ensure stdlib module is loaded for PyInstaller
+import tempfile
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastmcp import FastMCP
@@ -1006,38 +1007,140 @@ def reset_config_file(filename: str):
     raise HTTPException(status_code=500, detail="Default file not found")
 
 @app.get("/backup")
-def backup_data():
+async def backup_data():
     # Create zip of USER_DATA_DIR
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"nda_backup_{timestamp}.zip"
-    zip_path = os.path.join(BASE_DIR, zip_filename) # Store temp zip in app dir, not user dir (to avoid recursive zip)
+    # Create the zip in OS temp (NOT repo root) to avoid cluttering BASE_DIR.
+    temp_dir = tempfile.mkdtemp(prefix="docusenselm_backup_")
+    zip_path = os.path.join(temp_dir, zip_filename)
     
-    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', USER_DATA_DIR)
+    # Create zip manually, skipping locked/cache files
+    import zipfile
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(USER_DATA_DIR):
+            # Skip Cache directories (locked by Electron)
+            dirs[:] = [d for d in dirs if d not in ['Cache', 'GPUCache', 'Code Cache']]
+            
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, USER_DATA_DIR)
+                try:
+                    zipf.write(file_path, arcname)
+                except (PermissionError, OSError) as e:
+                    logger.warning(f"Skipping locked file in backup: {arcname} ({e})")
+                    continue
     
-    return FileResponse(zip_path, filename=zip_filename, media_type='application/zip')
+    # Stream the file and delete it after streaming completes
+    def generate():
+        try:
+            with open(zip_path, 'rb') as f:
+                while True:
+                    chunk = f.read(64 * 1024)  # 64KB chunks
+                    if not chunk:
+                        break
+                    yield chunk
+        finally:
+            # Delete file after streaming is complete
+            try:
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                    logger.info(f"Cleaned up backup file: {zip_path}")
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                logger.error(f"Error cleaning up backup file {zip_path}: {e}")
+    
+    headers = {
+        "Content-Disposition": f'attachment; filename="{zip_filename}"'
+    }
+    
+    return StreamingResponse(
+        generate(),
+        media_type='application/zip',
+        headers=headers
+    )
+
+def cleanup_root_zip_artifacts():
+    """
+    Safety cleanup: legacy versions created backup/restore zips in BASE_DIR (repo root).
+    This ensures we never leave .zip artifacts there.
+    """
+    try:
+        # Old backup naming
+        for name in os.listdir(BASE_DIR):
+            if name.startswith("nda_backup_") and name.endswith(".zip"):
+                try:
+                    os.remove(os.path.join(BASE_DIR, name))
+                except Exception:
+                    pass
+        # Old restore temp zip naming
+        legacy_restore = os.path.join(BASE_DIR, "temp_restore.zip")
+        if os.path.exists(legacy_restore):
+            try:
+                os.remove(legacy_restore)
+            except Exception:
+                pass
+    except Exception:
+        # Never block app behavior on cleanup
+        pass
 
 @app.post("/restore")
 async def restore_data(file: UploadFile = File(...)):
+    logger.info(f"=== RESTORE ENDPOINT CALLED ===")
+    logger.info(f"Uploaded file: {file.filename}")
+    
     # Validate
     if not file.filename.endswith(".zip"):
+        logger.error(f"Invalid file type: {file.filename}")
         raise HTTPException(status_code=400, detail="Invalid file type. Must be a zip.")
     
-    # Save uploaded zip
-    temp_zip = os.path.join(BASE_DIR, "temp_restore.zip")
-    with open(temp_zip, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    # Wipe current user data (DANGER)
-    # We should probably backup first, but let's trust the user wants to overwrite
-    if os.path.exists(USER_DATA_DIR):
-        shutil.rmtree(USER_DATA_DIR)
-    os.makedirs(USER_DATA_DIR)
+    # Never write temp restore zips into BASE_DIR (repo root). Use OS temp instead.
+    cleanup_root_zip_artifacts()
+    temp_dir = tempfile.mkdtemp(prefix="docusenselm_restore_")
+    temp_zip = os.path.join(temp_dir, "restore.zip")
+    logger.info(f"Using temp restore location: {temp_zip}")
     
-    # Unzip
-    shutil.unpack_archive(temp_zip, USER_DATA_DIR)
-    
-    # Cleanup
-    os.remove(temp_zip)
+    try:
+        logger.info("Writing uploaded file to temp...")
+        with open(temp_zip, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        logger.info(f"Temp file written, size: {os.path.getsize(temp_zip)} bytes")
+
+        # Wipe current user data (DANGER)
+        # Skip locked files (Cache, etc.) that are held by the running Electron app
+        logger.info(f"Wiping USER_DATA_DIR: {USER_DATA_DIR}")
+        if os.path.exists(USER_DATA_DIR):
+            def handle_remove_error(func, path, exc_info):
+                """Skip locked files during restore"""
+                logger.warning(f"Skipping locked file during restore: {path}")
+            
+            shutil.rmtree(USER_DATA_DIR, onerror=handle_remove_error)
+        os.makedirs(USER_DATA_DIR, exist_ok=True)
+
+        # Unzip manually to skip locked files
+        logger.info("Unpacking archive...")
+        import zipfile
+        with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
+            for member in zip_ref.namelist():
+                try:
+                    zip_ref.extract(member, USER_DATA_DIR)
+                except (PermissionError, OSError) as e:
+                    logger.warning(f"Skipping locked file during extraction: {member} ({e})")
+                    continue
+        logger.info("Archive unpacked successfully (skipped locked files)")
+    finally:
+        # Cleanup temp restore artifacts
+        try:
+            if os.path.exists(temp_zip):
+                os.remove(temp_zip)
+        except Exception:
+            pass
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
     
     # Restart Chroma Client (it might have open connections to old files)
     global chroma_client, collection
@@ -1645,6 +1748,12 @@ async def chat(request: ChatRequest):
         "answer": answer_text,
         "sources": final_sources
     }
+
+@app.on_event("startup")
+async def startup_event():
+    """Run cleanup on startup to remove any legacy zip files from repo root"""
+    cleanup_root_zip_artifacts()
+    logger.info("Cleaned up any legacy zip files from repo root")
 
 if __name__ == "__main__":
     print("Starting FastAPI server...")

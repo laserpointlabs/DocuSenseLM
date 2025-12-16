@@ -8,7 +8,9 @@
 
 [ ] - Train llm on how to use this app → add notes to rag from traning folder
 [x] - Add direct link to local storage
-
+[x] - Move zip file location out of the root dir out of the root dir
+[ ] - Review startup logs and fix speed of load
+[ ] - Upload all documents first the process in background so the user can walk away
 
 [x] - Document type modification after uploading
 [x] - Manual modification of extracted information meta-data for correction (TODAY)
@@ -29,7 +31,10 @@
 [ ] - investigate startup speed its slow 
 [ ] - consider updating the app for better electron mcp automation
 [ ] - package dev system in docker container and host via cloudflare using containers for both the app and cloudflaire
-[ ] - Fix pdf viwers white screen issue that is periodic (Next)
+[ ] - Fix pdf viwers white screen issue that is periodic (Non now this may just be a rebuild issue)
+[ ] - Add multi delete capability or delete all.. use check marks (Next)
+[ ] - Upload (bulk) all files first then process in the backgound
+[ ] - chat shuold not lock when processing in the background
 
 Release Management:
 [x] - Create release tagging scripts (create-release-tag.sh/.ps1)
