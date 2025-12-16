@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -392,3 +392,10 @@ app.on('before-quit', () => {
 });
 
 ipcMain.handle('get-api-port', () => API_PORT);
+ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
+ipcMain.handle('open-user-data-folder', async () => {
+  const p = app.getPath('userData');
+  // openPath returns an empty string on success, otherwise an error message
+  const result = await shell.openPath(p);
+  return { success: result === "", path: p, error: result || null };
+});

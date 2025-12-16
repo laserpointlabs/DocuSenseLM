@@ -5,6 +5,8 @@ console.log('Preload script executing...');
 // Expose electron API to renderer using proper contextBridge pattern
 contextBridge.exposeInMainWorld('electronAPI', {
   getApiPort: () => ipcRenderer.invoke('get-api-port'),
+  getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
+  openUserDataFolder: () => ipcRenderer.invoke('open-user-data-folder'),
 
   // Handle startup status messages
   handleStartupStatus: (callback: (status: string) => void) => {

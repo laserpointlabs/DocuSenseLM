@@ -7,7 +7,7 @@
 [x] - Change Repo Folder
 
 [ ] - Train llm on how to use this app → add notes to rag from traning folder
-[ ] - Add direct link to local storeage
+[x] - Add direct link to local storage
 
 
 [x] - Document type modification after uploading
@@ -24,12 +24,12 @@
 [x] - Extracted data seems like it no longer working (FIXED: Hybrid search + conversation memory)
 [x] - When clearning chat history make sure its actually removed
 [ ] - Verify chat history length under normal operation
-[ ] - Save pdf markups
-[ ] - add notification of background processing and current status, estimated time to complete, etc.
-[ ] - investigate startup speed its slow
+[ ] - Save pdf markups (Nice to have)
+[ ] - add notification of background processing and current status, estimated time to complete, etc. (Next)
+[ ] - investigate startup speed its slow 
 [ ] - consider updating the app for better electron mcp automation
 [ ] - package dev system in docker container and host via cloudflare using containers for both the app and cloudflaire
-[ ] - Fix pdf viwers white screen issue that is periodic.
+[ ] - Fix pdf viwers white screen issue that is periodic (Next)
 
 Release Management:
 [x] - Create release tagging scripts (create-release-tag.sh/.ps1)

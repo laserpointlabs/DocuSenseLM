@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, CheckCircle, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight, Edit } from 'lucide-react';
+import { Upload, FileText, MessageSquare, LayoutDashboard, Settings, Check, CheckCircle, AlertCircle, X, Search, Eye, RefreshCw, Archive, Trash2, File, Download, Database, ChevronDown, ChevronRight, Edit, FolderOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Modal, ConfirmModal, AlertModal } from './components/Modal';
@@ -30,6 +30,8 @@ declare global {
       handleStartupStatus: (callback: (status: string) => void) => void;
       handlePythonReady: (callback: () => void) => void;
       handlePythonError: (callback: (error: string) => void) => void;
+      getUserDataPath?: () => Promise<string>;
+      openUserDataFolder?: () => Promise<{ success: boolean; path: string; error: string | null }>;
     };
   }
 }
@@ -2055,11 +2057,50 @@ function SettingsView() {
     const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
     const [showAlert, setShowAlert] = useState<{title: string, message: string} | null>(null);
     const [fileContent, setFileContent] = useState("");
+    const [storagePath, setStoragePath] = useState<string>("");
+    const [openingStorage, setOpeningStorage] = useState(false);
 
-    // Fetch API key status on component mount
+    // Fetch API key status and storage path on component mount
     useEffect(() => {
         fetchApiKeyStatus();
+        fetchStoragePath();
     }, []); // Run once on mount
+    
+    const fetchStoragePath = async () => {
+        try {
+            if (window.electronAPI?.getUserDataPath) {
+                const p = await window.electronAPI.getUserDataPath();
+                setStoragePath(p || "");
+            } else {
+                // Not running in Electron (e.g. browser dev mode)
+                setStoragePath("");
+            }
+        } catch (err) {
+            console.error("Failed to fetch storage path:", err);
+            setStoragePath("");
+        }
+    };
+    
+    const handleOpenStorage = async () => {
+        setOpeningStorage(true);
+        try {
+            if (!window.electronAPI?.openUserDataFolder) {
+                setShowAlert({ title: "Not Available", message: "Opening the storage folder is only available in the desktop app." });
+                return;
+            }
+            const result = await window.electronAPI.openUserDataFolder();
+            if (result?.success) {
+                setShowAlert({ title: "Opened", message: `Opened storage folder:\n${result.path}` });
+            } else {
+                setShowAlert({ title: "Error", message: result?.error || "Failed to open storage folder." });
+            }
+        } catch (err) {
+            console.error("Failed to open storage:", err);
+            setShowAlert({ title: "Error", message: "Failed to open storage directory. Please try again." });
+        } finally {
+            setOpeningStorage(false);
+        }
+    };
     
     const fetchApiKeyStatus = async () => {
         try {
@@ -2261,6 +2302,32 @@ function SettingsView() {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold">Settings & Data Management</h2>
+            
+            {/* Storage Location Section */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <FolderOpen className="text-blue-600" /> Storage Location
+                </h3>
+                <div className="space-y-3">
+                    <p className="text-sm text-gray-600">
+                        All your documents, configuration files, and application data are stored in the following directory:
+                    </p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <code className="text-sm text-gray-800 break-all">{storagePath || "Loading..."}</code>
+                    </div>
+                    <button
+                        onClick={handleOpenStorage}
+                        disabled={openingStorage || !storagePath}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <FolderOpen size={16} />
+                        {openingStorage ? "Opening..." : "Open Storage Folder"}
+                    </button>
+                    <p className="text-xs text-gray-500">
+                        Click the button above to open the storage directory in your system's file explorer.
+                    </p>
+                </div>
+            </div>
             
             {/* API Key Section */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
