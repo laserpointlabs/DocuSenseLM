@@ -120,9 +120,25 @@ function App() {
 
   const fetchConfig = () => {
     fetch(`http://localhost:${API_PORT}/config`)
-      .then(res => res.json())
-      .then(setConfig)
-      .catch(console.error);
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Failed to fetch config: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        // Ensure document_types exists
+        if (!data.document_types) {
+          console.warn('[App] Config missing document_types, initializing empty object');
+          data.document_types = {};
+        }
+        setConfig(data);
+      })
+      .catch(err => {
+        console.error('[App] Error fetching config:', err);
+        // Set a minimal config so dashboard can still render with error message
+        setConfig({ document_types: {}, dashboard: {} });
+      });
   };
 
   const fetchDocuments = () => {
@@ -258,6 +274,18 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
 
   if (!config) return <div>Loading configuration...</div>;
   
+  // Ensure document_types exists and is an object
+  if (!config.document_types || typeof config.document_types !== 'object') {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-yellow-800">Configuration is missing document types. Please check your config.yaml file.</p>
+        </div>
+      </div>
+    );
+  }
+  
   // Debug: Log config to see what we're working with
   console.log('[Dashboard] Config loaded:', JSON.stringify(config.document_types, null, 2));
   
@@ -284,12 +312,11 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
     }
     // Handle both boolean false and string "false" - default to true if not specified
     const showOnDashboard = docTypeConfig.show_on_dashboard;
-    // Explicitly check for false values (boolean false, string "false", null, undefined treated as true)
+    // Explicitly check for false values (boolean false, string "false")
+    // null/undefined should default to true (show)
     const shouldShow = showOnDashboard !== false && 
                        showOnDashboard !== "false" && 
-                       showOnDashboard !== "False" &&
-                       showOnDashboard !== null &&
-                       showOnDashboard !== undefined;
+                       showOnDashboard !== "False";
     if (!shouldShow) {
       console.log(`[Dashboard] Hiding document ${d.filename} - doc_type: ${d.doc_type}, show_on_dashboard:`, showOnDashboard, `(type: ${typeof showOnDashboard})`);
     }
@@ -390,17 +417,22 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
           </div>
       </Modal>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {Object.entries(config.document_types)
-          .filter(([key, type]: [string, any]) => {
+      {Object.keys(config.document_types).length === 0 ? (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <p className="text-yellow-800 font-medium">No document types configured.</p>
+          <p className="text-yellow-700 text-sm mt-2">Please configure document types in your config.yaml file to see dashboard cards.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {Object.entries(config.document_types)
+            .filter(([key, type]: [string, any]) => {
             // Handle both boolean false and string "false" - default to true if not specified
             const showOnDashboard = type.show_on_dashboard;
-            // Explicitly check for false values (boolean false, string "false", null/undefined treated as true)
+            // Explicitly check for false values (boolean false, string "false")
+            // null/undefined should default to true (show)
             const shouldShow = showOnDashboard !== false && 
                                showOnDashboard !== "false" && 
-                               showOnDashboard !== "False" &&
-                               showOnDashboard !== null &&
-                               showOnDashboard !== undefined;
+                               showOnDashboard !== "False";
             if (!shouldShow) {
               console.log(`[Dashboard] Hiding document type card: ${key}, show_on_dashboard:`, showOnDashboard, `(type: ${typeof showOnDashboard})`);
             }
@@ -447,7 +479,8 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
              )}
           </div>
         )})}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

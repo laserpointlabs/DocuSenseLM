@@ -29,6 +29,7 @@
 [ ] - investigate startup speed its slow
 [ ] - consider updating the app for better electron mcp automation
 [ ] - package dev system in docker container and host via cloudflare using containers for both the app and cloudflaire
+[ ] - Fix pdf viwers white screen issue that is periodic.
 
 Release Management:
 [x] - Create release tagging scripts (create-release-tag.sh/.ps1)

@@ -52,7 +52,6 @@ logger.info(f"__file__ path: {__file__}")
 # OCR imports (optional - will gracefully degrade if not available)
 OCR_AVAILABLE = False
 OCR_READER = None
-
 try:
     import easyocr
     import fitz  # PyMuPDF - for PDF to image conversion without poppler
@@ -250,6 +249,55 @@ def extract_keywords(query: str) -> List[str]:
     # Filter: remove stop words and words <= 2 chars
     keywords = [w for w in words if w not in STOP_WORDS and len(w) > 2]
     return keywords
+
+def _normalize_token(s: str) -> str:
+    """
+    Normalize tokens for fuzzy filename matching: lowercase and keep only [a-z0-9].
+    """
+    import re
+    return re.sub(r'[^a-z0-9]+', '', (s or "").lower())
+
+def _bounded_levenshtein(a: str, b: str, max_dist: int) -> int:
+    """
+    Levenshtein distance with an upper bound. Returns max_dist+1 if it exceeds max_dist.
+    This is used only for short tokens to keep filename matching tolerant to typos.
+    """
+    if max_dist < 0:
+        return max_dist + 1
+
+    if a == b:
+        return 0
+
+    # Quick length check
+    la, lb = len(a), len(b)
+    if abs(la - lb) > max_dist:
+        return max_dist + 1
+
+    # Ensure a is the shorter string
+    if la > lb:
+        a, b = b, a
+        la, lb = lb, la
+
+    prev = list(range(la + 1))
+    for j in range(1, lb + 1):
+        bj = b[j - 1]
+        cur = [j] + [0] * la
+        row_min = cur[0]
+        for i in range(1, la + 1):
+            cost = 0 if a[i - 1] == bj else 1
+            cur[i] = min(
+                prev[i] + 1,       # deletion
+                cur[i - 1] + 1,    # insertion
+                prev[i - 1] + cost # substitution
+            )
+            if cur[i] < row_min:
+                row_min = cur[i]
+        if row_min > max_dist:
+            return max_dist + 1
+        prev = cur
+
+    dist = prev[la]
+    return dist if dist <= max_dist else max_dist + 1
 
 def keyword_search(query: str, all_chunks: List[Dict], n_results: int = 20) -> List[Dict]:
     """
@@ -1338,15 +1386,48 @@ async def chat(request: ChatRequest):
     metadata = load_metadata()
     forced_context_files = []
     
-    # Simple keyword matching in filenames
+    # Simple keyword matching in filenames (with light fuzzy matching for typos)
     query_lower = request.question.lower()
+    query_words_norm = [_normalize_token(w) for w in query_lower.split()]
+    query_words_norm = [w for w in query_words_norm if len(w) >= 3]
     for filename in metadata.keys():
         # Check if significant parts of the filename are in the query
         # e.g. "BRAWO" in "KIDDE_BRAWO_Supply..."
         # Split filename by common separators
         parts = filename.replace('.pdf', '').replace('.docx', '').replace('_', ' ').split()
         for part in parts:
-            if len(part) > 3 and part.lower() in query_lower:
+            # Normalize the filename token for better matching (handles punctuation like "Franny's")
+            part_norm = _normalize_token(part)
+            if len(part_norm) < 4:
+                continue
+
+            # Fast path: exact substring match against original query text
+            if part.lower() in query_lower:
+                forced_context_files.append(filename)
+                break
+
+            # Fuzzy path: tolerate small typos (e.g. frannies/frans vs frannys)
+            # Pick a conservative max edit distance based on token length.
+            if len(part_norm) <= 5:
+                max_dist = 2
+            elif len(part_norm) <= 8:
+                max_dist = 2
+            else:
+                max_dist = 3
+
+            matched = False
+            for qw in query_words_norm:
+                if len(qw) < 3:
+                    continue
+                # Quick prefix containment checks
+                if qw in part_norm or part_norm in qw:
+                    matched = True
+                    break
+                if _bounded_levenshtein(qw, part_norm, max_dist) <= max_dist:
+                    matched = True
+                    break
+
+            if matched:
                 forced_context_files.append(filename)
                 break
     
@@ -1391,13 +1472,32 @@ async def chat(request: ChatRequest):
     retrieved_files = set()
     
     # Add Forced Context first (high priority) - limit to 1 document
+    #
+    # IMPORTANT: Do NOT re-read PDFs or run OCR during chat requests.
+    # Chat must be low-latency and must not kick off heavyweight extraction.
+    # Instead, reuse the already-indexed chunks stored in Chroma for this filename.
     for filename in forced_context_files[:1]:  # Only first forced file
-        filepath = os.path.join(DOCUMENTS_DIR, filename)
-        if os.path.exists(filepath):
-            text = extract_text_from_pdf(filepath)
-            context_text += f"--- FULL TEXT from {filename} ---\n{text[:50000]}\n\n"
+        if collection is None:
+            logger.warning(f"Forced context: Collection not initialized; cannot pull indexed chunks for {filename}")
+            continue
+
+        try:
+            indexed = collection.get(where={"filename": filename}, include=["documents"])
+            docs = indexed.get("documents") if indexed else None
+            if not docs:
+                logger.warning(f"Forced context: No indexed chunks found for {filename}; skipping (will not OCR during chat)")
+                continue
+
+            # Join a limited number of chunks to keep context bounded.
+            # Chunks are already extracted/indexed during document processing.
+            joined = "\n\n".join(docs[:25])
+            context_text += f"--- INDEXED TEXT (chunks) from {filename} ---\n{joined[:50000]}\n\n"
             retrieved_files.add(filename)
-            logger.info(f"Forced context: Added full text from {filename} ({len(text)} chars)")
+            logger.info(f"Forced context: Added indexed chunks from {filename} (chunks={min(len(docs), 25)}, chars={len(joined)})")
+        except Exception as e:
+            logger.error(f"Forced context: Failed to load indexed chunks for {filename}: {e}")
+            # Never fall back to OCR/pdf extraction during chat.
+            continue
 
     # Add hybrid search results
     # Apply distance threshold to filter out semantically distant chunks
