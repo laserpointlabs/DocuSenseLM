@@ -1691,6 +1691,9 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
             {role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}
         ];
     });
+    // Keep a ref to the latest messages so event handlers can't accidentally use stale history
+    // (e.g. user clears chat and immediately sends a message before React flushes state updates).
+    const messagesRef = useRef(messages);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [inputKey, setInputKey] = useState(0); // Key to force remount of input
@@ -1705,6 +1708,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
     useEffect(scrollToBottom, [messages]);
 
     useEffect(() => {
+        messagesRef.current = messages;
         localStorage.setItem('nda_chat_history', JSON.stringify(messages));
     }, [messages]);
 
@@ -1718,8 +1722,18 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
     const confirmClear = () => setShowClearConfirm(true);
 
     const handleClear = () => {
-        setMessages([{role: 'ai', content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}]);
+        const cleared = [{role: 'ai' as const, content: 'Hello! I can help you analyze your documents. I have access to all uploaded files.'}];
+        // Hard reset: wipe persisted history immediately and reset in-memory state.
+        // This ensures the next request cannot accidentally include legacy context.
+        try {
+            localStorage.removeItem('nda_chat_history');
+        } catch {
+            // ignore storage failures (e.g. disabled storage)
+        }
+        messagesRef.current = cleared;
+        setMessages(cleared);
         setInput(''); // Clear input state
+        setLoading(false);
         setInputKey(prev => prev + 1); // Force remount of input to prevent lockup
         setShowClearConfirm(false);
     };
@@ -1733,7 +1747,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
         
         // Build conversation history for the API (exclude sources, map 'ai' to 'assistant')
         // Only include the last 10 message pairs to avoid token limits
-        const historyForApi = messages
+        const historyForApi = messagesRef.current
             .filter(m => m.role === 'user' || m.role === 'ai')
             .slice(-20)  // Last 20 messages (10 pairs)
             .map(m => ({

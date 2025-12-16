@@ -1,7 +1,8 @@
 [ ] - Complet a linux\mac build
 [ ] - Windows and mac builds
 [x] - Fix the issue with locking up the text areas after adding a key
-[ ] - Add CI smoke test (Electron + Playwright) covering startup/health
+[x] - Add CI smoke test (Electron + Playwright) covering startup/health
+[x] - Fix CI test for embeddable Python backend (Windows build workflow)
 [x] - Get electron-mcp
 [x] - Change Repo Folder
 
@@ -21,9 +22,13 @@
 [ ] - Build github download, new features, and update page
 [/] - Improve status of processing when adding new file and when reprocessing document (still a bit flaky)
 [x] - Extracted data seems like it no longer working (FIXED: Hybrid search + conversation memory)
-[ ] - When clearning chat history make sure its actually removed
+[x] - When clearning chat history make sure its actually removed
 [ ] - Verify chat history length under normal operation
 [ ] - Save pdf markups
+[ ] - add notification of background processing and current status, estimated time to complete, etc.
+[ ] - investigate startup speed its slow
+[ ] - consider updating the app for better electron mcp automation
+[ ] - package dev system in docker container and host via cloudflare using containers for both the app and cloudflaire
 
 Release Management:
 [x] - Create release tagging scripts (create-release-tag.sh/.ps1)
