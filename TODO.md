@@ -54,6 +54,7 @@
 - [ ] - Add background processing notifications with ETA
 - [ ] - Add multi-delete capability (select multiple docs, delete all)
 - [ ] - Add data export functionality (CSV/JSON for document metadata)
+- [ ] - Implement formalized toast notification system (success, error, warning, info states with auto-dismiss and queue management)
 
 ### Documentation
 - [ ] - Create installation guides for Mac/Linux
@@ -94,10 +95,81 @@
 - [ ] - Verify chat history length under normal operation
 
 ### Infrastructure & DevOps
-- [ ] - Consider updating the app for better electron MCP automation
 - [ ] - Set up automated release process (GitHub Actions)
 - [ ] - Create release checklist template
 - [ ] - Document release process and rollback procedures
+
+---
+
+## 🧪 TESTING & AUTOMATION (New Branch: `feature/e2e-testing`)
+
+### Test Infrastructure Setup
+- [ ] - Update playwright.config.ts with multiple test projects (smoke, e2e, api)
+- [ ] - Create test output directories and reporting (HTML, JSON reports)
+- [ ] - Add test result artifacts to CI workflow
+- [ ] - Create shared test fixtures directory with sample documents
+- [ ] - Generate test PDF/DOCX fixtures with known content for validation
+
+### E2E Test Helpers & Utilities
+- [ ] - Create `tests/helpers/electron-app.ts` - Electron app launcher with retry logic
+- [ ] - Create `tests/helpers/openai-mocks.ts` - OpenAI API mocking utilities
+- [ ] - Create `tests/helpers/api-client.ts` - Backend API test helpers
+- [ ] - Create `tests/helpers/test-data.ts` - Test data generators and cleanup utilities
+- [ ] - Create `tests/helpers/selectors.ts` - Centralized UI selectors using data-testid
+
+### UI Automation Attributes (data-testid)
+- [ ] - Add data-testid to navigation items (sidebar buttons)
+- [ ] - Add data-testid to Dashboard components (cards, metrics, expiring docs)
+- [ ] - Add data-testid to Documents page (upload button, search, filters, table rows)
+- [ ] - Add data-testid to Chat interface (input, send button, messages, clear button)
+- [ ] - Add data-testid to Settings page (API key input, config editor, backup/restore)
+- [ ] - Add data-testid to all modals (upload modal, confirm dialogs, alerts)
+- [ ] - Add data-testid to PDF viewer and metadata editor
+
+### Comprehensive E2E Test Suite
+- [ ] - `tests/e2e/navigation.spec.ts` - Tab navigation and sidebar tests
+- [ ] - `tests/e2e/dashboard.spec.ts` - Dashboard cards, metrics, expiring documents
+- [ ] - `tests/e2e/documents.spec.ts` - Upload, search, filter, archive, delete
+- [ ] - `tests/e2e/document-processing.spec.ts` - Upload → process → metadata extraction
+- [ ] - `tests/e2e/document-type-change.spec.ts` - Change doc type after upload
+- [ ] - `tests/e2e/metadata-edit.spec.ts` - Edit extracted metadata manually
+- [ ] - `tests/e2e/chat.spec.ts` - Chat with documents, clear history, sources
+- [ ] - `tests/e2e/chat-rag.spec.ts` - RAG functionality with mocked OpenAI
+- [ ] - `tests/e2e/settings.spec.ts` - API key management, config editor
+- [ ] - `tests/e2e/backup-restore.spec.ts` - Backup download, restore from backup
+- [ ] - `tests/e2e/templates.spec.ts` - Template upload and management
+- [ ] - `tests/e2e/bulk-upload.spec.ts` - Multiple file upload and processing
+- [ ] - `tests/e2e/error-handling.spec.ts` - Network errors, API failures, recovery
+
+### API Integration Tests
+- [ ] - `tests/api/health.spec.ts` - Backend health endpoint
+- [ ] - `tests/api/documents.spec.ts` - Document CRUD operations
+- [ ] - `tests/api/chat.spec.ts` - Chat endpoint with mocked LLM
+- [ ] - `tests/api/config.spec.ts` - Config file read/write
+- [ ] - `tests/api/backup.spec.ts` - Backup and restore endpoints
+- [ ] - `tests/api/processing.spec.ts` - Document processing status
+
+### Electron MCP Automation Improvements
+- [ ] - Add window title/state for MCP detection (`DocuSenseLM - {tab}`)
+- [ ] - Expose app state via IPC for MCP queries (current tab, doc count, processing status)
+- [ ] - Add semantic HTML structure (landmarks, headings) for better automation
+- [ ] - Add aria-labels to interactive elements
+- [ ] - Create MCP-friendly status indicators (loading states, operation results)
+- [ ] - Document MCP automation patterns and examples
+
+### Browser Automation Support
+- [ ] - Ensure all interactive elements are keyboard accessible
+- [ ] - Add focus indicators for keyboard navigation
+- [ ] - Ensure form elements have associated labels
+- [ ] - Add loading/busy states that automation can detect
+- [ ] - Create stable selectors (avoid dynamic class names)
+
+### Test Documentation
+- [ ] - Create `docs/TESTING.md` with test running instructions
+- [ ] - Document test fixtures and how to generate them
+- [ ] - Document OpenAI mocking strategies
+- [ ] - Create test coverage goals and tracking
+- [ ] - Document CI test workflow and failure handling
 
 ---
 
