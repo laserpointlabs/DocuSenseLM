@@ -1,54 +1,135 @@
 # TODO List
 
-## Build & Distribution
-- [ ] - Complete cross-platform builds (Linux, Mac, Windows)
-- [ ] - Implement deployment and automatic updates
-- [ ] - Build GitHub download, new features, and update page
-- [ ] - Package dev system in Docker container and host via Cloudflare using containers for both the app and Cloudflare
+---
 
-## Bug Fixes
-- [x] - Fix the issue with locking up the text areas after adding a key
-- [x] - Fix bulk drag and drop from desktop (Verified working - no changes needed)
-- [x] - Extracted data seems like it no longer working (FIXED: Hybrid search + conversation memory)
-- [x] - When clearing chat history make sure it's actually removed
-- [ ] - Fix PDF viewer white screen issue that is periodic (Note: may just be a rebuild issue)
+## 🚀 MVP BLOCKERS (Must complete before release)
+
+### Build & Distribution
+- [ ] - Complete Windows build and test full installation flow
+- [ ] - Test and verify auto-update mechanism works (electron-updater)
+- [ ] - Create Windows installer (NSIS) - test install/update/uninstall
+
+### Critical Bug Fixes
+- [ ] - Fix PDF viewer white screen issue (periodic)
 - [ ] - Chat should not lock when processing in the background
+- [ ] - Add graceful error handling for Python backend crashes
+- [ ] - Handle network errors gracefully (API key validation, OpenAI API failures)
 
-## Performance & Optimization
-- [ ] - Review startup logs and investigate/fix slow startup speed
-- [x] - Upload all documents first then process in background so the user can walk away (Implemented: `/start-processing` endpoint with parallel processing using ThreadPoolExecutor)
+### Core UX Requirements
+- [ ] - Add first-run onboarding wizard (API key setup, quick start guide)
+- [ ] - Fix flaky processing status when adding/reprocessing documents
+- [ ] - Review and fix slow startup speed
 
-## Features & Enhancements
-- [x] - Document type modification after uploading
-- [x] - Manual modification of extracted information meta-data for correction
-- [x] - Add direct link to local storage
-- [x] - Add Show/Hide status to config file to allow user to control display of document type on the dashboard and document collections area
-- [ ] - Add a notes key to the extracted data for the user to add notes and dates and other general information. Track date of changes or edits for extracted data and notes.
-- [ ] - Should always have access to the extracted meta data for the chat.
+### Testing Before Release
+- [ ] - Full end-to-end testing of all core features
+- [ ] - Test on clean Windows machine (no dev environment)
+- [ ] - Verify backup/restore functionality works correctly
+
+### Documentation (Minimum)
+- [ ] - Create installation guide for Windows
+- [ ] - Document system requirements and dependencies
+- [ ] - Write quick start guide (included in app or separate doc)
+
+---
+
+## 📋 POST-MVP (v1.1 - Soon after initial release)
+
+### Additional Platforms
+- [ ] - Complete Mac build and test
+- [ ] - Complete Linux AppImage build and test
+- [ ] - Set up code signing certificates (Windows: Authenticode, Mac: Developer ID)
+- [ ] - Configure Mac notarization for distribution
+
+### Security Improvements
+- [ ] - Encrypt API key storage at rest (currently plain text in config.yaml)
+- [ ] - Add secure storage for credentials (OS keychain/credential manager)
+- [ ] - Review and secure all API endpoints
+
+### Enhanced Error Handling
+- [ ] - Add crash reporting/error tracking (Sentry or custom)
+- [ ] - Better error messages for common failures
+
+### UI/UX Improvements
+- [ ] - Add processing status to dashboard
+- [ ] - Add background processing notifications with ETA
+- [ ] - Add multi-delete capability (select multiple docs, delete all)
+- [ ] - Add data export functionality (CSV/JSON for document metadata)
+
+### Documentation
+- [ ] - Create installation guides for Mac/Linux
+- [ ] - Create troubleshooting guide for common issues
+- [ ] - Add in-app help/documentation system (F1 key, Help menu)
+
+---
+
+## 📅 FUTURE RELEASES (v1.2+)
+
+### Build & Distribution
+- [ ] - Build GitHub download page with release notes
+- [ ] - Implement automatic updates with user notification
+- [ ] - Generate release notes/changelog automatically from commits
+- [ ] - Package dev system in Docker container for Cloudflare hosting
+
+### Features & Enhancements
+- [ ] - Add notes field to extracted data with edit history tracking
+- [ ] - Ensure chat always has access to extracted metadata
 - [ ] - Save PDF markups (Nice to have)
-- [ ] - Add multi delete capability or delete all - use check marks (Next)
+- [ ] - Add keyboard shortcuts reference (Help menu)
 
-## UI/UX Improvements
-- [x] - Show document collections based on document types in config file in documentation page, this should show an explorer like view instead of the current list where users can open/collapse a file view of the document types (simplified to a modal)
-- [x] - Improve sort and search on document page
-- [x] - Improve how a user sets the document type prior to drag and drop (might naturally be corrected when we improve the collections on the document page)
-- [ ] - Improve processing status notifications: fix flaky status when adding/reprocessing documents, add background processing notifications with current status and estimated time to complete, add processing status to dashboard (Next)
+### Privacy & Compliance
+- [ ] - Add privacy policy and terms of service
+- [ ] - Implement data deletion/privacy controls (GDPR compliance)
+- [ ] - Add privacy policy acceptance on first run
+- [ ] - Audit file permissions and access controls
+- [ ] - Add rate limiting for API calls
 
-## Testing & CI
-- [x] - Add CI smoke test (Electron + Playwright) covering startup/health
-- [x] - Fix CI test for embeddable Python backend (Windows build workflow)
+### User Experience Polish
+- [ ] - Add tooltips and contextual help throughout UI
+- [ ] - Create sample documents for testing/demo
+- [ ] - Add accessibility features (keyboard navigation, screen reader support)
+- [ ] - Test UI on different screen sizes and resolutions
 
-## Infrastructure & DevOps
-- [x] - Get electron-mcp
-- [x] - Change Repo Folder
-- [x] - Move zip file location out of the root dir
-- [ ] - Consider updating the app for better electron MCP automation
-
-## Documentation & Training
-- [ ] - Train LLM on how to use this app → add notes to RAG from training folder
+### Training & Intelligence
+- [ ] - Train LLM on how to use this app (RAG from training folder)
 - [ ] - Verify chat history length under normal operation
 
-## Release Management
-- [x] - Create release tagging scripts (create-release-tag.sh/.ps1)
+### Infrastructure & DevOps
+- [ ] - Consider updating the app for better electron MCP automation
+- [ ] - Set up automated release process (GitHub Actions)
+- [ ] - Create release checklist template
+- [ ] - Document release process and rollback procedures
+
+---
+
+## ✅ COMPLETED
+
+### Bug Fixes
+- [x] - Fix the issue with locking up the text areas after adding a key
+- [x] - Fix bulk drag and drop from desktop (Verified working)
+- [x] - Extracted data search fixed (Hybrid search + conversation memory)
+- [x] - Chat history clearing actually removes data
+
+### Features
+- [x] - Document type modification after uploading
+- [x] - Manual modification of extracted information meta-data
+- [x] - Add direct link to local storage
+- [x] - Show/Hide status in config for dashboard display
+- [x] - Bulk upload with background processing (ThreadPoolExecutor)
+
+### UI/UX
+- [x] - Document collections grouped by type with filtering
+- [x] - Sort and search on document page
+- [x] - Document type selection prior to drag and drop
+
+### Testing & CI
+- [x] - CI smoke test (Electron + Playwright)
+- [x] - CI test for embeddable Python backend (Windows)
+
+### Infrastructure
+- [x] - Electron-mcp integration
+- [x] - Repository folder structure
+- [x] - Zip file location moved from root
+
+### Release Management
+- [x] - Release tagging scripts (create-release-tag.sh/.ps1)
 - [x] - Tag v1.0.14: CI workflow fixes and TypeScript error resolution
-- [ ] - Ensure all TODO items get tagged when completed
