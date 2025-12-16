@@ -70,3 +70,7 @@ dmypy.json
 *.tmp
 *.temp
 dev-output.txt
+
+# Backup zip files
+*.zip
+nda_backup_*.zip
