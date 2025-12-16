@@ -1,16 +1,6 @@
 
 import { useState, useEffect } from 'react';
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      handleStartupStatus: (callback: (status: string) => void) => void;
-      handlePythonReady: (callback: () => void) => void;
-      handlePythonError: (callback: (error: string) => void) => void;
-    };
-  }
-}
-
 export const LoadingScreen = () => {
   const [statusMessage, setStatusMessage] = useState('Initializing DocuSenseLM...');
   const [error, setError] = useState<string | null>(null);

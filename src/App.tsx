@@ -492,6 +492,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [previewDoc, setPreviewDoc] = useState<string | null>(initialPreview);
     const [reprocessingFilename, setReprocessingFilename] = useState<string | null>(null);
+    const [processingOverride, setProcessingOverride] = useState<Record<string, string>>({}); // Temporary status override for immediate UI feedback
     const [searchTerm, setSearchTerm] = useState(initialPreview || ""); // Default search to preview doc if set
     const [showArchived, setShowArchived] = useState(false);
     const [editingType, setEditingType] = useState<string | null>(null);
@@ -578,40 +579,76 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         setUploadProgress(progress);
         
         try {
-            // Upload files sequentially to show progress
-            for (let i = 0; i < filesToUpload.length; i++) {
-                const file = filesToUpload[i];
+            // PHASE 1: Upload ALL files in parallel (fast!)
+            console.log(`[Upload] Starting parallel upload of ${filesToUpload.length} files`);
+            const uploadPromises = filesToUpload.map(async (file) => {
                 const formData = new FormData();
                 formData.append("file", file);
                 
                 try {
-                    const response = await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}`, {
+                    const response = await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}&skip_processing=true`, {
                         method: "POST",
                         body: formData
                     });
                     
                     if (response.ok) {
                         setUploadProgress(prev => ({ ...prev, [file.name]: 'uploaded' }));
-                        // Small delay to show uploaded status before moving to processing
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                        setUploadProgress(prev => ({ ...prev, [file.name]: 'processing' }));
+                        return { success: true, filename: file.name };
                     } else {
                         setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
+                        return { success: false, filename: file.name };
                     }
                 } catch (err) {
                     console.error(`Error uploading ${file.name}:`, err);
                     setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
+                    return { success: false, filename: file.name };
                 }
+            });
+
+            // Wait for all uploads to complete
+            const uploadResults = await Promise.all(uploadPromises);
+            const successfulUploads = uploadResults.filter(r => r.success);
+            console.log(`[Upload] Completed ${successfulUploads.length}/${filesToUpload.length} uploads`);
+
+            if (successfulUploads.length === 0) {
+                setShowAlert({ 
+                    title: "Upload Failed", 
+                    message: "Failed to upload any files. Please try again." 
+                });
+                setUploading(false);
+                cleanupUpload();
+                return;
             }
-            
-            // Refresh to get updated document list
+
+            // Refresh to show uploaded documents
             refresh();
             
-            // Set uploading to false so modal can be closed manually, but keep it open to monitor processing
+            // PHASE 2: Trigger processing for all uploaded files
+            console.log(`[Upload] Starting processing phase for ${successfulUploads.length} files`);
+            
+            // Update UI to show processing phase
+            successfulUploads.forEach(result => {
+                setUploadProgress(prev => ({ ...prev, [result.filename]: 'processing' }));
+            });
+            
+            // Trigger batch processing on backend
+            try {
+                const processResponse = await fetch(`http://localhost:${API_PORT}/start-processing`, {
+                    method: "POST"
+                });
+                
+                if (!processResponse.ok) {
+                    console.error("[Upload] Failed to start processing");
+                }
+            } catch (err) {
+                console.error("[Upload] Error starting processing:", err);
+            }
+            
+            // Set uploading to false - user can now close modal or continue working
             setUploading(false);
             setMonitoringProcessing(true);
             
-            // Poll for processing completion - don't close modal until all files are actually processed
+            // Poll for processing completion - modal stays open to monitor progress
             const pollProcessingStatus = async () => {
                 const maxAttempts = 180; // 3 minutes max
                 let attempts = 0;
@@ -656,17 +693,15 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             }
                         });
                         
+                        // Refresh documents list to show progress
+                        refresh();
+                        
                         // If all are processed, close modal immediately
                         if (allProcessed) {
-                            // IMPORTANT: Keep monitoringProcessing true while closing modal
-                            // This ensures the processing view stays visible until modal closes
-                            // Modal component checks isOpen immediately, so modal will close
-                            // but React might render once more with monitoringProcessing still true
+                            console.log("[Upload] All files processed, closing modal");
                             setShowUploadModal(false);
                             refresh(); // Final refresh
                             // Clear state after modal has fully closed
-                            // Modal.tsx has "if (!isOpen) return null" so it closes immediately
-                            // But we keep monitoringProcessing true to prevent showing initial screen
                             setTimeout(() => {
                                 setMonitoringProcessing(false);
                                 setUploadProgress({});
@@ -674,11 +709,12 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                 setPendingFiles([]);
                                 setUploading(false);
                                 isUploadingRef.current = false;
-                            }, 100); // Very short delay - just enough for React to process the close
+                            }, 100);
                             return;
                         }
                         
                         if (attempts >= maxAttempts) {
+                            console.log("[Upload] Processing timeout reached");
                             setMonitoringProcessing(false);
                             refresh(); // Final refresh
                             cleanupUpload();
@@ -762,6 +798,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         setShowReprocessConfirm(null);
         setReprocessingFilename(filename);
         
+        // IMMEDIATELY set status override to "processing" for instant UI feedback
+        setProcessingOverride(prev => ({ ...prev, [filename]: 'processing' }));
+        
         try {
             // URL encode the filename to handle spaces and special characters
             const encodedFilename = encodeURIComponent(filename);
@@ -777,16 +816,25 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error(`[Reprocess] Error response: ${errorText}`);
+                // Clear override on error
+                setProcessingOverride(prev => {
+                    const next = { ...prev };
+                    delete next[filename];
+                    return next;
+                });
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
             
             const result = await response.json();
             console.log(`[Reprocess] Success:`, result);
             
+            // Refresh to get actual backend status (will likely still be processing)
+            refresh();
+            
             // Poll for status updates until processing completes
             const pollStatus = async () => {
                 let attempts = 0;
-                const maxAttempts = 120; // 2 minutes max (120 * 1 second)
+                const maxAttempts = 180; // 3 minutes max (like bulk upload)
                 
                 const checkStatus = async () => {
                     attempts++;
@@ -796,12 +844,19 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         const docs = await response.json();
                         const currentDoc = docs[filename];
                         
-                        // Also update the local state
+                        // Update the local state
                         refresh();
                         
                         // Check if processing is complete
                         if (currentDoc && currentDoc.status === 'processed') {
+                            console.log(`[Reprocess] ${filename} processing complete!`);
                             setReprocessingFilename(null);
+                            // Clear the processing override
+                            setProcessingOverride(prev => {
+                                const next = { ...prev };
+                                delete next[filename];
+                                return next;
+                            });
                             refresh(); // Final refresh to update UI
                             return; // Done
                         }
@@ -810,32 +865,51 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         if (!currentDoc) {
                             console.warn(`Document ${filename} not found in API response`);
                             setReprocessingFilename(null);
+                            // Clear override
+                            setProcessingOverride(prev => {
+                                const next = { ...prev };
+                                delete next[filename];
+                                return next;
+                            });
                             return;
                         }
                         
                         // If still processing and haven't exceeded max attempts, check again
-                        if (attempts < maxAttempts && (currentDoc.status === 'processing' || currentDoc.status === 'reprocessing')) {
-                            setTimeout(checkStatus, 1000); // Check again in 1 second
+                        if (attempts < maxAttempts && (currentDoc.status === 'processing' || currentDoc.status === 'pending')) {
+                            console.log(`[Reprocess] ${filename} still processing (${currentDoc.status}), attempt ${attempts}/${maxAttempts}`);
+                            setTimeout(checkStatus, 2000); // Check every 2 seconds (same as bulk upload)
                         } else {
                             // Timeout or unknown status
                             setReprocessingFilename(null);
+                            // Clear override
+                            setProcessingOverride(prev => {
+                                const next = { ...prev };
+                                delete next[filename];
+                                return next;
+                            });
                             refresh(); // Final refresh
                             if (attempts >= maxAttempts) {
-                                setShowAlert({ title: "Timeout", message: `Reprocessing ${filename} is taking longer than expected (${maxAttempts} seconds). It may still be processing in the background. Check the status again in a moment.` });
+                                setShowAlert({ title: "Processing Continues", message: `${filename} is still processing in the background. The document will update when complete.` });
                             } else {
                                 // Unknown status - might be an error
-                                setShowAlert({ title: "Status Unknown", message: `Reprocessing ${filename} completed with status: ${currentDoc.status}. Check the document status.` });
+                                setShowAlert({ title: "Status Update", message: `${filename} status: ${currentDoc.status}` });
                             }
                         }
                     } catch (err) {
                         console.error("[Reprocess] Error checking status:", err);
                         setReprocessingFilename(null);
+                        // Clear override on polling error
+                        setProcessingOverride(prev => {
+                            const next = { ...prev };
+                            delete next[filename];
+                            return next;
+                        });
                     }
                 };
                 
-                // Start checking after a brief delay to let backend update status
+                // Start checking immediately
                 console.log(`[Reprocess] Starting status polling for ${filename}`);
-                setTimeout(checkStatus, 500);
+                checkStatus();
             };
             
             pollStatus();
@@ -843,6 +917,14 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             console.error("[Reprocess] Failed to start reprocessing:", err);
             setShowAlert({ title: "Error", message: `Failed to start reprocessing: ${err instanceof Error ? err.message : String(err)}` });
             setReprocessingFilename(null);
+            // Clear override on API error
+            if (filename) {
+                setProcessingOverride(prev => {
+                    const next = { ...prev };
+                    delete next[filename];
+                    return next;
+                });
+            }
         }
     };
 
@@ -1233,7 +1315,10 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredDocs.map(doc => (
+                            {filteredDocs.map(doc => {
+                                // Apply processing override for immediate UI feedback during reprocess
+                                const displayStatus = processingOverride[doc.filename] || doc.status;
+                                return (
                                 <tr key={doc.filename} className="hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewDoc(doc.filename)}>
                                     <td className="p-4 font-medium">{doc.filename}</td>
                                     <td className="p-4 text-sm" onClick={(e) => { e.stopPropagation(); setEditingType(doc.filename); }}>
@@ -1262,9 +1347,12 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                     <td className="p-4">
                                         <div className="flex flex-col gap-1">
                                             <span className={`px-2 py-1 rounded-full text-xs w-fit ${
-                                                doc.status === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                displayStatus === 'processed' ? 'bg-green-100 text-green-700' : 
+                                                displayStatus === 'processing' || displayStatus === 'pending' ? 'bg-blue-100 text-blue-700 animate-pulse' :
+                                                displayStatus === 'error' || displayStatus === 'failed' ? 'bg-red-100 text-red-700' :
+                                                'bg-yellow-100 text-yellow-700'
                                             }`}>
-                                                System: {doc.status}
+                                                System: {displayStatus}
                                             </span>
                                             <span className={`px-2 py-1 rounded-full text-xs w-fit border ${
                                                 doc.workflow_status === 'active' ? 'bg-green-50 border-green-200 text-green-700' : 
@@ -1319,7 +1407,8 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                             </tbody>
                         </table>
                         </div>
@@ -1469,7 +1558,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                 <div className="flex items-center gap-3 mb-4">
                                     <RefreshCw className={`animate-spin ${uploading ? 'text-blue-600' : 'text-orange-600'}`} size={20} />
                                     <p className="text-sm font-medium text-gray-700">
-                                        {uploading ? 'Uploading documents...' : monitoringProcessing ? 'Processing documents (extracting data, indexing, analyzing...)' : 'Upload complete'}
+                                        {uploading ? 'Uploading all files...' : monitoringProcessing ? 'Processing in background (extracting, indexing, analyzing...)' : 'Upload complete'}
                                     </p>
                                 </div>
                                 <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto border border-gray-200 space-y-3">
@@ -1487,6 +1576,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                                     {status === 'processing' && (
                                                         <RefreshCw className="animate-spin text-orange-600" size={16} />
                                                     )}
+                                                    {status === 'completed' && (
+                                                        <Check className="text-green-600" size={16} />
+                                                    )}
                                                     {status === 'error' && (
                                                         <AlertCircle className="text-red-600" size={16} />
                                                     )}
@@ -1496,11 +1588,11 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                                         {file.name}
                                                     </div>
                                                     <div className="text-xs text-gray-500">
-                                                        {status === 'uploading' && 'Uploading file...'}
-                                                        {status === 'uploaded' && 'File uploaded successfully'}
-                                                        {status === 'processing' && 'Processing document (extracting data, indexing...)'}
-                                                        {status === 'completed' && 'Processing complete!'}
-                                                        {status === 'error' && 'Upload failed'}
+                                                        {status === 'uploading' && 'Uploading...'}
+                                                        {status === 'uploaded' && 'Uploaded ✓ - Ready for processing'}
+                                                        {status === 'processing' && 'Processing in background...'}
+                                                        {status === 'completed' && 'Complete! ✓'}
+                                                        {status === 'error' && 'Failed - please try again'}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1508,11 +1600,18 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                     })}
                                 </div>
                             </div>
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                <p className="text-xs text-blue-800">
-                                    <strong>Note:</strong> Documents are being processed in the background. 
-                                    This includes text extraction, RAG indexing, and competency question analysis. 
-                                    You can close this dialog and continue working - processing will continue.
+                            <div className={`${monitoringProcessing ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'} border rounded-lg p-3`}>
+                                <p className={`text-xs ${monitoringProcessing ? 'text-green-800' : 'text-blue-800'}`}>
+                                    <strong>
+                                        {uploading ? 'Phase 1/2: Uploading Files' : monitoringProcessing ? 'Phase 2/2: Processing Documents' : 'Complete'}
+                                    </strong>
+                                    <br />
+                                    {uploading 
+                                        ? 'All files are being uploaded in parallel. Once complete, processing will begin automatically.'
+                                        : monitoringProcessing
+                                        ? 'All files uploaded! Processing is now running in the background (text extraction, RAG indexing, analysis). You can close this and continue working.'
+                                        : 'All documents have been processed and are ready to use.'
+                                    }
                                 </p>
                             </div>
                             <div className="flex justify-end pt-2">
@@ -1524,14 +1623,14 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         } else if (uploading) {
                                             setShowCancelUploadConfirm(true);
                                         } else {
-                                            // During processing monitoring, allow closing but warn
+                                            // During processing monitoring, allow closing
                                             cleanupUpload();
                                         }
                                     }}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     disabled={uploading}
                                 >
-                                    {uploading ? 'Uploading...' : monitoringProcessing ? 'Processing... (Click to close)' : 'Close Dialog'}
+                                    {uploading ? 'Please wait...' : monitoringProcessing ? 'Close & Continue Working' : 'Close'}
                                 </button>
                             </div>
                         </>
