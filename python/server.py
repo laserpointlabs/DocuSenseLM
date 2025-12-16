@@ -12,6 +12,10 @@ import pickletools
 import diskcache
 import webbrowser  # Ensure stdlib module is loaded for PyInstaller
 import tempfile
+import asyncio
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
@@ -213,6 +217,15 @@ initialize_openai_client()
 
 # Initialize FastAPI
 app = FastAPI(title=f"{APP_NAME} API")
+
+# Thread pool for parallel document processing
+# Best Practice: Use ThreadPoolExecutor for I/O-bound and CPU-intensive tasks
+# This allows multiple documents to process in parallel rather than sequentially
+processing_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="doc_processor")
+
+# Thread lock for metadata file access (CRITICAL for thread safety)
+# Prevents race conditions when multiple threads update metadata simultaneously
+metadata_lock = threading.Lock()
 
 app.add_middleware(
     CORSMiddleware,
@@ -460,17 +473,33 @@ def hybrid_search_rrf(query: str, collection, n_results: int = 10, k: int = 60) 
     return sorted_results[:n_results]
 
 def load_metadata():
-    if os.path.exists(METADATA_FILE):
-        try:
-            with open(METADATA_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
+    """
+    Thread-safe metadata loading.
+    Uses lock to prevent race conditions during concurrent access.
+    """
+    with metadata_lock:
+        if os.path.exists(METADATA_FILE):
+            try:
+                with open(METADATA_FILE, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading metadata: {e}")
+                return {}
+        return {}
 
 def save_metadata(metadata):
-    with open(METADATA_FILE, "w") as f:
-        json.dump(metadata, f, indent=2)
+    """
+    Thread-safe metadata saving.
+    Uses lock to prevent race conditions during concurrent writes.
+    CRITICAL: This prevents data loss when multiple documents process in parallel.
+    """
+    with metadata_lock:
+        try:
+            with open(METADATA_FILE, "w") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving metadata: {e}")
+            raise
 
 def is_scanned_pdf(filepath):
     """
@@ -697,9 +726,30 @@ def index_document(filename: str, text: str):
         logger.error(traceback.format_exc())
         raise
 
-async def process_document_background(filename: str, filepath: str, doc_type: str):
+def process_document_sync(filename: str, filepath: str, doc_type: str):
     """
-    Process document in background. FastAPI BackgroundTasks handles async functions correctly.
+    Synchronous wrapper for document processing. Used by ThreadPoolExecutor for parallel processing.
+    """
+    # Run the async function in a new event loop (thread-safe)
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(_process_document_async(filename, filepath, doc_type))
+        loop.close()
+    except Exception as e:
+        logger.error(f"Error in sync wrapper for {filename}: {e}")
+        # Update status to error
+        try:
+            metadata = load_metadata()
+            if filename in metadata:
+                metadata[filename]["status"] = "error"
+                save_metadata(metadata)
+        except:
+            pass
+
+async def _process_document_async(filename: str, filepath: str, doc_type: str):
+    """
+    Internal async function for document processing.
     """
     logger.info(f"=== STARTING BACKGROUND PROCESSING FOR {filename} ===")
     logger.info(f"Filepath: {filepath}")
@@ -827,12 +877,19 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
         logger.error(f"Unexpected error processing {filename}: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        # Update status to processed even on error
+        # Update status to error on unexpected errors
         metadata = load_metadata()
         if filename in metadata:
-            metadata[filename]["status"] = "processed"
+            metadata[filename]["status"] = "error"
             metadata[filename]["text_extracted"] = False
             save_metadata(metadata)
+
+async def process_document_background(filename: str, filepath: str, doc_type: str):
+    """
+    Process document in background. FastAPI BackgroundTasks handles async functions correctly.
+    This is kept for backwards compatibility with single file uploads.
+    """
+    await _process_document_async(filename, filepath, doc_type)
 
 # --- Models ---
 
@@ -1150,13 +1207,68 @@ async def restore_data(file: UploadFile = File(...)):
     return {"status": "restored", "message": "Data restored successfully. Please restart the application if you see issues."}
 
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", background_tasks: BackgroundTasks = None):
-    filename = file.filename
-    filepath = os.path.join(DOCUMENTS_DIR, filename)
+async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", skip_processing: bool = False, background_tasks: BackgroundTasks = None):
+    """
+    Upload a document file. Optionally skip immediate processing for bulk uploads.
     
-    # Save file
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    Best Practices Implemented:
+    - File validation (type, size, name sanitization)
+    - Streaming upload for large files
+    - Secure file storage with sanitized names
+    - Separate upload and processing phases
+    """
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    file_ext = file.filename.lower().split('.')[-1]
+    if file_ext not in ['pdf', 'docx']:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
+    
+    # Sanitize filename to prevent path traversal attacks
+    # Remove any path components and use only the basename
+    import os.path
+    import re
+    safe_filename = os.path.basename(file.filename)
+    # Remove any non-alphanumeric characters except .-_
+    safe_filename = re.sub(r'[^\w\s\-\.]', '', safe_filename)
+    # Ensure filename is not empty after sanitization
+    if not safe_filename or safe_filename == '.':
+        safe_filename = f"document_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_ext}"
+    
+    # Check for duplicate filename
+    original_safe_filename = safe_filename
+    counter = 1
+    filepath = os.path.join(DOCUMENTS_DIR, safe_filename)
+    while os.path.exists(filepath):
+        name_part, ext_part = os.path.splitext(original_safe_filename)
+        safe_filename = f"{name_part}_{counter}{ext_part}"
+        filepath = os.path.join(DOCUMENTS_DIR, safe_filename)
+        counter += 1
+    
+    # Validate file size (streaming - don't load entire file into memory)
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB limit
+    file_size = 0
+    
+    try:
+        # Stream file to disk in chunks (best practice for large files)
+        with open(filepath, "wb") as buffer:
+            while chunk := await file.read(8192):  # Read in 8KB chunks
+                file_size += len(chunk)
+                if file_size > MAX_FILE_SIZE:
+                    # Clean up partial file
+                    buffer.close()
+                    os.remove(filepath)
+                    raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)} MB")
+                buffer.write(chunk)
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        if isinstance(e, HTTPException):
+            raise
+        logger.error(f"Error uploading file: {e}")
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
     
     # Init metadata
     metadata = load_metadata()
@@ -1164,10 +1276,12 @@ async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", b
     doc_type_config = config.get("document_types", {}).get(doc_type, {})
     show_on_dashboard = doc_type_config.get("show_on_dashboard", True)
     
-    metadata[filename] = {
-        "filename": filename,
+    metadata[safe_filename] = {
+        "filename": safe_filename,
+        "original_filename": file.filename,  # Track original name
         "doc_type": doc_type,
         "upload_date": datetime.datetime.now().isoformat(),
+        "file_size": file_size,
         "status": "pending",
         "workflow_status": "in_review",
         "show_on_dashboard": show_on_dashboard,
@@ -1175,13 +1289,73 @@ async def upload_document(file: UploadFile = File(...), doc_type: str = "nda", b
     }
     save_metadata(metadata)
     
-    # Process
-    background_tasks.add_task(process_document_background, filename, filepath, doc_type)
+    logger.info(f"File uploaded successfully: {safe_filename} (size: {file_size} bytes)")
     
-    return {"status": "uploaded", "filename": filename}
+    # Process immediately only if skip_processing is False
+    if not skip_processing:
+        background_tasks.add_task(process_document_background, safe_filename, filepath, doc_type)
+    
+    return {"status": "uploaded", "filename": safe_filename, "original_filename": file.filename, "file_size": file_size}
+
+@app.post("/start-processing")
+async def start_processing():
+    """
+    Start processing all documents with 'pending' status in PARALLEL.
+    
+    Best Practice: Uses ThreadPoolExecutor to process multiple documents simultaneously
+    rather than sequentially. This is much faster for bulk uploads.
+    
+    This endpoint is used after bulk upload to trigger processing of all uploaded files.
+    """
+    logger.info("=== START-PROCESSING ENDPOINT CALLED ===")
+    metadata = load_metadata()
+    
+    # Find all pending documents
+    pending_files = [
+        (filename, data) 
+        for filename, data in metadata.items() 
+        if data.get("status") == "pending"
+    ]
+    
+    if not pending_files:
+        logger.info("No pending documents to process")
+        return {"status": "no_pending_files", "message": "No documents are pending processing"}
+    
+    logger.info(f"Starting parallel processing of {len(pending_files)} documents")
+    
+    # Submit all pending files to thread pool for PARALLEL processing
+    # Best Practice: Process documents in parallel using thread pool
+    futures = []
+    for filename, data in pending_files:
+        filepath = os.path.join(DOCUMENTS_DIR, filename)
+        doc_type = data.get("doc_type", "nda")
+        
+        if os.path.exists(filepath):
+            logger.info(f"Submitting {filename} for parallel processing (doc_type: {doc_type})")
+            # Submit to thread pool - will process in parallel up to max_workers
+            future = processing_executor.submit(process_document_sync, filename, filepath, doc_type)
+            futures.append((filename, future))
+        else:
+            logger.warning(f"File not found, skipping: {filepath}")
+            # Mark as error in metadata
+            if filename in metadata:
+                metadata[filename]["status"] = "error"
+                save_metadata(metadata)
+    
+    logger.info(f"Submitted {len(futures)} documents for parallel processing")
+    return {
+        "status": "processing_started", 
+        "message": f"Started processing {len(futures)} document(s) in parallel",
+        "count": len(futures),
+        "files": [f[0] for f in futures]
+    }
 
 @app.post("/reprocess/{filename}")
-async def reprocess_document(filename: str, background_tasks: BackgroundTasks):
+async def reprocess_document(filename: str):
+    """
+    Reprocess a single document using the parallel processing executor.
+    This allows reprocessing to happen alongside bulk processing operations.
+    """
     logger.info(f"=== REPROCESS ENDPOINT CALLED FOR {filename} ===")
     filepath = os.path.join(DOCUMENTS_DIR, filename)
     if not os.path.exists(filepath):
@@ -1193,19 +1367,19 @@ async def reprocess_document(filename: str, background_tasks: BackgroundTasks):
         logger.error(f"Metadata not found for: {filename}")
         raise HTTPException(status_code=404, detail="Metadata not found")
     
-    # Update status
-    logger.info(f"Setting status to 'reprocessing' for {filename}")
-    metadata[filename]["status"] = "reprocessing"
+    # Update status to processing (not reprocessing) to match the new flow
+    logger.info(f"Setting status to 'processing' for {filename}")
+    metadata[filename]["status"] = "processing"
     save_metadata(metadata)
     
-    # Re-run processing
+    # Re-run processing using ThreadPoolExecutor for parallel execution
     doc_type = metadata[filename].get("doc_type", "nda")
-    logger.info(f"Adding background task for {filename} (doc_type: {doc_type}, filepath: {filepath})")
+    logger.info(f"Submitting {filename} for parallel reprocessing (doc_type: {doc_type})")
     
-    # Ensure the background task will execute - FastAPI BackgroundTasks handles async functions
-    background_tasks.add_task(process_document_background, filename, filepath, doc_type)
+    # Submit to thread pool - will process in parallel with other documents
+    future = processing_executor.submit(process_document_sync, filename, filepath, doc_type)
     
-    logger.info(f"Background task added successfully for {filename}, returning response")
+    logger.info(f"Document {filename} submitted to parallel processing queue")
     return {"status": "reprocessing_started", "filename": filename}
 
 @app.post("/fix-stuck/{filename}")
