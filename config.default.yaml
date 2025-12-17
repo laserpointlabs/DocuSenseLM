@@ -2,6 +2,17 @@
 api:
   openai_api_key: ""  # Add your OpenAI API key here
 
+# RAG Configuration
+# These defaults are used unless overridden in the user's config.yaml or environment variables.
+rag:
+  # Chroma collection name used for indexing/retrieval
+  collection_name: "nda_documents"
+  # Retrieval filter: higher = more inclusive (recommended for OpenAI embeddings)
+  distance_threshold: 0.75
+  # How many documents the backend is allowed to "pin" from recent chat sources.
+  # This keeps multi-turn Q&A stable without hardcoding specific words.
+  max_pinned_files: 3
+
 document_types:
   nda:
     name: "Non-Disclosure Agreement"

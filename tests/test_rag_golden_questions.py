@@ -45,6 +45,59 @@ GOLDEN_QUESTIONS = [
         ],
         "expected_source": "Franny",
     },
+    {
+        "id": "franny_snow_total",
+        "question": "What do we pay Franny's for snow removal?",
+        "expected_patterns": [
+            r"\$49,?000",
+            r"\$9,?800",
+        ],
+        "expected_source": "Frannys Snow Contract",
+    },
+    {
+        "id": "franny_snow_payments",
+        "question": "How many payments are there for the Franny snow contract and how much is each payment?",
+        "expected_patterns": [
+            r"\bfive\b",
+            r"\$9,?800",
+        ],
+        "expected_source": "Frannys Snow Contract",
+    },
+    {
+        "id": "franny_snow_salt",
+        "question": "What is the cost per salt application in the Franny snow contract (after the 70-inch threshold)?",
+        "expected_patterns": [
+            r"\$1,?000",
+        ],
+        "expected_source": "Frannys Snow Contract",
+    },
+    {
+        "id": "fanuc_parties",
+        "question": "Who are the parties in the Fanuc America Corporation NDA?",
+        "expected_patterns": [
+            r"Fanuc",
+            r"Kidde",
+        ],
+        "expected_source": "Fanuc America Corporation",
+    },
+    {
+        "id": "kgs_parties",
+        "question": "Who are the parties in the KGS Fire and Security B.V. NDA?",
+        "expected_patterns": [
+            r"KGS",
+            r"Kidde",
+        ],
+        "expected_source": "KGS Fire",
+    },
+    {
+        "id": "worthington_expiration",
+        "question": "What is the expiration date of the WORTHINGTON sales agreement?",
+        "expected_patterns": [
+            r"July",
+            r"2028",
+        ],
+        "expected_source": "WORTHINGTON",
+    },
 ]
 
 
@@ -106,6 +159,59 @@ class TestRAGGoldenQuestions:
         # Check expected source is cited
         source_found = any(expected_source.lower() in s.lower() for s in sources)
         assert source_found, f"Expected source containing '{expected_source}' not in sources: {sources}"
+
+
+class TestOCRRegression:
+    """
+    OCR regression tests for synthetic scanned PDFs.
+
+    These tests are SKIPPED unless the scanned PDFs have been uploaded and processed in the backend.
+    Generate them with: python tests/fixtures/generate_scanned_test_pdfs.py
+    """
+
+    OCR_CASES = [
+        {
+            "id": "ocr_pricing_weeding",
+            "filename_hint": "scanned_pricing_test.pdf",
+            "question": "What do we pay for weeding?",
+            "expected_patterns": [r"\$55"],
+        },
+        {
+            "id": "ocr_nda_parties",
+            "filename_hint": "scanned_nda_test.pdf",
+            "question": "Who are the parties?",
+            "expected_patterns": [r"Acme", r"Beta"],
+        },
+    ]
+
+    def _documents(self):
+        r = requests.get(f"{API_URL}/documents", timeout=10)
+        assert r.status_code == 200
+        return r.json() or {}
+
+    @pytest.mark.parametrize("case", OCR_CASES)
+    def test_scanned_pdf_ocr(self, ensure_server_running, case):
+        docs = self._documents()
+        present = any(case["filename_hint"].lower() == k.lower() for k in docs.keys())
+        if not present:
+            pytest.skip(f"OCR fixture '{case['filename_hint']}' not uploaded to backend")
+
+        response = requests.post(
+            f"{API_URL}/chat",
+            json={"question": case["question"]},
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        answer = data.get("answer", "")
+        sources = data.get("sources", [])
+
+        for pattern in case["expected_patterns"]:
+            assert re.search(pattern, answer, re.IGNORECASE), f"Expected pattern '{pattern}' not found. Answer: {answer[:300]}"
+
+        source_found = any(case["filename_hint"].lower() in s.lower() for s in sources)
+        assert source_found, f"Expected OCR source '{case['filename_hint']}' not in sources: {sources}"
     
     def test_no_hallucination_on_unknown(self, ensure_server_running):
         """

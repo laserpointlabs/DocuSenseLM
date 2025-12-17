@@ -34,6 +34,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nda-tool")
 
+# --- RAG defaults / configuration helpers ---
+DEFAULT_COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "nda_documents")
+DEFAULT_DISTANCE_THRESHOLD = float(os.environ.get("RAG_DISTANCE_THRESHOLD", "0.75"))
+
 # Load configuration first to get BASE_DIR
 # Get the correct base directory (project root)
 # Electron may set working directory to python/ folder, so we need to go up one level
@@ -119,25 +123,63 @@ prompts_config = load_prompts_config()
 
 # Load configuration
 def load_app_config():
-    # Try loading user override first
-    user_config = os.path.join(USER_DATA_DIR, "config.yaml")
-    if os.path.exists(user_config):
-        try:
-            with open(user_config, "r") as f:
-                return yaml.safe_load(f)
-        except Exception as e:
-            logger.error(f"Failed to load user config: {e}")
-    
-    # Fallback to default
-    default_config = os.path.join(BASE_DIR, "config.default.yaml")
+    """
+    Load configuration with default + user override semantics.
+    IMPORTANT: We deep-merge default config into user config so new default keys (e.g. rag.*)
+    appear automatically even if the user's config.yaml was created on an older version.
+    """
+    def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(base or {})
+        for k, v in (override or {}).items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = _deep_merge(out[k], v)  # type: ignore[arg-type]
+            else:
+                out[k] = v
+        return out
+
+    # Load defaults first
+    default_config_path = os.path.join(BASE_DIR, "config.default.yaml")
+    defaults: Dict[str, Any] = {}
     try:
-        with open(default_config, "r") as f:
-            return yaml.safe_load(f)
+        with open(default_config_path, "r") as f:
+            defaults = yaml.safe_load(f) or {}
     except Exception as e:
         logger.error(f"Failed to load default config: {e}")
-        return {"document_types": {}, "dashboard": {}}
+        defaults = {"document_types": {}, "dashboard": {}}
+
+    # Then apply user overrides (if present)
+    user_config_path = os.path.join(USER_DATA_DIR, "config.yaml")
+    user_cfg: Dict[str, Any] = {}
+    if os.path.exists(user_config_path):
+        try:
+            with open(user_config_path, "r") as f:
+                user_cfg = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.error(f"Failed to load user config: {e}")
+            user_cfg = {}
+
+    return _deep_merge(defaults, user_cfg)
 
 config = load_app_config()
+
+# RAG configuration (from config.yaml with env fallbacks)
+def _get_collection_name() -> str:
+    try:
+        name = (config or {}).get("rag", {}).get("collection_name")
+        if name and str(name).strip():
+            return str(name).strip()
+    except Exception:
+        pass
+    return DEFAULT_COLLECTION_NAME
+
+def _get_distance_threshold() -> float:
+    try:
+        val = (config or {}).get("rag", {}).get("distance_threshold")
+        if val is not None:
+            return float(val)
+    except Exception:
+        pass
+    return DEFAULT_DISTANCE_THRESHOLD
 
 # Ensure user config files exist in USER_DATA_DIR for editing
 if not os.path.exists(os.path.join(USER_DATA_DIR, "config.yaml")):
@@ -192,11 +234,65 @@ def initialize_openai_client():
             api_key=api_key,
             model_name="text-embedding-3-small"
         )
-        collection = chroma_client.get_or_create_collection(
-            name="nda_documents",
-            embedding_function=openai_ef
-        )
-        logger.info("ChromaDB collection initialized with OpenAI embeddings")
+        # Initialize ChromaDB collection with OpenAI embeddings
+        # If collection name changes across versions, we want to avoid silently creating a new empty one.
+        desired_name = _get_collection_name()
+        try:
+            collection = chroma_client.get_or_create_collection(
+                name=desired_name,
+                embedding_function=openai_ef
+            )
+        except Exception:
+            # Fallback for older Chroma versions that may not accept embedding_function on get_or_create
+            collection = chroma_client.get_or_create_collection(name=desired_name)
+            try:
+                # Try to attach embedding function if supported
+                collection._embedding_function = openai_ef  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+        # Detect common footgun: an empty freshly-created collection while another legacy collection has data.
+        try:
+            desired_count = collection.count() if collection is not None else 0
+            if desired_count == 0:
+                legacy_candidates = []
+                for c in chroma_client.list_collections():
+                    try:
+                        cname = getattr(c, "name", None) or (c.get("name") if isinstance(c, dict) else None)  # type: ignore[attr-defined]
+                    except Exception:
+                        cname = None
+                    if not cname or cname == desired_name:
+                        continue
+                    try:
+                        legacy_col = chroma_client.get_collection(name=cname, embedding_function=openai_ef)  # type: ignore[arg-type]
+                    except Exception:
+                        legacy_col = chroma_client.get_collection(name=cname)  # type: ignore[arg-type]
+                    try:
+                        legacy_count = legacy_col.count()
+                    except Exception:
+                        legacy_count = 0
+                    if legacy_count > 0:
+                        legacy_candidates.append((cname, legacy_count))
+                if legacy_candidates:
+                    legacy_candidates.sort(key=lambda x: -x[1])
+                    chosen_name, chosen_count = legacy_candidates[0]
+                    logger.warning(
+                        f"Chroma collection '{desired_name}' is empty but found legacy collection '{chosen_name}' with {chosen_count} chunks. "
+                        f"Using legacy collection to avoid silent RAG breakage."
+                    )
+                    try:
+                        collection = chroma_client.get_collection(name=chosen_name, embedding_function=openai_ef)  # type: ignore[arg-type]
+                    except Exception:
+                        collection = chroma_client.get_collection(name=chosen_name)  # type: ignore[arg-type]
+                        try:
+                            collection._embedding_function = openai_ef  # type: ignore[attr-defined]
+                        except Exception:
+                            pass
+
+        except Exception as e:
+            logger.warning(f"Could not validate Chroma collections on init: {e}")
+
+        logger.info(f"ChromaDB collection initialized: name='{_get_collection_name()}'")
         return True
         
     except Exception as e:
@@ -315,7 +411,7 @@ def _bounded_levenshtein(a: str, b: str, max_dist: int) -> int:
 
 def keyword_search(query: str, all_chunks: List[Dict], n_results: int = 20) -> List[Dict]:
     """
-    Perform keyword-based search using TF-like scoring.
+    Perform keyword-based search using a lightweight BM25-style scorer.
     Returns chunks ranked by keyword match score.
     
     Args:
@@ -330,34 +426,68 @@ def keyword_search(query: str, all_chunks: List[Dict], n_results: int = 20) -> L
     if not keywords:
         return []
     
-    scored_chunks = []
+    import math
+
+    # Tokenize chunks once (exact-ish word matching, but allow prefix matches for short stems like "pay" -> "payment")
+    tokenized = []
     for chunk in all_chunks:
-        doc_lower = chunk['doc'].lower()
-        
-        # Calculate keyword score
-        score = 0
+        doc = chunk.get("doc") or ""
+        tokens = re.findall(r"\b[a-zA-Z]+\b", doc.lower())
+        tokenized.append((chunk, tokens))
+
+    N = len(tokenized) or 1
+    avgdl = (sum(len(toks) for _, toks in tokenized) / N) if N else 0.0
+
+    # Document frequency per keyword
+    df = {kw: 0 for kw in keywords}
+    for _, toks in tokenized:
+        if not toks:
+            continue
+        tok_set = set(toks)
+        for kw in keywords:
+            # Consider token match if exact OR token startswith kw (e.g., pay->payment)
+            if kw in tok_set or any(t.startswith(kw) for t in tok_set):
+                df[kw] += 1
+
+    # BM25 parameters (lightweight defaults)
+    k1 = 1.2
+    b = 0.75
+
+    scored_chunks = []
+    for chunk, toks in tokenized:
+        if not toks:
+            continue
+        dl = len(toks)
+
+        score = 0.0
         matched_keywords = []
         for kw in keywords:
-            # Count occurrences (term frequency)
-            count = doc_lower.count(kw)
-            if count > 0:
-                # Log-scaled TF to avoid over-counting repeated terms
-                import math
-                score += 1 + math.log(count)
-                matched_keywords.append(kw)
-        
-        # Bonus for having multiple different keywords (coverage)
+            # Term frequency with prefix match support
+            tf = 0
+            for t in toks:
+                if t == kw or t.startswith(kw):
+                    tf += 1
+            if tf <= 0:
+                continue
+
+            matched_keywords.append(kw)
+            # IDF (always positive)
+            dfi = df.get(kw, 0)
+            idf = math.log(1 + (N - dfi + 0.5) / (dfi + 0.5))
+            denom = tf + k1 * (1 - b + b * (dl / (avgdl or 1.0)))
+            score += idf * (tf * (k1 + 1) / (denom or 1.0))
+
+        # Coverage bonus: prefer chunks that match multiple distinct keywords
         if len(matched_keywords) > 1:
-            score *= (1 + 0.2 * len(matched_keywords))
-        
+            score *= (1 + 0.15 * (len(matched_keywords) - 1))
+
         if score > 0:
             chunk_copy = chunk.copy()
-            chunk_copy['keyword_score'] = score
-            chunk_copy['matched_keywords'] = matched_keywords
+            chunk_copy["keyword_score"] = float(score)
+            chunk_copy["matched_keywords"] = matched_keywords
             scored_chunks.append(chunk_copy)
-    
-    # Sort by score descending
-    scored_chunks.sort(key=lambda x: -x['keyword_score'])
+
+    scored_chunks.sort(key=lambda x: -x["keyword_score"])
     return scored_chunks[:n_results]
 
 def hybrid_search_rrf(query: str, collection, n_results: int = 10, k: int = 60) -> List[Dict]:
@@ -896,6 +1026,7 @@ async def process_document_background(filename: str, filepath: str, doc_type: st
 class ChatMessage(BaseModel):
     role: str  # 'user' or 'assistant'
     content: str
+    sources: Optional[List[str]] = None  # Optional: sources cited by assistant in previous turns (for stable multi-turn RAG)
 
 class ChatRequest(BaseModel):
     question: str
@@ -914,7 +1045,241 @@ class UpdateMetadataRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": "1.0.1", "rag": "enabled"}
+    # Keep this endpoint lightweight; detailed diagnostics are available at /rag/status
+    rag_ready = bool(openai_client) and bool(collection)
+    try:
+        if rag_ready and collection is not None:
+            rag_ready = collection.count() > 0
+    except Exception:
+        rag_ready = False
+    return {"status": "ok", "version": "1.0.1", "rag": "enabled" if rag_ready else "degraded"}
+
+
+def _safe_collection_count(col) -> int:
+    try:
+        return int(col.count())
+    except Exception:
+        return 0
+
+
+def _safe_collection_filename_count(col, filename: str) -> int:
+    try:
+        res = col.get(where={"filename": filename}, include=[])
+        ids = res.get("ids") if res else None
+        return len(ids) if ids else 0
+    except Exception:
+        return 0
+
+
+def _list_collections_with_counts() -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    try:
+        cols = chroma_client.list_collections()
+    except Exception:
+        return out
+    for c in cols:
+        try:
+            cname = getattr(c, "name", None) or (c.get("name") if isinstance(c, dict) else None)  # type: ignore[attr-defined]
+        except Exception:
+            cname = None
+        if not cname:
+            continue
+        try:
+            col_obj = chroma_client.get_collection(name=cname)  # type: ignore[arg-type]
+            cnt = _safe_collection_count(col_obj)
+        except Exception:
+            cnt = 0
+        out.append({"name": cname, "count": cnt})
+    out.sort(key=lambda x: (-x["count"], x["name"]))
+    return out
+
+
+def get_rag_status() -> Dict[str, Any]:
+    """
+    RAG diagnostics endpoint data. This is designed to make "silent RAG failure" impossible.
+    """
+    md = load_metadata()
+    md_items = list(md.values()) if isinstance(md, dict) else []
+
+    desired_collection = _get_collection_name()
+    distance_threshold = _get_distance_threshold()
+
+    total_chunks = _safe_collection_count(collection) if collection is not None else 0
+
+    # Detect processed docs that claim to be searchable but have 0 indexed chunks.
+    missing_index: List[Dict[str, Any]] = []
+    franny_filename = None
+    for k in (md.keys() if isinstance(md, dict) else []):
+        if isinstance(k, str) and "franny" in k.lower() and "maintenance" in k.lower():
+            franny_filename = k
+            break
+
+    # Limit per-file checks to avoid long response times.
+    processed_searchable = [
+        d for d in md_items
+        if isinstance(d, dict) and d.get("status") == "processed" and d.get("text_extracted") is True
+    ]
+    for d in processed_searchable[:75]:
+        fname = d.get("filename")
+        if not fname or not isinstance(fname, str) or collection is None:
+            continue
+        cnt = _safe_collection_filename_count(collection, fname)
+        if cnt == 0:
+            missing_index.append({"filename": fname, "doc_type": d.get("doc_type"), "status": d.get("status")})
+
+    franny_chunks = _safe_collection_filename_count(collection, franny_filename) if (collection is not None and franny_filename) else 0
+
+    ready = bool(openai_client) and bool(collection) and total_chunks > 0
+    return {
+        "ready": ready,
+        "openai_configured": bool(openai_client),
+        "user_data_dir": USER_DATA_DIR,
+        "db_dir": DB_DIR,
+        "documents_dir": DOCUMENTS_DIR,
+        "metadata_file": METADATA_FILE,
+        "collection_name": desired_collection,
+        "collections": _list_collections_with_counts(),
+        "total_chunks": total_chunks,
+        "distance_threshold": distance_threshold,
+        "metadata_documents": len(md_items),
+        "processed_searchable_documents": len(processed_searchable),
+        "missing_index_documents": missing_index,
+        "franny_filename": franny_filename,
+        "franny_chunks": franny_chunks,
+    }
+
+
+@app.get("/rag/status")
+def rag_status():
+    return get_rag_status()
+
+
+@app.get("/rag/debug-search")
+def rag_debug_search(q: str):
+    """
+    Lightweight debug endpoint to validate retrieval without invoking the LLM.
+    Helps diagnose cases where /chat returns empty sources.
+    """
+    if collection is None:
+        raise HTTPException(status_code=500, detail="Chroma collection not initialized")
+
+    query_lower = q.lower()
+    is_pricing_query = any(word in query_lower for word in ['pay', 'cost', 'price', 'fee', 'charge', 'hour', 'rate', 'per'])
+    n_results = 8 if is_pricing_query else 5
+    distance_threshold = _get_distance_threshold()
+
+    hybrid_results = hybrid_search_rrf(q, collection, n_results=n_results * 2)
+
+    max_chunks = 5 if is_pricing_query else 3
+    included = []
+    for r in hybrid_results:
+        if len(included) >= max_chunks:
+            break
+        semantic_distance = r.get("semantic_distance")
+        matched_keywords = r.get("matched_keywords", []) or []
+        has_keyword_match = len(matched_keywords) > 0
+
+        include = True
+        reason = "default"
+        if semantic_distance is not None and not has_keyword_match:
+            if semantic_distance > distance_threshold:
+                include = False
+                reason = "distance_gt_threshold_no_keywords"
+        if include:
+            included.append({
+                "filename": r.get("filename", "unknown"),
+                "semantic_distance": semantic_distance,
+                "matched_keywords": matched_keywords,
+                "semantic_rank": r.get("semantic_rank"),
+                "keyword_rank": r.get("keyword_rank"),
+                "rrf_score": r.get("score"),
+                "include_reason": reason,
+                "preview": (r.get("doc", "") or "")[:240]
+            })
+
+    return {
+        "query": q,
+        "is_pricing_query": is_pricing_query,
+        "distance_threshold": distance_threshold,
+        "hybrid_candidates": len(hybrid_results),
+        "included": included,
+    }
+
+
+@app.get("/rag/chunks")
+def rag_chunks(filename: str, limit: int = 5):
+    """
+    Return a small preview of indexed chunks for a given filename.
+    This is purely for diagnostics and helps confirm whether key terms (e.g. "WEEDING") are present in the index.
+    """
+    if collection is None:
+        raise HTTPException(status_code=500, detail="Chroma collection not initialized")
+    try:
+        res = collection.get(where={"filename": filename}, include=["documents", "metadatas"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read chunks from Chroma: {e}")
+
+    docs = (res.get("documents") if res else None) or []
+    metas = (res.get("metadatas") if res else None) or []
+    out = []
+    for i, doc in enumerate(docs[: max(1, min(int(limit), 25))]):
+        meta = metas[i] if i < len(metas) else {}
+        out.append({
+            "i": i,
+            "chars": len(doc or ""),
+            "preview": (doc or "")[:800],
+            "metadata": meta,
+        })
+    return {"filename": filename, "chunks": out, "chunk_count": len(docs)}
+
+
+@app.post("/rag/rebuild-missing")
+async def rag_rebuild_missing():
+    """
+    Rebuild the vector index for documents that are marked searchable but have no chunks in Chroma.
+    This is the primary "self-heal" mechanism to prevent flaky RAG after restarts.
+    """
+    if not openai_client or collection is None:
+        raise HTTPException(status_code=500, detail="RAG not configured (OpenAI key missing or collection not initialized)")
+
+    status = get_rag_status()
+    missing = status.get("missing_index_documents", [])
+    if not missing:
+        return {"status": "ok", "message": "No missing-index documents detected", "queued": []}
+
+    md = load_metadata()
+    queued = []
+    for item in missing:
+        fname = item.get("filename")
+        if not fname or not isinstance(fname, str):
+            continue
+        file_path = os.path.join(DOCUMENTS_DIR, fname)
+        if not os.path.exists(file_path):
+            continue
+        doc_type = "nda"
+        try:
+            if isinstance(md, dict) and fname in md and isinstance(md[fname], dict):
+                doc_type = md[fname].get("doc_type", "nda")
+        except Exception:
+            doc_type = "nda"
+
+        # Mark as processing and submit to executor
+        try:
+            if isinstance(md, dict) and fname in md and isinstance(md[fname], dict):
+                md[fname]["status"] = "processing"
+                md[fname]["text_extracted"] = False
+        except Exception:
+            pass
+        queued.append(fname)
+        processing_executor.submit(process_document_sync, fname, file_path, doc_type)
+
+    try:
+        if isinstance(md, dict):
+            save_metadata(md)
+    except Exception:
+        pass
+
+    return {"status": "ok", "message": f"Queued {len(queued)} documents for re-indexing", "queued": queued}
 
 @app.get("/config")
 def get_config():
@@ -1661,7 +2026,74 @@ async def chat(request: ChatRequest):
     # b) Perform Semantic Vector Search (Fuzzy Retrieval)
     
     metadata = load_metadata()
-    forced_context_files = []
+    forced_context_files: List[str] = []
+
+    # --- Best-practice multi-turn RAG: pin retrieval to recent cited sources ---
+    # If the previous assistant turn cited sources, keep retrieval anchored to those files for follow-up questions.
+    pinned_sources: List[str] = []
+    if request.history:
+        for msg in reversed(request.history):
+            if getattr(msg, "role", None) == "assistant":
+                srcs = getattr(msg, "sources", None)
+                if srcs and isinstance(srcs, list):
+                    pinned_sources = [s for s in srcs if isinstance(s, str) and s.strip()]
+                    if pinned_sources:
+                        break
+
+    # Configurable cap for pinned files
+    try:
+        max_pinned = int((config or {}).get("rag", {}).get("max_pinned_files", 3))
+    except Exception:
+        max_pinned = 3
+    max_pinned = max(1, min(max_pinned, 10))
+
+    # Add pinned sources first (highest priority)
+    if pinned_sources:
+        for s in pinned_sources:
+            if s not in forced_context_files:
+                forced_context_files.append(s)
+            if len(forced_context_files) >= max_pinned:
+                break
+
+        # Also expand to "related" docs by filename tokens (e.g., vendor family: Franny's maintenance + Franny's snow).
+        # This is generic entity-style expansion, not word-specific heuristics.
+        def _extract_filename_tokens(fn: str) -> List[str]:
+            parts = fn.replace(".pdf", "").replace(".docx", "").replace("_", " ").split()
+            toks = []
+            for p in parts:
+                pn = _normalize_token(p)
+                if len(pn) >= 4:
+                    toks.append(pn)
+            return toks
+
+        source_tokens: List[str] = []
+        for s in forced_context_files:
+            source_tokens.extend(_extract_filename_tokens(s))
+        # Deduplicate while preserving order
+        seen = set()
+        source_tokens = [t for t in source_tokens if not (t in seen or seen.add(t))]
+
+        for fname in (metadata.keys() if isinstance(metadata, dict) else []):
+            if not isinstance(fname, str) or fname in forced_context_files:
+                continue
+            parts = fname.replace(".pdf", "").replace(".docx", "").replace("_", " ").split()
+            fn_tokens = [_normalize_token(p) for p in parts if len(_normalize_token(p)) >= 4]
+            matched = False
+            for st in source_tokens[:8]:  # keep it bounded
+                for ft in fn_tokens:
+                    if st == ft or st in ft or ft in st:
+                        matched = True
+                        break
+                    # Conservative fuzzy match
+                    if _bounded_levenshtein(st, ft, 2) <= 2:
+                        matched = True
+                        break
+                if matched:
+                    break
+            if matched:
+                forced_context_files.append(fname)
+                if len(forced_context_files) >= max_pinned:
+                    break
     
     # Simple keyword matching in filenames (with light fuzzy matching for typos)
     query_lower = request.question.lower()
@@ -1748,12 +2180,14 @@ async def chat(request: ChatRequest):
     context_text = ""
     retrieved_files = set()
     
-    # Add Forced Context first (high priority) - limit to 1 document
+    # Add Forced Context first (high priority).
+    # Keep the number of forced files bounded for latency and to avoid pulling in unrelated docs.
+    forced_limit = max_pinned if pinned_sources else 1
     #
     # IMPORTANT: Do NOT re-read PDFs or run OCR during chat requests.
     # Chat must be low-latency and must not kick off heavyweight extraction.
     # Instead, reuse the already-indexed chunks stored in Chroma for this filename.
-    for filename in forced_context_files[:1]:  # Only first forced file
+    for filename in forced_context_files[:forced_limit]:
         if collection is None:
             logger.warning(f"Forced context: Collection not initialized; cannot pull indexed chunks for {filename}")
             continue
@@ -1779,7 +2213,9 @@ async def chat(request: ChatRequest):
     # Add hybrid search results
     # Apply distance threshold to filter out semantically distant chunks
     # Chunks matched ONLY via keyword (no semantic match) are still included
-    DISTANCE_THRESHOLD = 0.5  # Stricter threshold - lower = more similar required
+    # Distance threshold: higher = more inclusive (OpenAI embeddings often need ~0.7+ for diluted-but-relevant chunks).
+    # Configurable via config.yaml -> rag.distance_threshold (default 0.75) or env RAG_DISTANCE_THRESHOLD.
+    DISTANCE_THRESHOLD = _get_distance_threshold()
     # For vague follow-up queries, only use top 1 result to avoid noise from unrelated docs
     if is_vague_query:
         max_chunks = 1

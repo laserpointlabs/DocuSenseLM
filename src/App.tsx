@@ -45,6 +45,7 @@ function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [documents, setDocuments] = useState<Record<string, DocumentData>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [backendReady, setBackendReady] = useState(false);
   const [docToOpen, setDocToOpen] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,6 +59,7 @@ function App() {
       window.electronAPI.handlePythonReady(() => {
         console.log('App: Received python-ready signal, initializing app...');
         pythonReadyReceived = true;
+        setBackendReady(true);
         fetchConfig();
         fetchDocuments();
         setIsLoading(false);
@@ -97,6 +99,7 @@ function App() {
           const res = await fetch(`http://localhost:${API_PORT}/health`);
           if (res.ok) {
             console.log('App: Health check passed, initializing app');
+            setBackendReady(true);
             fetchConfig();
             fetchDocuments();
             setIsLoading(false);
@@ -122,29 +125,43 @@ function App() {
   }, [isLoading]);
 
   const fetchConfig = () => {
-    fetch(`http://localhost:${API_PORT}/config`)
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Failed to fetch config: ${res.status} ${res.statusText}`);
+    if (!backendReady) return;
+
+    const tryFetch = async () => {
+      const res = await fetch(`http://localhost:${API_PORT}/config`);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch config: ${res.status} ${res.statusText}`);
+      }
+      return res.json();
+    };
+
+    // Retry once quickly to smooth over startup flakiness.
+    (async () => {
+      try {
+        let data: any;
+        try {
+          data = await tryFetch();
+        } catch {
+          await new Promise(r => setTimeout(r, 600));
+          data = await tryFetch();
         }
-        return res.json();
-      })
-      .then(data => {
+
         // Ensure document_types exists
         if (!data.document_types) {
           console.warn('[App] Config missing document_types, initializing empty object');
           data.document_types = {};
         }
         setConfig(data);
-      })
-      .catch(err => {
+      } catch (err) {
         console.error('[App] Error fetching config:', err);
         // Set a minimal config so dashboard can still render with error message
         setConfig({ document_types: {}, dashboard: {} });
-      });
+      }
+    })();
   };
 
   const fetchDocuments = () => {
+    if (!backendReady) return;
     fetch(`http://localhost:${API_PORT}/documents`)
       .then(res => res.json())
       .then(setDocuments)
@@ -153,10 +170,10 @@ function App() {
 
   // Refresh config when switching to dashboard tab to pick up any config changes
   useEffect(() => {
-    if (activeTab === 'dashboard') {
+    if (activeTab === 'dashboard' && backendReady) {
       fetchConfig();
     }
-  }, [activeTab]);
+  }, [activeTab, backendReady]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -1887,30 +1904,55 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
             .slice(-20)  // Last 20 messages (10 pairs)
             .map(m => ({
                 role: m.role === 'ai' ? 'assistant' : 'user',
-                content: m.content
+                content: m.content,
+                // Include sources for assistant messages so the backend can keep retrieval
+                // anchored to the same document set across follow-ups (best-practice multi-turn RAG).
+                sources: m.role === 'ai' ? (m.sources || []) : undefined
             }));
         
         setMessages(prev => [...prev, {role: 'user', content: userMsg}]);
         setInput('');
         setLoading(true);
 
-        try {
+        const payload = {
+            question: userMsg,
+            history: historyForApi  // Send conversation history
+        };
+
+        // One retry helps with transient OpenAI/network hiccups that otherwise feel "flaky" in the UI.
+        const attemptChat = async () => {
             const res = await fetch(`http://localhost:${API_PORT}/chat`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    question: userMsg,
-                    history: historyForApi  // Send conversation history
-                })
+                body: JSON.stringify(payload)
             });
-            const data = await res.json();
+
+            // If backend errors (e.g. 500), try to surface details instead of a generic message.
+            if (!res.ok) {
+                const text = await res.text().catch(() => "");
+                throw new Error(text || `Backend error: ${res.status} ${res.statusText}`);
+            }
+            return res.json();
+        };
+
+        try {
+            let data: any;
+            try {
+                data = await attemptChat();
+            } catch (err) {
+                // Quick retry after a short delay
+                await new Promise(r => setTimeout(r, 800));
+                data = await attemptChat();
+            }
+
             setMessages(prev => [...prev, {
                 role: 'ai',
                 content: data.answer || "Sorry, I couldn't get an answer.",
                 sources: data.sources
             }]);
-        } catch (err) {
-            setMessages(prev => [...prev, {role: 'ai', content: "Error communicating with server."}]);
+        } catch (err: any) {
+            const msg = (err && err.message) ? err.message : "Error communicating with server.";
+            setMessages(prev => [...prev, {role: 'ai', content: `Error communicating with server: ${msg}`}]);
         } finally {
             setLoading(false);
         }
