@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **What you were investigating**
   - Startup console spam + lots of “errors” on launch
   - App sometimes stuck on the loading screen showing “Ready!” but never transitioning into the app
+- **RAG work (where it stands)**
+  - **Hybrid retrieval**: backend uses a Hybrid Search + Reciprocal Rank Fusion (RRF) strategy to combine semantic retrieval (Chroma embeddings) + keyword matching for better recall (`python/server.py`)
+  - **Multi-turn stability**: UI sends prior assistant `sources` back to the backend so follow-ups stay anchored to the same document set (best-practice for multi-turn RAG) (`src/App.tsx`)
+  - **Configurable retrieval knobs**: `rag.collection_name`, `rag.distance_threshold`, and `rag.max_pinned_files` in `config.default.yaml` (overridable via user config/env)
+  - **Prompts**: dedicated chat prompt with explicit citation format (`SOURCES: [...]`) in `prompts.default.yaml`
+  - **Diagnostics & self-heal** (already in backend):
+    - `GET /rag/status` (designed to avoid “silent RAG failure”)
+    - `GET /rag/debug-search` and `GET /rag/chunks` for retrieval/index inspection
+    - `POST /rag/rebuild-missing` to re-index “processed but missing chunks” documents
 - **What we found**
   - One-shot IPC events (`python-ready`) could be **missed by late subscribers** (LoadingScreen got it, App didn’t)
   - React 18 dev StrictMode effect behavior + an init guard caused **startup init to get cancelled** and never re-run
@@ -46,6 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verified the app **loads into the Dashboard** after startup (no longer stuck on loading screen).
 - **Where to pick up tomorrow**
   - **Verify**: cold start from `npm run dev` (no stuck loading, no noisy access-log spam)
+  - **Harden RAG (recommended next steps)**
+    - **Quality / relevance**
+      - Add a small “golden set” of documents + Q&A and a repeatable eval harness (can start as a script + expected sources)
+      - Tune chunking (size/overlap) and retrieval thresholds per doc type; confirm citations match the answer
+    - **Reliability**
+      - Add UI surfacing for RAG health (read `GET /rag/status` and show “RAG degraded” vs “ready”)
+      - Add retry/backoff and clear user messaging for OpenAI rate-limit/timeouts; ensure failures don’t return empty sources silently
+    - **Safety**
+      - Add prompt-injection defenses (treat retrieved text as untrusted; refuse instructions from documents; constrain tool-less behavior)
+      - Ensure “no relevant context” responses are explicit; never fabricate citations
+    - **Cost / performance**
+      - Cache embeddings/indexing work; avoid re-embedding unchanged docs
+      - Add per-session limits (max context tokens / max retrieved chunks) and log token usage for visibility
   - **Triage remaining noise**:
     - Dev CSP warning (expected in dev; should be addressed for production hardening)
     - Dependency DeprecationWarnings (optional cleanup; can be muted/updated later)
