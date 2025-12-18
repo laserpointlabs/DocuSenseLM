@@ -2368,4 +2368,6 @@ async def startup_event():
 if __name__ == "__main__":
     print("Starting FastAPI server...")
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    # Keep our application logs, but avoid spamming stdout with access logs
+    # (e.g. repeated GET /health, /config, /documents from the UI polling).
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", access_log=False)

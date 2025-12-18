@@ -38,8 +38,9 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      // Disable web security in dev mode to avoid CSP issues with Vite
-      webSecurity: !(isDev && !distBuild),
+      // Keep Electron security features enabled (even in dev) to avoid noisy security warnings
+      // and to keep behavior closer to production.
+      webSecurity: true,
     },
   });
 
@@ -47,7 +48,11 @@ function createWindow() {
     // True dev mode - Vite dev server is running
     console.log('Dev mode: Loading from http://localhost:5173');
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    // Don't auto-open DevTools by default; it can emit noisy protocol warnings on startup.
+    // Set ELECTRON_OPEN_DEVTOOLS=1 to open automatically.
+    if (process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
     // Show window immediately in dev mode
     mainWindow.show();
   } else {
@@ -76,11 +81,13 @@ function createWindow() {
     console.error(`Error: ${errorCode} - ${errorDescription}`);
   });
 
-  // Log console messages from renderer
-  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    const levelStr = ['log', 'warning', 'error', 'debug', 'info'][level] || 'unknown';
-    console.log(`[Renderer ${levelStr}]: ${message} (${sourceId}:${line})`);
-  });
+  // Log console messages from renderer (skip in dev to reduce noise; Vite already shows console output)
+  if (!isDev || distBuild) {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levelStr = ['log', 'warning', 'error', 'debug', 'info'][level] || 'unknown';
+      console.log(`[Renderer ${levelStr}]: ${message} (${sourceId}:${line})`);
+    });
+  }
 
   // Log all console output (only in production, skip in dev to avoid conflicts with Vite HMR)
   if (!isDev || distBuild) {
@@ -143,6 +150,9 @@ function startPythonBackend() {
       ...process.env,
       PORT: API_PORT.toString(),
       PYTHONUNBUFFERED: '1',
+      // Reduce noisy dependency DeprecationWarnings that look like "startup errors".
+      // Developers can override by explicitly setting PYTHONWARNINGS in their shell.
+      PYTHONWARNINGS: process.env.PYTHONWARNINGS ?? 'ignore::DeprecationWarning,ignore::PendingDeprecationWarning',
       USER_DATA_DIR: userDataPath
   };
 
@@ -277,7 +287,17 @@ function startPythonBackend() {
   if (pythonProcess.stderr) {
       pythonProcess.stderr.on('data', (data) => {
         const output = data.toString();
-        console.error(`[Python Stderr]: ${output}`);
+        // Many libraries (uvicorn, chromadb, etc.) write non-error logs to stderr.
+        // Only treat as an actual error if it looks like one, otherwise log normally.
+        const looksLikeError =
+          /\bTraceback\b/.test(output) ||
+          /\bERROR\b/.test(output) ||
+          /\bException\b/.test(output);
+        if (looksLikeError) {
+          console.error(`[Python]: ${output}`);
+        } else {
+          console.log(`[Python]: ${output}`);
+        }
         // Also send stderr to renderer for debugging
         if (mainWindow) {
             mainWindow.webContents.send('python-stderr', output);
@@ -308,13 +328,20 @@ function startPythonBackend() {
   const maxHealthChecks = 60; // Increased to 60 attempts max (up to ~4 minutes with backoff)
   let currentDelay = 1000; // Start with 1 second
   const maxDelay = 10000; // Cap delay at 10 seconds
+  let healthCheckStopped = false;
+  let healthCheckTimeout: NodeJS.Timeout | null = null;
 
   // Send initial status update - but wait for window to be ready
   console.log('Python backend starting, will send status updates when window is ready...');
 
   const performHealthCheck = () => {
+    if (healthCheckStopped) return;
     healthCheckAttempts++;
-    console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${currentDelay}ms)`);
+    // Avoid scary-looking "error spam" during normal startup.
+    // Log only occasionally; the renderer has its own loading UI.
+    if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
+      console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${Math.round(currentDelay)}ms)`);
+    }
 
     const req = http.get(`http://127.0.0.1:${API_PORT}/health`, (res) => {
       if (res.statusCode === 200) {
@@ -325,6 +352,11 @@ function startPythonBackend() {
           mainWindow.webContents.send('startup-status', 'Backend ready!');
           mainWindow.webContents.send('python-ready');
         }
+        healthCheckStopped = true;
+        if (healthCheckTimeout) {
+          clearTimeout(healthCheckTimeout);
+          healthCheckTimeout = null;
+        }
         return; // Success - stop checking
       }
       res.resume(); // Consume response
@@ -332,7 +364,10 @@ function startPythonBackend() {
     });
 
     req.on('error', (error) => {
-      console.log(`Health check attempt ${healthCheckAttempts} failed: ${error.message}`);
+      // Normal while the backend is still booting (e.g. ECONNREFUSED).
+      if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
+        console.log(`Backend not ready yet (attempt ${healthCheckAttempts}/${maxHealthChecks}): ${error.message}`);
+      }
 
       if (healthCheckAttempts >= maxHealthChecks) {
         console.error(`✗ Python backend health check failed after ${maxHealthChecks} attempts`);
@@ -341,6 +376,7 @@ function startPythonBackend() {
           mainWindow.webContents.send('startup-status', 'Backend startup failed');
           mainWindow.webContents.send('python-error', `Backend failed to start after ${maxHealthChecks} attempts: ${error.message}`);
         }
+        healthCheckStopped = true;
         return; // Stop checking
       }
 
@@ -354,10 +390,11 @@ function startPythonBackend() {
   };
 
   const scheduleNextCheck = () => {
+    if (healthCheckStopped) return;
     // Exponential backoff with jitter
     currentDelay = Math.min(currentDelay * 1.5 + Math.random() * 1000, maxDelay);
-    console.log(`Scheduling next health check in ${Math.round(currentDelay)}ms`);
-    setTimeout(performHealthCheck, currentDelay);
+    if (healthCheckTimeout) clearTimeout(healthCheckTimeout);
+    healthCheckTimeout = setTimeout(performHealthCheck, currentDelay);
   };
 
   // Start the first health check

@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **First-order product/spec docs**: Added `docs/PRD.md` and `docs/SRS.md` for scope, requirements, interfaces, and acceptance criteria
+- **IPC robustness**: Preload now caches/replays `startup-status`, `python-ready`, and `python-error` so late subscribers don’t miss one-shot events
+
+### Changed
+- **Startup logging noise reduction**
+  - Python: disabled Uvicorn access logs (stops `/health`/`/config`/`/documents` poll spam) and reduced default log level
+  - Electron: throttled health-check logs so normal “backend booting” doesn’t look like an error storm
+  - Electron dev: don’t auto-open DevTools unless `ELECTRON_OPEN_DEVTOOLS=1` (avoids noisy protocol warnings)
+- **Polling**: `/documents` polling runs only when needed (Dashboard/Documents tabs) instead of continuously across all tabs
+
+### Fixed
+- **Duplicate IPC listener registration**: Preload attaches each IPC channel once and fans out to callbacks (prevents StrictMode/dev double-mount spam)
+- **App stuck on LoadingScreen**: Removed a StrictMode-unsafe init guard and made startup initialization idempotent, backed by parallel health-check fallback
+
+### Documentation
+- **Roadmap tracking**: Updated `TODO.md` to reflect completed work (Windows build/install validation, threading metadata lock, bulk upload two-phase flow) and clarified remaining blockers
+
+### Removed
+- Removed a draft `docs/SDD.md` (will be re-added as a consolidated Software Design/Description document once finalized)
+
+### Session recap (2025-12-18)
+- **What you were investigating**
+  - Startup console spam + lots of “errors” on launch
+  - App sometimes stuck on the loading screen showing “Ready!” but never transitioning into the app
+- **What we found**
+  - One-shot IPC events (`python-ready`) could be **missed by late subscribers** (LoadingScreen got it, App didn’t)
+  - React 18 dev StrictMode effect behavior + an init guard caused **startup init to get cancelled** and never re-run
+  - `/health` / `/config` / `/documents` polling + access logs made normal startup look like an error storm
+- **What we changed (high signal)**
+  - **`electron/preload.ts`**: cache + replay latest `startup-status`, `python-ready`, `python-error` to any late subscribers
+  - **`src/App.tsx`**: idempotent startup init (`initializeApp`) and parallel health-check fallback so the UI never stays stuck
+  - **`python/server.py`**: disabled Uvicorn access logs (`access_log=False`) so polling doesn’t flood output
+  - **`electron/main.ts`**: throttled health-check logs; stopped treating all stderr as “error”; gated DevTools auto-open behind `ELECTRON_OPEN_DEVTOOLS=1`
+  - **`src/App.tsx`**: `/documents` polling limited to Dashboard/Documents tabs
+- **Current state**
+  - Verified the app **loads into the Dashboard** after startup (no longer stuck on loading screen).
+- **Where to pick up tomorrow**
+  - **Verify**: cold start from `npm run dev` (no stuck loading, no noisy access-log spam)
+  - **Triage remaining noise**:
+    - Dev CSP warning (expected in dev; should be addressed for production hardening)
+    - Dependency DeprecationWarnings (optional cleanup; can be muted/updated later)
+  - **Docs**: re-create/finish `docs/SDD.md` as the next documentation deliverable if still desired
+  - **Follow-ups (product)**: remaining MVP blockers tracked in `TODO.md` (auto-update verification, PDF viewer white screen, user-facing python-error UI, onboarding, backup/restore verification)
+
 ## [2025-12-09]
 
 ### Added

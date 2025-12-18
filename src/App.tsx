@@ -27,9 +27,9 @@ import { LoadingScreen } from './components/LoadingScreen';
 declare global {
   interface Window {
     electronAPI?: {
-      handleStartupStatus: (callback: (status: string) => void) => void;
-      handlePythonReady: (callback: () => void) => void;
-      handlePythonError: (callback: (error: string) => void) => void;
+      handleStartupStatus: (callback: (status: string) => void) => (() => void) | void;
+      handlePythonReady: (callback: () => void) => (() => void) | void;
+      handlePythonError: (callback: (error: string) => void) => (() => void) | void;
       getUserDataPath?: () => Promise<string>;
       openUserDataFolder?: () => Promise<{ success: boolean; path: string; error: string | null }>;
       downloadBackup?: () => Promise<{ success: boolean; filename?: string; error?: string }>;
@@ -49,21 +49,37 @@ function App() {
   const [docToOpen, setDocToOpen] = useState<string | null>(null);
 
   useEffect(() => {
+    document.title = APP_TITLE;
+  }, []);
+
+  useEffect(() => {
     console.log('App: Setting up IPC listeners');
     console.log('App: window.electronAPI available:', !!window.electronAPI);
 
+    const unsubscribers: Array<() => void> = [];
+
     // Listen for python-ready IPC message
-    let pythonReadyReceived = false;
+    let initialized = false;
+    let cancelled = false;
+
+    const initializeApp = (source: 'ipc' | 'health') => {
+      if (initialized) return;
+      initialized = true;
+      cancelled = true; // stop any in-flight polling loop
+      console.log(`App: Initializing app via ${source}...`);
+      setBackendReady(true);
+      fetchConfig(true);
+      fetchDocuments(true);
+      setIsLoading(false);
+    };
+
     if (window.electronAPI?.handlePythonReady) {
       console.log('App: Setting up python-ready handler');
-      window.electronAPI.handlePythonReady(() => {
-        console.log('App: Received python-ready signal, initializing app...');
-        pythonReadyReceived = true;
-        setBackendReady(true);
-        fetchConfig();
-        fetchDocuments();
-        setIsLoading(false);
+      const unsub = window.electronAPI.handlePythonReady(() => {
+        console.log('App: Received python-ready signal');
+        initializeApp('ipc');
       });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('App: electronAPI.handlePythonReady not available');
     }
@@ -71,41 +87,30 @@ function App() {
     // Set up error listener
     if (window.electronAPI?.handlePythonError) {
       console.log('App: Setting up python error handler');
-        window.electronAPI.handlePythonError((error: string) => {
-            console.error('App: Received python error:', error);
-            // Can't use setShowAlert here as it's outside component scope
-            // Will be handled by the error display in the component
-        });
+      const unsub = window.electronAPI.handlePythonError((error: string) => {
+        console.error('App: Received python error:', error);
+        // Don't leave the user stuck on the loading screen forever.
+        setIsLoading(false);
+      });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('App: electronAPI.handlePythonError not available');
     }
 
-    // Fallback to manual health checking if IPC is not available OR if signal doesn't come within 10 seconds
+    // Always do a lightweight health-check loop in parallel so we never miss a one-shot IPC event.
     const initApp = async () => {
-      // Wait up to 10 seconds for IPC signal if available
-      if (window.electronAPI?.handlePythonReady) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        if (pythonReadyReceived) {
-          console.log('App: IPC signal received, skipping health check fallback');
-          return;
-        }
-        console.log('App: IPC signal timeout, falling back to health check');
-      }
-      
       console.log('App: Starting manual health checking');
       let retries = 0;
       while (retries < 30) {
+        if (cancelled) return;
         try {
           const res = await fetch(`http://localhost:${API_PORT}/health`);
           if (res.ok) {
-            console.log('App: Health check passed, initializing app');
-            setBackendReady(true);
-            fetchConfig();
-            fetchDocuments();
-            setIsLoading(false);
+            console.log('App: Health check passed');
+            initializeApp('health');
             return;
           }
-        } catch (e) {
+        } catch {
           // Ignore error, retry
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -114,18 +119,34 @@ function App() {
       console.error('App: Failed to connect to backend after all retries');
       setIsLoading(false); // Show the app anyway, let user see the error
     };
+
     initApp();
 
-    document.title = APP_TITLE;
+    return () => {
+      cancelled = true;
+      for (const unsub of unsubscribers) {
+        try {
+          unsub();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
-    const interval = setInterval(() => {
-      if (!isLoading) fetchDocuments();
-    }, 5000); 
-    return () => clearInterval(interval);
-  }, [isLoading]);
-
-  const fetchConfig = () => {
+  useEffect(() => {
+    if (isLoading) return;
     if (!backendReady) return;
+    const shouldPollDocs = activeTab === 'dashboard' || activeTab === 'documents';
+    if (!shouldPollDocs) return;
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isLoading, backendReady, activeTab]);
+
+  const fetchConfig = (force = false) => {
+    if (!force && !backendReady) return;
 
     const tryFetch = async () => {
       const res = await fetch(`http://localhost:${API_PORT}/config`);
@@ -160,8 +181,8 @@ function App() {
     })();
   };
 
-  const fetchDocuments = () => {
-    if (!backendReady) return;
+  const fetchDocuments = (force = false) => {
+    if (!force && !backendReady) return;
     fetch(`http://localhost:${API_PORT}/documents`)
       .then(res => res.json())
       .then(setDocuments)
@@ -306,8 +327,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
     );
   }
   
-  // Debug: Log config to see what we're working with
-  console.log('[Dashboard] Config loaded:', JSON.stringify(config.document_types, null, 2));
+  // Debug logging removed (was spamming the console with the full config on every render).
   
   const handleGenerateReport = async () => {
       setGeneratingReport(true);
