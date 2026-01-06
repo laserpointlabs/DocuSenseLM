@@ -7,6 +7,47 @@ import http from 'http';
 
 const isDev = !app.isPackaged;
 
+// ---- Startup metrics + file logging (packaged debugging) ----
+const PROCESS_START_MS = Date.now();
+let logFilePath: string | null = null;
+
+function formatIso(ms: number) {
+  return new Date(ms).toISOString();
+}
+
+function ensureLogFile() {
+  try {
+    if (logFilePath) return;
+    const userData = app.getPath('userData');
+    const dir = path.join(userData, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    logFilePath = path.join(dir, 'main.log');
+  } catch {
+    // ignore
+  }
+}
+
+function writeLog(level: 'INFO' | 'WARN' | 'ERROR' | 'METRIC', message: string) {
+  const line = `${formatIso(Date.now())} [${level}] ${message}\n`;
+  // Always mirror to console (shows up in terminal in dev/win-unpacked).
+  if (level === 'ERROR') console.error(message);
+  else if (level === 'WARN') console.warn(message);
+  else console.log(message);
+
+  // Also append to file for packaged builds.
+  try {
+    ensureLogFile();
+    if (logFilePath) fs.appendFileSync(logFilePath, line, { encoding: 'utf8' });
+  } catch {
+    // ignore
+  }
+}
+
+function metric(name: string, extra?: Record<string, any>) {
+  const base = { ms_since_process_start: Date.now() - PROCESS_START_MS, ...extra };
+  writeLog('METRIC', `${name} ${JSON.stringify(base)}`);
+}
+
 // Helper function to check if running from dist directory
 // In dev mode, __dirname is dist-electron, but we want to treat that as dev
 // Only treat as dist build if it's in a release/win-unpacked directory or packaged
@@ -248,7 +289,8 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
-    console.log('Window ready-to-show event fired');
+    writeLog('INFO', 'Window ready-to-show event fired');
+    metric('renderer_ready_to_show');
     if (mainWindow) {
       mainWindow.show();
     }
@@ -287,7 +329,8 @@ function createWindow() {
 
   // Send startup messages only after renderer finished loading (IPC ready)
   mainWindow.webContents.once('did-finish-load', () => {
-    console.log('Window did-finish-load event fired - sending startup messages');
+    writeLog('INFO', 'Window did-finish-load event fired - sending startup messages');
+    metric('renderer_did_finish_load');
     if (!mainWindow) return;
     const send = (msg: string, delay: number) => {
       setTimeout(() => {
@@ -318,13 +361,14 @@ function startPythonBackend() {
   // Mac: ~/Library/Application Support/nda-tool-lite
   const userDataPath = app.getPath('userData');
   migrateLegacyUserDataIfNeeded(userDataPath);
-  console.log(`User Data Path: ${userDataPath}`);
-  console.log(`isDev: ${isDev}`);
-  console.log(`process.resourcesPath: ${process.resourcesPath}`);
-  console.log(`__dirname: ${__dirname}`);
-  console.log(`isDistBuild(): ${isDistBuild()}`);
+  writeLog('INFO', `User Data Path: ${userDataPath}`);
+  writeLog('INFO', `isDev: ${isDev}`);
+  writeLog('INFO', `process.resourcesPath: ${process.resourcesPath}`);
+  writeLog('INFO', `__dirname: ${__dirname}`);
+  writeLog('INFO', `isDistBuild(): ${isDistBuild()}`);
+  metric('python_spawn_begin');
 
-  console.log(`Starting Python backend on port ${API_PORT}...`);
+  writeLog('INFO', `Starting Python backend on port ${API_PORT}...`);
 
   const env = {
       ...process.env,
@@ -434,7 +478,7 @@ function startPythonBackend() {
   }
 
   // Spawn the Python process
-  console.log(`Spawning Python process...`);
+  writeLog('INFO', 'Spawning Python process...');
 
   const args = scriptPath ? [scriptPath] : [];
   const workingDir = scriptPath ? path.dirname(scriptPath) : path.dirname(pythonExecutable);
@@ -448,10 +492,9 @@ function startPythonBackend() {
 
   pythonProcess.on('error', (error) => {
       const errorMsg = `Failed to start Python process: ${error.message}`;
-      console.error(`ERROR: ${errorMsg}`);
-      console.error(`Error details:`, error);
-      console.error(`Python executable: ${pythonExecutable}`);
-      console.error(`Script path: ${scriptPath}`);
+    writeLog('ERROR', `ERROR: ${errorMsg}`);
+    writeLog('ERROR', `Python executable: ${pythonExecutable}`);
+    writeLog('ERROR', `Script path: ${scriptPath}`);
       if (mainWindow) {
           mainWindow.webContents.send('python-error', errorMsg);
       }
@@ -486,10 +529,10 @@ function startPythonBackend() {
   }
 
   pythonProcess.on('close', (code, signal) => {
-    console.log(`Python process exited with code ${code}, signal ${signal}`);
+    writeLog('INFO', `Python process exited with code ${code}, signal ${signal}`);
     if (code !== 0 && code !== null) {
         const errorMsg = `Python backend crashed with exit code ${code}`;
-        console.error(`ERROR: ${errorMsg}`);
+        writeLog('ERROR', `ERROR: ${errorMsg}`);
         if (mainWindow) {
             mainWindow.webContents.send('python-error', errorMsg);
         }
@@ -497,11 +540,11 @@ function startPythonBackend() {
   });
 
   pythonProcess.on('exit', (code, signal) => {
-    console.log(`Python process exit event - code: ${code}, signal: ${signal}`);
+    writeLog('INFO', `Python process exit event - code: ${code}, signal: ${signal}`);
   });
 
   // Log process info
-  console.log(`Python process spawned with PID: ${pythonProcess.pid}`);
+  writeLog('INFO', `Python process spawned with PID: ${pythonProcess.pid}`);
 
   // Poll health endpoint to verify backend started with exponential backoff
   let healthCheckAttempts = 0;
@@ -512,7 +555,7 @@ function startPythonBackend() {
   let healthCheckTimeout: NodeJS.Timeout | null = null;
 
   // Send initial status update - but wait for window to be ready
-  console.log('Python backend starting, will send status updates when window is ready...');
+  writeLog('INFO', 'Python backend starting, will send status updates when window is ready...');
 
   const performHealthCheck = () => {
     if (healthCheckStopped) return;
@@ -520,12 +563,13 @@ function startPythonBackend() {
     // Avoid scary-looking "error spam" during normal startup.
     // Log only occasionally; the renderer has its own loading UI.
     if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
-      console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${Math.round(currentDelay)}ms)`);
+      writeLog('INFO', `Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${Math.round(currentDelay)}ms)`);
     }
 
     const req = http.get(`http://127.0.0.1:${API_PORT}/health`, (res) => {
       if (res.statusCode === 200) {
-        console.log(`✓ Python backend health check passed after ${healthCheckAttempts} attempts`);
+        writeLog('INFO', `✓ Python backend health check passed after ${healthCheckAttempts} attempts`);
+        metric('backend_health_ok', { attempts: healthCheckAttempts });
 
         // Send final status and ready message
         if (mainWindow) {
@@ -546,12 +590,12 @@ function startPythonBackend() {
     req.on('error', (error) => {
       // Normal while the backend is still booting (e.g. ECONNREFUSED).
       if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
-        console.log(`Backend not ready yet (attempt ${healthCheckAttempts}/${maxHealthChecks}): ${error.message}`);
+        writeLog('INFO', `Backend not ready yet (attempt ${healthCheckAttempts}/${maxHealthChecks}): ${error.message}`);
       }
 
       if (healthCheckAttempts >= maxHealthChecks) {
-        console.error(`✗ Python backend health check failed after ${maxHealthChecks} attempts`);
-        console.error(`Last error: ${error.message}`);
+        writeLog('ERROR', `✗ Python backend health check failed after ${maxHealthChecks} attempts`);
+        writeLog('ERROR', `Last error: ${error.message}`);
         if (mainWindow) {
           mainWindow.webContents.send('startup-status', 'Backend startup failed');
           mainWindow.webContents.send('python-error', `Backend failed to start after ${maxHealthChecks} attempts: ${error.message}`);
