@@ -5,19 +5,19 @@
 ## 🚀 MVP BLOCKERS (Must complete before release)
 
 ### Build & Distribution
-- [ ] - Complete Windows build and test full installation flow
+- [x] - Complete Windows build and test full installation flow
 - [ ] - Test and verify auto-update mechanism works (electron-updater)
-- [ ] - Create Windows installer (NSIS) - test install/update/uninstall
+- [ ] - Create Windows installer (NSIS) - test install/update/uninstall (CI builds installer; still need update/uninstall verification)
 
 ### Critical Bug Fixes
 - [ ] - Fix PDF viewer white screen issue (periodic)
-- [ ] - Chat should not lock when processing in the background
-- [ ] - Add graceful error handling for Python backend crashes
+- [x] - Chat should not lock when processing in the background
+- [ ] - Add graceful error handling for Python backend crashes (surface `python-error` to user-facing UI)
 - [ ] - Handle network errors gracefully (API key validation, OpenAI API failures)
 
 ### Core UX Requirements
 - [ ] - Add first-run onboarding wizard (API key setup, quick start guide)
-- [ ] - Fix flaky processing status when adding/reprocessing documents
+- [x] - Fix flaky processing status when adding/reprocessing documents
 - [ ] - Review and fix slow startup speed
 
 ### Testing Before Release
@@ -175,11 +175,15 @@
 
 ## ✅ COMPLETED
 
+### Build & Distribution
+- [x] - Windows build + install flow validated (local `release/win-unpacked` + CI NSIS pipeline)
+
 ### Bug Fixes
 - [x] - Fix the issue with locking up the text areas after adding a key
 - [x] - Fix bulk drag and drop from desktop (Verified working)
 - [x] - Extracted data search fixed (Hybrid search + conversation memory)
 - [x] - Chat history clearing actually removes data
+- [x] - Thread-safe metadata writes during parallel document processing (prevents `metadata.json` corruption)
 
 ### Features
 - [x] - Document type modification after uploading
@@ -187,6 +191,7 @@
 - [x] - Add direct link to local storage
 - [x] - Show/Hide status in config for dashboard display
 - [x] - Bulk upload with background processing (ThreadPoolExecutor)
+- [x] - Bulk upload: separated upload vs processing phases (upload all → start processing → background status polling)
 
 ### UI/UX
 - [x] - Document collections grouped by type with filtering

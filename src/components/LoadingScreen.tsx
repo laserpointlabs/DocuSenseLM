@@ -9,36 +9,51 @@ export const LoadingScreen = () => {
     console.log('LoadingScreen: Component mounted');
 
     // Set up IPC listeners using the proper contextBridge API
+    const unsubscribers: Array<() => void> = [];
+
     if (window.electronAPI?.handleStartupStatus) {
       console.log('LoadingScreen: Setting up startup status handler');
-      window.electronAPI.handleStartupStatus((status: string) => {
+      const unsub = window.electronAPI.handleStartupStatus((status: string) => {
         console.log('LoadingScreen: Received status update:', status);
         setStatusMessage(status);
       });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('LoadingScreen: electronAPI.handleStartupStatus not available');
     }
 
     if (window.electronAPI?.handlePythonReady) {
       console.log('LoadingScreen: Setting up python ready handler');
-      window.electronAPI.handlePythonReady(() => {
+      const unsub = window.electronAPI.handlePythonReady(() => {
         console.log('LoadingScreen: Backend ready signal received');
         setStatusMessage('Ready!');
       });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('LoadingScreen: electronAPI.handlePythonReady not available');
     }
 
     if (window.electronAPI?.handlePythonError) {
       console.log('LoadingScreen: Setting up python error handler');
-      window.electronAPI.handlePythonError((error: string) => {
+      const unsub = window.electronAPI.handlePythonError((error: string) => {
         console.error('LoadingScreen: Error received:', error);
         setError(error);
         setStatusMessage('Startup failed');
       });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('LoadingScreen: electronAPI.handlePythonError not available');
     }
+
+    return () => {
+      for (const unsub of unsubscribers) {
+        try {
+          unsub();
+        } catch {
+          // ignore
+        }
+      }
+    };
   }, []);
 
   return (
@@ -63,4 +78,3 @@ export const LoadingScreen = () => {
     </div>
   );
 };
-

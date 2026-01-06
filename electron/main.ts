@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, Menu } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -27,6 +27,136 @@ let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;
 const API_PORT = 14242;
 
+// --- Auto-update UX (packaged builds only) ---
+let updateCheckInProgress = false;
+let updateDownloaded = false;
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  // Give users control: check on startup, but don't download until they confirm.
+  autoUpdater.autoDownload = false;
+
+  autoUpdater.on('error', (err) => {
+    updateCheckInProgress = false;
+    const msg = (err && (err as any).message) ? (err as any).message : String(err);
+    console.error(`Auto-updater error: ${msg}`);
+    // Avoid noisy dialogs for transient connectivity issues; user can manually re-check.
+  });
+
+  autoUpdater.on('checking-for-update', () => {
+    updateCheckInProgress = true;
+  });
+
+  autoUpdater.on('update-not-available', async () => {
+    updateCheckInProgress = false;
+    updateDownloaded = false;
+    await dialog.showMessageBox({
+      type: 'info',
+      title: 'No updates',
+      message: 'You are already running the latest version.',
+    });
+  });
+
+  autoUpdater.on('update-available', async () => {
+    updateCheckInProgress = false;
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Update available',
+      message: 'A new version is available. Do you want to download it now?',
+      buttons: ['Download', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (result.response === 0) {
+      try {
+        updateCheckInProgress = true;
+        await autoUpdater.downloadUpdate();
+      } finally {
+        updateCheckInProgress = false;
+      }
+    }
+  });
+
+  autoUpdater.on('update-downloaded', async () => {
+    updateDownloaded = true;
+    updateCheckInProgress = false;
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Update ready',
+      message: 'The update has been downloaded. Restart to install it now?',
+      buttons: ['Restart and install', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+}
+
+function buildAppMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin'
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            { role: 'quit' },
+          ],
+        } as Electron.MenuItemConstructorOptions]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Check for Updates…',
+          enabled: app.isPackaged,
+          click: async () => {
+            if (!app.isPackaged) return;
+            if (updateCheckInProgress) {
+              await dialog.showMessageBox({
+                type: 'info',
+                title: 'Checking…',
+                message: 'An update check is already in progress.',
+              });
+              return;
+            }
+            if (updateDownloaded) {
+              const result = await dialog.showMessageBox({
+                type: 'info',
+                title: 'Update ready',
+                message: 'An update is already downloaded. Restart to install?',
+                buttons: ['Restart and install', 'Later'],
+                defaultId: 0,
+                cancelId: 1,
+              });
+              if (result.response === 0) autoUpdater.quitAndInstall();
+              return;
+            }
+            try {
+              updateCheckInProgress = true;
+              await autoUpdater.checkForUpdates();
+            } finally {
+              updateCheckInProgress = false;
+            }
+          },
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 function createWindow() {
   const distBuild = isDistBuild();
   mainWindow = new BrowserWindow({
@@ -38,8 +168,9 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      // Disable web security in dev mode to avoid CSP issues with Vite
-      webSecurity: !(isDev && !distBuild),
+      // Keep Electron security features enabled (even in dev) to avoid noisy security warnings
+      // and to keep behavior closer to production.
+      webSecurity: true,
     },
   });
 
@@ -47,7 +178,11 @@ function createWindow() {
     // True dev mode - Vite dev server is running
     console.log('Dev mode: Loading from http://localhost:5173');
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    // Don't auto-open DevTools by default; it can emit noisy protocol warnings on startup.
+    // Set ELECTRON_OPEN_DEVTOOLS=1 to open automatically.
+    if (process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
     // Show window immediately in dev mode
     mainWindow.show();
   } else {
@@ -57,9 +192,12 @@ function createWindow() {
       : path.join(__dirname, '../dist/index.html');
     console.log(`Loading HTML from: ${htmlPath}`);
     mainWindow.loadFile(htmlPath);
-    // Check for updates only if packaged
+    // Auto-updates are only meaningful for packaged apps installed from an installer (e.g. NSIS).
+    // Check quietly on startup; user controls download/install via dialogs.
     if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify();
+      setTimeout(() => {
+        autoUpdater.checkForUpdates().catch(() => {});
+      }, 2000);
     }
   }
 
@@ -76,11 +214,13 @@ function createWindow() {
     console.error(`Error: ${errorCode} - ${errorDescription}`);
   });
 
-  // Log console messages from renderer
-  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    const levelStr = ['log', 'warning', 'error', 'debug', 'info'][level] || 'unknown';
-    console.log(`[Renderer ${levelStr}]: ${message} (${sourceId}:${line})`);
-  });
+  // Log console messages from renderer (skip in dev to reduce noise; Vite already shows console output)
+  if (!isDev || distBuild) {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levelStr = ['log', 'warning', 'error', 'debug', 'info'][level] || 'unknown';
+      console.log(`[Renderer ${levelStr}]: ${message} (${sourceId}:${line})`);
+    });
+  }
 
   // Log all console output (only in production, skip in dev to avoid conflicts with Vite HMR)
   if (!isDev || distBuild) {
@@ -143,6 +283,9 @@ function startPythonBackend() {
       ...process.env,
       PORT: API_PORT.toString(),
       PYTHONUNBUFFERED: '1',
+      // Reduce noisy dependency DeprecationWarnings that look like "startup errors".
+      // Developers can override by explicitly setting PYTHONWARNINGS in their shell.
+      PYTHONWARNINGS: process.env.PYTHONWARNINGS ?? 'ignore::DeprecationWarning,ignore::PendingDeprecationWarning',
       USER_DATA_DIR: userDataPath
   };
 
@@ -172,12 +315,12 @@ function startPythonBackend() {
       // In packaged apps, extraResources are always in process.resourcesPath
       const pythonBasePath = path.join(process.resourcesPath, 'python');
       scriptPath = path.join(pythonBasePath, 'server.py');
-      
+
       // Check for Python embeddable distribution first (CI builds - relocatable)
       const embedPython = process.platform === 'win32'
           ? path.join(pythonBasePath, 'python_embed', 'python.exe')
           : path.join(pythonBasePath, 'python_embed', 'bin', 'python3');
-      
+
       if (fs.existsSync(embedPython)) {
           console.log(`Production mode - Using Python embeddable distribution`);
           console.log(`Embed Python: ${embedPython}`);
@@ -185,16 +328,16 @@ function startPythonBackend() {
           pythonExecutable = embedPython;
       } else {
           // Fall back to venv-based approach (local builds)
-          const venvPath = process.platform === 'win32' 
+          const venvPath = process.platform === 'win32'
               ? path.join(pythonBasePath, 'venv', 'Scripts', 'python.exe')
               : path.join(pythonBasePath, 'venv', 'bin', 'python');
-          
+
           console.log(`Production/Dist mode - Python base: ${pythonBasePath}`);
           console.log(`Production/Dist mode - Python venv: ${venvPath}`);
           console.log(`Production/Dist mode - Script: ${scriptPath}`);
           console.log(`Python venv exists: ${fs.existsSync(venvPath)}`);
           console.log(`Script exists: ${fs.existsSync(scriptPath)}`);
-          
+
           if (!fs.existsSync(scriptPath)) {
               console.error(`ERROR: Python script not found at ${scriptPath}`);
               if (mainWindow) {
@@ -202,7 +345,7 @@ function startPythonBackend() {
               }
               return;
           }
-          
+
           // Try venv first, fall back to system Python if venv doesn't exist
           if (fs.existsSync(venvPath)) {
               console.log(`Using Python venv: ${venvPath}`);
@@ -213,7 +356,7 @@ function startPythonBackend() {
           }
       }
   }
-  
+
   // Verify paths before spawning
   console.log(`About to spawn Python:`);
   console.log(`  Executable: ${pythonExecutable}`);
@@ -224,7 +367,7 @@ function startPythonBackend() {
   }
   console.log(`  Working directory: ${process.cwd()}`);
   console.log(`  Resources path: ${process.resourcesPath}`);
-  
+
   if (!fs.existsSync(pythonExecutable)) {
       const errorMsg = `Python executable not found at ${pythonExecutable}`;
       console.error(`ERROR: ${errorMsg}`);
@@ -233,7 +376,7 @@ function startPythonBackend() {
       }
       return;
   }
-  
+
   if (scriptPath && !fs.existsSync(scriptPath)) {
       const errorMsg = `Python script not found at ${scriptPath}`;
       console.error(`ERROR: ${errorMsg}`);
@@ -242,7 +385,7 @@ function startPythonBackend() {
       }
       return;
   }
-  
+
   // Spawn the Python process
   console.log(`Spawning Python process...`);
 
@@ -255,7 +398,7 @@ function startPythonBackend() {
     detached: false,
     cwd: workingDir
   });
-  
+
   pythonProcess.on('error', (error) => {
       const errorMsg = `Failed to start Python process: ${error.message}`;
       console.error(`ERROR: ${errorMsg}`);
@@ -277,14 +420,24 @@ function startPythonBackend() {
   if (pythonProcess.stderr) {
       pythonProcess.stderr.on('data', (data) => {
         const output = data.toString();
-        console.error(`[Python Stderr]: ${output}`);
+        // Many libraries (uvicorn, chromadb, etc.) write non-error logs to stderr.
+        // Only treat as an actual error if it looks like one, otherwise log normally.
+        const looksLikeError =
+          /\bTraceback\b/.test(output) ||
+          /\bERROR\b/.test(output) ||
+          /\bException\b/.test(output);
+        if (looksLikeError) {
+          console.error(`[Python]: ${output}`);
+        } else {
+          console.log(`[Python]: ${output}`);
+        }
         // Also send stderr to renderer for debugging
         if (mainWindow) {
             mainWindow.webContents.send('python-stderr', output);
         }
       });
   }
-  
+
   pythonProcess.on('close', (code, signal) => {
     console.log(`Python process exited with code ${code}, signal ${signal}`);
     if (code !== 0 && code !== null) {
@@ -295,26 +448,33 @@ function startPythonBackend() {
         }
     }
   });
-  
+
   pythonProcess.on('exit', (code, signal) => {
     console.log(`Python process exit event - code: ${code}, signal: ${signal}`);
   });
-  
+
   // Log process info
   console.log(`Python process spawned with PID: ${pythonProcess.pid}`);
-  
+
   // Poll health endpoint to verify backend started with exponential backoff
   let healthCheckAttempts = 0;
   const maxHealthChecks = 60; // Increased to 60 attempts max (up to ~4 minutes with backoff)
   let currentDelay = 1000; // Start with 1 second
   const maxDelay = 10000; // Cap delay at 10 seconds
+  let healthCheckStopped = false;
+  let healthCheckTimeout: NodeJS.Timeout | null = null;
 
   // Send initial status update - but wait for window to be ready
   console.log('Python backend starting, will send status updates when window is ready...');
 
   const performHealthCheck = () => {
+    if (healthCheckStopped) return;
     healthCheckAttempts++;
-    console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${currentDelay}ms)`);
+    // Avoid scary-looking "error spam" during normal startup.
+    // Log only occasionally; the renderer has its own loading UI.
+    if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
+      console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${Math.round(currentDelay)}ms)`);
+    }
 
     const req = http.get(`http://127.0.0.1:${API_PORT}/health`, (res) => {
       if (res.statusCode === 200) {
@@ -325,6 +485,11 @@ function startPythonBackend() {
           mainWindow.webContents.send('startup-status', 'Backend ready!');
           mainWindow.webContents.send('python-ready');
         }
+        healthCheckStopped = true;
+        if (healthCheckTimeout) {
+          clearTimeout(healthCheckTimeout);
+          healthCheckTimeout = null;
+        }
         return; // Success - stop checking
       }
       res.resume(); // Consume response
@@ -332,7 +497,10 @@ function startPythonBackend() {
     });
 
     req.on('error', (error) => {
-      console.log(`Health check attempt ${healthCheckAttempts} failed: ${error.message}`);
+      // Normal while the backend is still booting (e.g. ECONNREFUSED).
+      if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
+        console.log(`Backend not ready yet (attempt ${healthCheckAttempts}/${maxHealthChecks}): ${error.message}`);
+      }
 
       if (healthCheckAttempts >= maxHealthChecks) {
         console.error(`✗ Python backend health check failed after ${maxHealthChecks} attempts`);
@@ -341,6 +509,7 @@ function startPythonBackend() {
           mainWindow.webContents.send('startup-status', 'Backend startup failed');
           mainWindow.webContents.send('python-error', `Backend failed to start after ${maxHealthChecks} attempts: ${error.message}`);
         }
+        healthCheckStopped = true;
         return; // Stop checking
       }
 
@@ -354,10 +523,11 @@ function startPythonBackend() {
   };
 
   const scheduleNextCheck = () => {
+    if (healthCheckStopped) return;
     // Exponential backoff with jitter
     currentDelay = Math.min(currentDelay * 1.5 + Math.random() * 1000, maxDelay);
-    console.log(`Scheduling next health check in ${Math.round(currentDelay)}ms`);
-    setTimeout(performHealthCheck, currentDelay);
+    if (healthCheckTimeout) clearTimeout(healthCheckTimeout);
+    healthCheckTimeout = setTimeout(performHealthCheck, currentDelay);
   };
 
   // Start the first health check
@@ -366,6 +536,8 @@ function startPythonBackend() {
 
 app.whenReady().then(() => {
   console.log('App is ready, creating window first...');
+  setupAutoUpdater();
+  buildAppMenu();
   createWindow();
   console.log('Starting backend...');
   startPythonBackend();
@@ -419,9 +591,9 @@ ipcMain.handle('download-backup', async () => {
         if (item.getURL() !== url) return;
 
         const filename = item.getFilename();
-        
+
         console.log('[Backup Download] will-download triggered for:', filename);
-        
+
         // Set a temporary path immediately to prevent Electron's default save dialog
         const tempPath = path.join(app.getPath('temp'), filename);
         console.log('[Backup Download] Setting temp path:', tempPath);

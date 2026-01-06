@@ -27,9 +27,9 @@ import { LoadingScreen } from './components/LoadingScreen';
 declare global {
   interface Window {
     electronAPI?: {
-      handleStartupStatus: (callback: (status: string) => void) => void;
-      handlePythonReady: (callback: () => void) => void;
-      handlePythonError: (callback: (error: string) => void) => void;
+      handleStartupStatus: (callback: (status: string) => void) => (() => void) | void;
+      handlePythonReady: (callback: () => void) => (() => void) | void;
+      handlePythonError: (callback: (error: string) => void) => (() => void) | void;
       getUserDataPath?: () => Promise<string>;
       openUserDataFolder?: () => Promise<{ success: boolean; path: string; error: string | null }>;
       downloadBackup?: () => Promise<{ success: boolean; filename?: string; error?: string }>;
@@ -45,23 +45,41 @@ function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [documents, setDocuments] = useState<Record<string, DocumentData>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [backendReady, setBackendReady] = useState(false);
   const [docToOpen, setDocToOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = APP_TITLE;
+  }, []);
 
   useEffect(() => {
     console.log('App: Setting up IPC listeners');
     console.log('App: window.electronAPI available:', !!window.electronAPI);
 
+    const unsubscribers: Array<() => void> = [];
+
     // Listen for python-ready IPC message
-    let pythonReadyReceived = false;
+    let initialized = false;
+    let cancelled = false;
+
+    const initializeApp = (source: 'ipc' | 'health') => {
+      if (initialized) return;
+      initialized = true;
+      cancelled = true; // stop any in-flight polling loop
+      console.log(`App: Initializing app via ${source}...`);
+      setBackendReady(true);
+      fetchConfig(true);
+      fetchDocuments(true);
+      setIsLoading(false);
+    };
+
     if (window.electronAPI?.handlePythonReady) {
       console.log('App: Setting up python-ready handler');
-      window.electronAPI.handlePythonReady(() => {
-        console.log('App: Received python-ready signal, initializing app...');
-        pythonReadyReceived = true;
-        fetchConfig();
-        fetchDocuments();
-        setIsLoading(false);
+      const unsub = window.electronAPI.handlePythonReady(() => {
+        console.log('App: Received python-ready signal');
+        initializeApp('ipc');
       });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('App: electronAPI.handlePythonReady not available');
     }
@@ -69,40 +87,30 @@ function App() {
     // Set up error listener
     if (window.electronAPI?.handlePythonError) {
       console.log('App: Setting up python error handler');
-        window.electronAPI.handlePythonError((error: string) => {
-            console.error('App: Received python error:', error);
-            // Can't use setShowAlert here as it's outside component scope
-            // Will be handled by the error display in the component
-        });
+      const unsub = window.electronAPI.handlePythonError((error: string) => {
+        console.error('App: Received python error:', error);
+        // Don't leave the user stuck on the loading screen forever.
+        setIsLoading(false);
+      });
+      if (typeof unsub === 'function') unsubscribers.push(unsub);
     } else {
       console.log('App: electronAPI.handlePythonError not available');
     }
 
-    // Fallback to manual health checking if IPC is not available OR if signal doesn't come within 10 seconds
+    // Always do a lightweight health-check loop in parallel so we never miss a one-shot IPC event.
     const initApp = async () => {
-      // Wait up to 10 seconds for IPC signal if available
-      if (window.electronAPI?.handlePythonReady) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        if (pythonReadyReceived) {
-          console.log('App: IPC signal received, skipping health check fallback');
-          return;
-        }
-        console.log('App: IPC signal timeout, falling back to health check');
-      }
-      
       console.log('App: Starting manual health checking');
       let retries = 0;
       while (retries < 30) {
+        if (cancelled) return;
         try {
           const res = await fetch(`http://localhost:${API_PORT}/health`);
           if (res.ok) {
-            console.log('App: Health check passed, initializing app');
-            fetchConfig();
-            fetchDocuments();
-            setIsLoading(false);
+            console.log('App: Health check passed');
+            initializeApp('health');
             return;
           }
-        } catch (e) {
+        } catch {
           // Ignore error, retry
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -111,40 +119,70 @@ function App() {
       console.error('App: Failed to connect to backend after all retries');
       setIsLoading(false); // Show the app anyway, let user see the error
     };
+
     initApp();
 
-    document.title = APP_TITLE;
-
-    const interval = setInterval(() => {
-      if (!isLoading) fetchDocuments();
-    }, 5000); 
-    return () => clearInterval(interval);
-  }, [isLoading]);
-
-  const fetchConfig = () => {
-    fetch(`http://localhost:${API_PORT}/config`)
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Failed to fetch config: ${res.status} ${res.statusText}`);
+    return () => {
+      cancelled = true;
+      for (const unsub of unsubscribers) {
+        try {
+          unsub();
+        } catch {
+          // ignore
         }
-        return res.json();
-      })
-      .then(data => {
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!backendReady) return;
+    const shouldPollDocs = activeTab === 'dashboard' || activeTab === 'documents';
+    if (!shouldPollDocs) return;
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isLoading, backendReady, activeTab]);
+
+  const fetchConfig = (force = false) => {
+    if (!force && !backendReady) return;
+
+    const tryFetch = async () => {
+      const res = await fetch(`http://localhost:${API_PORT}/config`);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch config: ${res.status} ${res.statusText}`);
+      }
+      return res.json();
+    };
+
+    // Retry once quickly to smooth over startup flakiness.
+    (async () => {
+      try {
+        let data: any;
+        try {
+          data = await tryFetch();
+        } catch {
+          await new Promise(r => setTimeout(r, 600));
+          data = await tryFetch();
+        }
+
         // Ensure document_types exists
         if (!data.document_types) {
           console.warn('[App] Config missing document_types, initializing empty object');
           data.document_types = {};
         }
         setConfig(data);
-      })
-      .catch(err => {
+      } catch (err) {
         console.error('[App] Error fetching config:', err);
         // Set a minimal config so dashboard can still render with error message
         setConfig({ document_types: {}, dashboard: {} });
-      });
+      }
+    })();
   };
 
-  const fetchDocuments = () => {
+  const fetchDocuments = (force = false) => {
+    if (!force && !backendReady) return;
     fetch(`http://localhost:${API_PORT}/documents`)
       .then(res => res.json())
       .then(setDocuments)
@@ -153,10 +191,10 @@ function App() {
 
   // Refresh config when switching to dashboard tab to pick up any config changes
   useEffect(() => {
-    if (activeTab === 'dashboard') {
+    if (activeTab === 'dashboard' && backendReady) {
       fetchConfig();
     }
-  }, [activeTab]);
+  }, [activeTab, backendReady]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -172,40 +210,40 @@ function App() {
           </h1>
           <p className="text-xs text-slate-400 mt-1">Version {APP_VERSION}</p>
         </div>
-        
+
         <nav className="flex-1 space-y-2">
-          <NavItem 
-            icon={<LayoutDashboard />} 
-            label="Dashboard" 
-            active={activeTab === 'dashboard'} 
-            onClick={() => setActiveTab('dashboard')} 
+          <NavItem
+            icon={<LayoutDashboard />}
+            label="Dashboard"
+            active={activeTab === 'dashboard'}
+            onClick={() => setActiveTab('dashboard')}
           />
-          <NavItem 
-            icon={<FileText />} 
-            label="Documents" 
-            active={activeTab === 'documents'} 
-            onClick={() => setActiveTab('documents')} 
+          <NavItem
+            icon={<FileText />}
+            label="Documents"
+            active={activeTab === 'documents'}
+            onClick={() => setActiveTab('documents')}
           />
-          <NavItem 
-            icon={<MessageSquare />} 
-            label="Chat & Ask" 
-            active={activeTab === 'chat'} 
-            onClick={() => setActiveTab('chat')} 
+          <NavItem
+            icon={<MessageSquare />}
+            label="Chat & Ask"
+            active={activeTab === 'chat'}
+            onClick={() => setActiveTab('chat')}
           />
-          <NavItem 
-            icon={<File />} 
-            label="Templates" 
-            active={activeTab === 'templates'} 
-            onClick={() => setActiveTab('templates')} 
+          <NavItem
+            icon={<File />}
+            label="Templates"
+            active={activeTab === 'templates'}
+            onClick={() => setActiveTab('templates')}
           />
-          <NavItem 
-            icon={<Database />} 
-            label="Settings & Data" 
-            active={activeTab === 'settings'} 
-            onClick={() => setActiveTab('settings')} 
+          <NavItem
+            icon={<Database />}
+            label="Settings & Data"
+            active={activeTab === 'settings'}
+            onClick={() => setActiveTab('settings')}
           />
         </nav>
-        
+
         <div className="mt-auto pt-4 border-t border-slate-700">
            <div className="flex items-center gap-2 text-slate-400 text-sm">
              <div className="w-2 h-2 rounded-full bg-green-500"></div>
@@ -217,9 +255,9 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-8 relative">
         {activeTab === 'dashboard' && (
-            <DashboardView 
-                config={config} 
-                documents={documents} 
+            <DashboardView
+                config={config}
+                documents={documents}
                 onOpenDocument={(filename) => {
                     setDocToOpen(filename);
                     setActiveTab('documents');
@@ -231,22 +269,22 @@ function App() {
             />
         )}
         {activeTab === 'documents' && (
-            <DocumentsView 
-                config={config} 
-                documents={documents} 
-                refresh={fetchDocuments} 
+            <DocumentsView
+                config={config}
+                documents={documents}
+                refresh={fetchDocuments}
                 initialPreview={docToOpen}
                 onClearPreview={() => setDocToOpen(null)}
             />
         )}
         {activeTab === 'chat' && (
-            <ChatView 
-                config={config} 
-                documents={documents} 
+            <ChatView
+                config={config}
+                documents={documents}
                 onOpenDocument={(filename) => {
                     setDocToOpen(filename);
                     setActiveTab('documents');
-                }} 
+                }}
             />
         )}
         {activeTab === 'templates' && <TemplatesView />}
@@ -258,7 +296,7 @@ function App() {
 
 function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${
         active ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
@@ -276,7 +314,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
 
 
   if (!config) return <div>Loading configuration...</div>;
-  
+
   // Ensure document_types exists and is an object
   if (!config.document_types || typeof config.document_types !== 'object') {
     return (
@@ -288,10 +326,9 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
       </div>
     );
   }
-  
-  // Debug: Log config to see what we're working with
-  console.log('[Dashboard] Config loaded:', JSON.stringify(config.document_types, null, 2));
-  
+
+  // Debug logging removed (was spamming the console with the full config on every render).
+
   const handleGenerateReport = async () => {
       setGeneratingReport(true);
       try {
@@ -305,7 +342,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
           setGeneratingReport(false);
       }
   };
-  
+
   // Filter documents based on their document type's show_on_dashboard setting from config
   const docList = Object.values(documents).filter(d => {
     const docTypeConfig = config.document_types[d.doc_type];
@@ -317,8 +354,8 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
     const showOnDashboard = docTypeConfig.show_on_dashboard;
     // Explicitly check for false values (boolean false, string "false")
     // null/undefined should default to true (show)
-    const shouldShow = showOnDashboard !== false && 
-                       showOnDashboard !== "false" && 
+    const shouldShow = showOnDashboard !== false &&
+                       showOnDashboard !== "false" &&
                        showOnDashboard !== "False";
     if (!shouldShow) {
       console.log(`[Dashboard] Hiding document ${d.filename} - doc_type: ${d.doc_type}, show_on_dashboard:`, showOnDashboard, `(type: ${typeof showOnDashboard})`);
@@ -364,7 +401,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
         <h2 className="text-2xl font-bold">Dashboard</h2>
         <div className="flex gap-2">
           {onRefreshConfig && (
-            <button 
+            <button
                 onClick={() => {
                   console.log('[Dashboard] Manual config refresh triggered');
                   onRefreshConfig();
@@ -376,7 +413,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
                 Refresh Config
             </button>
           )}
-          <button 
+          <button
               onClick={handleGenerateReport}
               disabled={generatingReport}
               className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50"
@@ -394,7 +431,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
       >
           <div className="flex flex-col gap-4">
               <div className="bg-gray-50 p-4 rounded-lg text-sm font-mono whitespace-pre-wrap border border-gray-200 select-all max-h-[60vh] overflow-y-auto prose prose-sm max-w-none">
-                  <ReactMarkdown 
+                  <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
                           // Reduce vertical spacing in lists and paragraphs
@@ -408,7 +445,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
                   </ReactMarkdown>
               </div>
               <div className="flex justify-end">
-                  <button 
+                  <button
                     onClick={() => {
                         if (report) navigator.clipboard.writeText(report);
                     }}
@@ -419,7 +456,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
               </div>
           </div>
       </Modal>
-      
+
       {Object.keys(config.document_types).length === 0 ? (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
           <p className="text-yellow-800 font-medium">No document types configured.</p>
@@ -433,8 +470,8 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
             const showOnDashboard = type.show_on_dashboard;
             // Explicitly check for false values (boolean false, string "false")
             // null/undefined should default to true (show)
-            const shouldShow = showOnDashboard !== false && 
-                               showOnDashboard !== "false" && 
+            const shouldShow = showOnDashboard !== false &&
+                               showOnDashboard !== "false" &&
                                showOnDashboard !== "False";
             if (!shouldShow) {
               console.log(`[Dashboard] Hiding document type card: ${key}, show_on_dashboard:`, showOnDashboard, `(type: ${typeof showOnDashboard})`);
@@ -446,7 +483,7 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
           const expiring = getExpiringCount(key, 90);
           const expiringDocs = getExpiringDocs(key, 90);
           const reviewCount = docList.filter(d => d.doc_type === key && (d.workflow_status === 'in_review' || !d.workflow_status)).length;
-          
+
           return (
           <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
             <h3 className="text-lg font-semibold text-gray-700">{type.name}s</h3>
@@ -458,14 +495,14 @@ function DashboardView({ config, documents, onOpenDocument, onRefreshConfig }: {
                 <div className="text-red-500 font-medium">{expiring} expiring in 90 days</div>
                 <div className="text-blue-500">{reviewCount} in review</div>
              </div>
-             
+
              {expiringDocs.length > 0 && (
                  <div className="mt-auto border-t border-gray-100 pt-3">
                      <p className="text-xs text-gray-500 font-semibold mb-2">Expiring Soon:</p>
                      <ul className="space-y-2">
                          {expiringDocs.map(doc => (
                              <li key={doc.filename}>
-                                 <button 
+                                 <button
                                     onClick={() => onOpenDocument(doc.filename)}
                                     className="text-xs text-left text-red-600 hover:underline truncate w-full block"
                                     title={doc.filename}
@@ -497,7 +534,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const [showArchived, setShowArchived] = useState(false);
     const [editingType, setEditingType] = useState<string | null>(null);
     const [filterDocType, setFilterDocType] = useState<string>(""); // Filter by document type
-    
+
     // Upload modal state
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -533,20 +570,20 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     // Handle file selection - show modal instead of uploading immediately
     const handleFileSelection = (files: File[]) => {
         // Filter to only PDF and DOCX files
-        const validFiles = files.filter(file => 
+        const validFiles = files.filter(file =>
             file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx')
         );
-        
+
         if (validFiles.length === 0) {
             setShowAlert({ title: "Invalid File Type", message: "Please select PDF or DOCX files only." });
             return;
         }
-        
+
         // Set default type to first available type if config is loaded
         if (config && Object.keys(config.document_types).length > 0) {
             setSelectedType(Object.keys(config.document_types)[0]);
         }
-        
+
         setPendingFiles(validFiles);
         setShowUploadModal(true);
     };
@@ -577,20 +614,20 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             progress[file.name] = 'uploading';
         });
         setUploadProgress(progress);
-        
+
         try {
             // PHASE 1: Upload ALL files in parallel (fast!)
             console.log(`[Upload] Starting parallel upload of ${filesToUpload.length} files`);
             const uploadPromises = filesToUpload.map(async (file) => {
                 const formData = new FormData();
                 formData.append("file", file);
-                
+
                 try {
                     const response = await fetch(`http://localhost:${API_PORT}/upload?doc_type=${selectedType}&skip_processing=true`, {
                         method: "POST",
                         body: formData
                     });
-                    
+
                     if (response.ok) {
                         setUploadProgress(prev => ({ ...prev, [file.name]: 'uploaded' }));
                         return { success: true, filename: file.name };
@@ -611,9 +648,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
             console.log(`[Upload] Completed ${successfulUploads.length}/${filesToUpload.length} uploads`);
 
             if (successfulUploads.length === 0) {
-                setShowAlert({ 
-                    title: "Upload Failed", 
-                    message: "Failed to upload any files. Please try again." 
+                setShowAlert({
+                    title: "Upload Failed",
+                    message: "Failed to upload any files. Please try again."
                 });
                 setUploading(false);
                 cleanupUpload();
@@ -622,47 +659,47 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
 
             // Refresh to show uploaded documents
             refresh();
-            
+
             // PHASE 2: Trigger processing for all uploaded files
             console.log(`[Upload] Starting processing phase for ${successfulUploads.length} files`);
-            
+
             // Update UI to show processing phase
             successfulUploads.forEach(result => {
                 setUploadProgress(prev => ({ ...prev, [result.filename]: 'processing' }));
             });
-            
+
             // Trigger batch processing on backend
             try {
                 const processResponse = await fetch(`http://localhost:${API_PORT}/start-processing`, {
                     method: "POST"
                 });
-                
+
                 if (!processResponse.ok) {
                     console.error("[Upload] Failed to start processing");
                 }
             } catch (err) {
                 console.error("[Upload] Error starting processing:", err);
             }
-            
+
             // Set uploading to false - user can now close modal or continue working
             setUploading(false);
             setMonitoringProcessing(true);
-            
+
             // Poll for processing completion - modal stays open to monitor progress
             const pollProcessingStatus = async () => {
                 const maxAttempts = 180; // 3 minutes max
                 let attempts = 0;
-                
+
                 const checkStatus = async () => {
                     attempts++;
                     try {
                         const response = await fetch(`http://localhost:${API_PORT}/documents`);
                         const docs = await response.json();
-                        
+
                         // Check status of all uploaded files
                         let allProcessed = true;
                         const statuses: Record<string, string> = {};
-                        
+
                         filesToUpload.forEach(file => {
                             const doc = docs[file.name];
                             if (!doc) {
@@ -671,7 +708,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                 statuses[file.name] = 'not_found';
                             } else {
                                 statuses[file.name] = doc.status;
-                                
+
                                 if (doc.status === 'processed') {
                                     // This one is done - mark as completed
                                     setUploadProgress(prev => {
@@ -692,10 +729,10 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                 }
                             }
                         });
-                        
+
                         // Refresh documents list to show progress
                         refresh();
-                        
+
                         // If all are processed, close modal immediately
                         if (allProcessed) {
                             console.log("[Upload] All files processed, closing modal");
@@ -712,19 +749,19 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             }, 100);
                             return;
                         }
-                        
+
                         if (attempts >= maxAttempts) {
                             console.log("[Upload] Processing timeout reached");
                             setMonitoringProcessing(false);
                             refresh(); // Final refresh
                             cleanupUpload();
-                            setShowAlert({ 
-                                title: "Processing Timeout", 
-                                message: "Some documents are still processing. They will continue in the background. Check their status in the documents list." 
+                            setShowAlert({
+                                title: "Processing Timeout",
+                                message: "Some documents are still processing. They will continue in the background. Check their status in the documents list."
                             });
                             return;
                         }
-                        
+
                         // Check again in 2 seconds
                         setTimeout(checkStatus, 2000);
                     } catch (err) {
@@ -738,11 +775,11 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         }
                     }
                 };
-                
+
                 // Start checking after a brief delay to let backend update status
                 setTimeout(checkStatus, 2000);
             };
-            
+
             // Start polling for processing completion
             pollProcessingStatus();
         } catch (err) {
@@ -797,22 +834,22 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         if (!filename) return;
         setShowReprocessConfirm(null);
         setReprocessingFilename(filename);
-        
+
         // IMMEDIATELY set status override to "processing" for instant UI feedback
         setProcessingOverride(prev => ({ ...prev, [filename]: 'processing' }));
-        
+
         try {
             // URL encode the filename to handle spaces and special characters
             const encodedFilename = encodeURIComponent(filename);
             const url = `http://localhost:${API_PORT}/reprocess/${encodedFilename}`;
             console.log(`[Reprocess] Calling API: ${url}`);
-            
+
             const response = await fetch(url, {
                 method: "POST"
             });
-            
+
             console.log(`[Reprocess] Response status: ${response.status}`);
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error(`[Reprocess] Error response: ${errorText}`);
@@ -824,18 +861,18 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 });
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
-            
+
             const result = await response.json();
             console.log(`[Reprocess] Success:`, result);
-            
+
             // Refresh to get actual backend status (will likely still be processing)
             refresh();
-            
+
             // Poll for status updates until processing completes
             const pollStatus = async () => {
                 let attempts = 0;
                 const maxAttempts = 180; // 3 minutes max (like bulk upload)
-                
+
                 const checkStatus = async () => {
                     attempts++;
                     try {
@@ -843,10 +880,10 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         const response = await fetch(`http://localhost:${API_PORT}/documents`);
                         const docs = await response.json();
                         const currentDoc = docs[filename];
-                        
+
                         // Update the local state
                         refresh();
-                        
+
                         // Check if processing is complete
                         if (currentDoc && currentDoc.status === 'processed') {
                             console.log(`[Reprocess] ${filename} processing complete!`);
@@ -860,7 +897,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             refresh(); // Final refresh to update UI
                             return; // Done
                         }
-                        
+
                         // If document doesn't exist, stop polling
                         if (!currentDoc) {
                             console.warn(`Document ${filename} not found in API response`);
@@ -873,7 +910,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             });
                             return;
                         }
-                        
+
                         // If still processing and haven't exceeded max attempts, check again
                         if (attempts < maxAttempts && (currentDoc.status === 'processing' || currentDoc.status === 'pending')) {
                             console.log(`[Reprocess] ${filename} still processing (${currentDoc.status}), attempt ${attempts}/${maxAttempts}`);
@@ -906,12 +943,12 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         });
                     }
                 };
-                
+
                 // Start checking immediately
                 console.log(`[Reprocess] Starting status polling for ${filename}`);
                 checkStatus();
             };
-            
+
             pollStatus();
         } catch (err) {
             console.error("[Reprocess] Failed to start reprocessing:", err);
@@ -985,7 +1022,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
 
     const handleSaveMetadata = async () => {
         if (!editingMetadataFilename || !editingMetadata) return;
-        
+
         setSavingMetadata(true);
         try {
             const encodedFilename = encodeURIComponent(editingMetadataFilename);
@@ -994,12 +1031,12 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ competency_answers: editingMetadata })
             });
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
-            
+
             // Success
             setToast({ message: "Metadata updated successfully", type: "success" });
             setTimeout(() => setToast(null), 3000);
@@ -1022,22 +1059,22 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     // Utility function to parse various date formats and convert to YYYY-MM-DD
     const parseDateForInput = (dateStr: string): string => {
         if (!dateStr || typeof dateStr !== 'string') return "";
-        
+
         const trimmed = dateStr.trim();
         if (!trimmed) return "";
-        
+
         // Already in YYYY-MM-DD format
         if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
             return trimmed;
         }
-        
+
         const monthNames: Record<string, number> = {
             'jan': 0, 'january': 0, 'feb': 1, 'february': 1, 'mar': 2, 'march': 2,
             'apr': 3, 'april': 3, 'may': 4, 'jun': 5, 'june': 5,
             'jul': 6, 'july': 6, 'aug': 7, 'august': 7, 'sep': 8, 'september': 8,
             'oct': 9, 'october': 9, 'nov': 10, 'november': 10, 'dec': 11, 'december': 11
         };
-        
+
         // Try parsing various formats
         // DD-MMM-YYYY (e.g., "31-Oct-2025")
         let match = trimmed.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
@@ -1052,7 +1089,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
         }
-        
+
         // MMM DD, YYYY (e.g., "Oct 31, 2025")
         match = trimmed.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
         if (match) {
@@ -1066,7 +1103,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
         }
-        
+
         // MMMM DD, YYYY (e.g., "October 31, 2025")
         match = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
         if (match) {
@@ -1080,7 +1117,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
         }
-        
+
         // DD MMM YYYY (e.g., "31 Oct 2025")
         match = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
         if (match) {
@@ -1094,14 +1131,14 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
         }
-        
+
         // DD/MM/YYYY or MM/DD/YYYY
         match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
         if (match) {
             const first = parseInt(match[1], 10);
             const second = parseInt(match[2], 10);
             const third = parseInt(match[3], 10);
-            
+
             // Heuristic: if first > 12, it's DD/MM/YYYY, else MM/DD/YYYY
             let day: number, month: number, year: number;
             if (first > 12) {
@@ -1113,7 +1150,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 day = second;
                 year = third;
             }
-            
+
             if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year >= 1000 && year <= 9999) {
                 const date = new Date(year, month, day);
                 if (!isNaN(date.getTime()) && date.getDate() === day && date.getMonth() === month) {
@@ -1121,7 +1158,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
         }
-        
+
         // YYYY/MM/DD
         match = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
         if (match) {
@@ -1135,7 +1172,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 }
             }
         }
-        
+
         // Try native Date parsing as fallback
         const parsed = new Date(trimmed);
         if (!isNaN(parsed.getTime())) {
@@ -1147,7 +1184,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             }
         }
-        
+
         // If all parsing fails, return empty string
         return "";
     };
@@ -1155,13 +1192,13 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const handleOpenEditMetadata = (filename: string) => {
         const doc = documents[filename];
         if (!doc) return;
-        
+
         setEditingMetadataFilename(filename);
         // Get all fields from config for this document type
         const docType = doc.doc_type;
         const docConfig = config?.document_types[docType];
         const fields = docConfig?.competency_questions || [];
-        
+
         // Initialize with existing values or empty strings
         const initialMetadata: Record<string, any> = {};
         fields.forEach((field: any) => {
@@ -1173,7 +1210,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 initialMetadata[field.id] = rawValue;
             }
         });
-        
+
         // Store original for change detection
         setOriginalMetadata(JSON.parse(JSON.stringify(initialMetadata)));
         setEditingMetadata(initialMetadata);
@@ -1189,7 +1226,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
         if (!doc) return false;
         // Search matches filename OR document type name
         const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = !searchTerm || 
+        const matchesSearch = !searchTerm ||
             (doc.filename?.toLowerCase().includes(searchLower) ?? false) ||
             (config?.document_types[doc.doc_type]?.name?.toLowerCase().includes(searchLower) ?? false);
         const matchesArchive = showArchived ? doc.archived : !doc.archived;
@@ -1202,7 +1239,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-        
+
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             handleFileSelection(Array.from(e.dataTransfer.files));
         }
@@ -1225,9 +1262,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                 <div className="flex gap-1.5 items-center flex-wrap">
                     <div className="relative">
                         <Search className="absolute left-2 top-1.5 text-gray-400" size={14} />
-                        <input 
-                            type="text" 
-                            placeholder="Search..." 
+                        <input
+                            type="text"
+                            placeholder="Search..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-7 pr-2 py-1.5 w-40 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -1245,7 +1282,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             </option>
                         ))}
                     </select>
-                    <button 
+                    <button
                         onClick={() => setShowArchived(!showArchived)}
                         className={`px-2.5 py-1.5 rounded text-xs font-medium border whitespace-nowrap ${
                             showArchived ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300'
@@ -1253,17 +1290,17 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                     >
                         {showArchived ? 'Active' : 'Archived'}
                     </button>
-                    <button 
+                    <button
                         onClick={() => fileInputRef.current?.click()}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded flex items-center gap-1.5 text-xs font-medium whitespace-nowrap"
                     >
                         <Upload size={14} /> Upload
                     </button>
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept=".pdf,.docx" 
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept=".pdf,.docx"
                         multiple
                         onChange={handleUpload}
                     />
@@ -1272,7 +1309,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
 
             <div className="flex-1 flex gap-6 min-h-0">
                 {/* Document List */}
-                <div 
+                <div
                     className={`bg-white rounded-xl shadow-sm border overflow-auto flex-1 ${previewDoc ? 'w-1/2' : 'w-full'} ${isDragging ? 'border-blue-500 bg-blue-50 border-2 border-dashed' : 'border-gray-100'}`}
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
@@ -1285,7 +1322,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                     )}
                     {!isDragging && (
                         <div key="document-list">
-                            <div 
+                            <div
                                 className={`p-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between transition-all ${(filterDocType || searchTerm) ? 'opacity-100' : 'opacity-0 h-0 p-0 overflow-hidden border-0'}`}
                             >
                                 <div className="text-sm text-gray-600">
@@ -1347,7 +1384,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                     <td className="p-4">
                                         <div className="flex flex-col gap-1">
                                             <span className={`px-2 py-1 rounded-full text-xs w-fit ${
-                                                displayStatus === 'processed' ? 'bg-green-100 text-green-700' : 
+                                                displayStatus === 'processed' ? 'bg-green-100 text-green-700' :
                                                 displayStatus === 'processing' || displayStatus === 'pending' ? 'bg-blue-100 text-blue-700 animate-pulse' :
                                                 displayStatus === 'error' || displayStatus === 'failed' ? 'bg-red-100 text-red-700' :
                                                 'bg-yellow-100 text-yellow-700'
@@ -1355,7 +1392,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                                 System: {displayStatus}
                                             </span>
                                             <span className={`px-2 py-1 rounded-full text-xs w-fit border ${
-                                                doc.workflow_status === 'active' ? 'bg-green-50 border-green-200 text-green-700' : 
+                                                doc.workflow_status === 'active' ? 'bg-green-50 border-green-200 text-green-700' :
                                                 doc.workflow_status === 'pending_signature' ? 'bg-orange-50 border-orange-200 text-orange-700' :
                                                 'bg-gray-50 border-gray-200 text-gray-600'
                                             }`}>
@@ -1364,7 +1401,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         </div>
                                     </td>
                                     <td className="p-4 flex gap-2">
-                                        <button 
+                                        <button
                                             className="p-1 hover:bg-gray-200 rounded text-blue-600"
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1374,7 +1411,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         >
                                             <Eye size={18} />
                                         </button>
-                                        <button 
+                                        <button
                                             className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-blue-600"
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1385,7 +1422,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         >
                                             <RefreshCw size={18} className={reprocessingFilename === doc.filename ? "animate-spin" : ""} />
                                         </button>
-                                        <button 
+                                        <button
                                             className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-orange-600"
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1395,7 +1432,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         >
                                             <Archive size={18} />
                                         </button>
-                                        <button 
+                                        <button
                                             className="p-1 hover:bg-gray-200 rounded text-gray-600 hover:text-red-600"
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1425,9 +1462,9 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                             </button>
                         </div>
                         <div className="flex-1 bg-gray-200 relative">
-                             <iframe 
-                                src={`http://localhost:${API_PORT}/files/${previewDoc}`} 
-                                className="w-full h-full border-none" 
+                             <iframe
+                                src={`http://localhost:${API_PORT}/files/${previewDoc}`}
+                                className="w-full h-full border-none"
                                 title="Document Preview"
                              />
                         </div>
@@ -1465,8 +1502,8 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                             key={status}
                                             onClick={() => updateStatus(previewDoc, status)}
                                             className={`px-3 py-1 rounded text-xs border transition-colors ${
-                                                documents[previewDoc]?.workflow_status === status 
-                                                ? 'bg-blue-600 text-white border-blue-600' 
+                                                documents[previewDoc]?.workflow_status === status
+                                                ? 'bg-blue-600 text-white border-blue-600'
                                                 : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                                             }`}
                                         >
@@ -1606,7 +1643,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         {uploading ? 'Phase 1/2: Uploading Files' : monitoringProcessing ? 'Phase 2/2: Processing Documents' : 'Complete'}
                                     </strong>
                                     <br />
-                                    {uploading 
+                                    {uploading
                                         ? 'All files are being uploaded in parallel. Once complete, processing will begin automatically.'
                                         : monitoringProcessing
                                         ? 'All files uploaded! Processing is now running in the background (text extraction, RAG indexing, analysis). You can close this and continue working.'
@@ -1696,15 +1733,15 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                         {(() => {
                             const doc = documents[editingMetadataFilename];
                             if (!doc || !config) return null;
-                            
+
                             const docType = doc.doc_type;
                             const docConfig = config.document_types[docType];
                             const fields = docConfig?.competency_questions || [];
-                            
+
                             if (fields.length === 0) {
                                 return <p className="text-gray-500">No fields configured for this document type.</p>;
                             }
-                            
+
                             return (
                                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                                     {fields.map((field: any) => {
@@ -1712,7 +1749,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                         const fieldValue = editingMetadata[fieldId] || "";
                                         const originalValue = originalMetadata?.[fieldId] || "";
                                         const hasChanged = String(fieldValue) !== String(originalValue);
-                                        
+
                                         return (
                                             <div key={fieldId} className={`${hasChanged ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'} border rounded-lg p-3`}>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1753,7 +1790,7 @@ function DocumentsView({ config, documents, refresh, initialPreview, onClearPrev
                                 </div>
                             );
                         })()}
-                        
+
                         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                             <button
                                 onClick={() => {
@@ -1879,7 +1916,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
         if (!input.trim()) return;
 
         const userMsg = input;
-        
+
         // Build conversation history for the API (exclude sources, map 'ai' to 'assistant')
         // Only include the last 10 message pairs to avoid token limits
         const historyForApi = messagesRef.current
@@ -1887,30 +1924,55 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
             .slice(-20)  // Last 20 messages (10 pairs)
             .map(m => ({
                 role: m.role === 'ai' ? 'assistant' : 'user',
-                content: m.content
+                content: m.content,
+                // Include sources for assistant messages so the backend can keep retrieval
+                // anchored to the same document set across follow-ups (best-practice multi-turn RAG).
+                sources: m.role === 'ai' ? (m.sources || []) : undefined
             }));
-        
+
         setMessages(prev => [...prev, {role: 'user', content: userMsg}]);
         setInput('');
         setLoading(true);
 
-        try {
+        const payload = {
+            question: userMsg,
+            history: historyForApi  // Send conversation history
+        };
+
+        // One retry helps with transient OpenAI/network hiccups that otherwise feel "flaky" in the UI.
+        const attemptChat = async () => {
             const res = await fetch(`http://localhost:${API_PORT}/chat`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    question: userMsg,
-                    history: historyForApi  // Send conversation history
-                })
+                body: JSON.stringify(payload)
             });
-            const data = await res.json();
+
+            // If backend errors (e.g. 500), try to surface details instead of a generic message.
+            if (!res.ok) {
+                const text = await res.text().catch(() => "");
+                throw new Error(text || `Backend error: ${res.status} ${res.statusText}`);
+            }
+            return res.json();
+        };
+
+        try {
+            let data: any;
+            try {
+                data = await attemptChat();
+            } catch (err) {
+                // Quick retry after a short delay
+                await new Promise(r => setTimeout(r, 800));
+                data = await attemptChat();
+            }
+
             setMessages(prev => [...prev, {
                 role: 'ai',
                 content: data.answer || "Sorry, I couldn't get an answer.",
                 sources: data.sources
             }]);
-        } catch (err) {
-            setMessages(prev => [...prev, {role: 'ai', content: "Error communicating with server."}]);
+        } catch (err: any) {
+            const msg = (err && err.message) ? err.message : "Error communicating with server.";
+            setMessages(prev => [...prev, {role: 'ai', content: `Error communicating with server: ${msg}`}]);
         } finally {
             setLoading(false);
         }
@@ -1921,15 +1983,15 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
             <div className="flex-1 flex flex-col">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold">Chat with Documents</h2>
-                    <button 
-                        onClick={confirmClear} 
+                    <button
+                        onClick={confirmClear}
                         className="text-gray-500 hover:text-red-600 p-2 rounded hover:bg-gray-100"
                         title="Clear Chat"
                     >
                         <Trash2 size={20} />
                     </button>
                 </div>
-                
+
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 mb-4 p-4 overflow-auto flex flex-col gap-4">
                     {messages.map((m, i) => (
                         <div key={i} className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -1943,7 +2005,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
                                     m.role === 'ai' ? 'bg-gray-100 prose prose-sm max-w-none' : 'bg-blue-600 text-white'
                                 }`}>
                                     {m.role === 'ai' ? (
-                                        <ReactMarkdown 
+                                        <ReactMarkdown
                                             remarkPlugins={[remarkGfm]}
                                             components={{
                                                 table: ({node, ...props}) => <table className="border-collapse table-auto w-full my-2" {...props} />,
@@ -1965,7 +2027,7 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
                                 <div className="text-xs text-gray-400 ml-11 flex gap-2 items-center flex-wrap">
                                     <span>Sources:</span>
                                     {m.sources.map(source => (
-                                        <button 
+                                        <button
                                             key={source}
                                             onClick={() => onOpenDocument(source)}
                                             className="text-blue-500 hover:underline bg-blue-50 px-2 py-0.5 rounded cursor-pointer"
@@ -1982,17 +2044,17 @@ function ChatView({ onOpenDocument }: { config: Config | null, documents: Record
                 </div>
 
                 <div className="flex gap-2">
-                    <input 
+                    <input
                         key={inputKey}
                         ref={inputRef}
-                        type="text" 
+                        type="text"
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSend()}
-                        placeholder="Ask a question across all documents..." 
+                        placeholder="Ask a question across all documents..."
                         className="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <button 
+                    <button
                         onClick={handleSend}
                         disabled={loading}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-lg font-medium disabled:opacity-50"
@@ -2049,7 +2111,7 @@ function TemplatesView() {
         const file = e.target.files[0];
         const formData = new FormData();
         formData.append("file", file);
-        
+
         try {
             await fetch(`http://localhost:${API_PORT}/upload_template`, {
                 method: "POST",
@@ -2081,17 +2143,17 @@ function TemplatesView() {
         <div className="space-y-6">
             <h2 className="text-2xl font-bold flex justify-between items-center">
                 <span>Templates</span>
-                <button 
+                <button
                     onClick={() => fileInputRef.current?.click()}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
                 >
                     <Upload size={18} /> Upload Template
                 </button>
-                <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept=".docx,.doc" 
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".docx,.doc"
                     onChange={handleUpload}
                 />
             </h2>
@@ -2103,8 +2165,8 @@ function TemplatesView() {
                             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                                 <FileText size={24} />
                             </div>
-                            <a 
-                                href={`http://localhost:${API_PORT}/templates/${name}`} 
+                            <a
+                                href={`http://localhost:${API_PORT}/templates/${name}`}
                                 className="font-medium hover:text-blue-600 truncate max-w-[200px]"
                                 target="_blank"
                                 rel="noreferrer"
@@ -2112,7 +2174,7 @@ function TemplatesView() {
                                 {name}
                             </a>
                         </div>
-                        <button 
+                        <button
                             onClick={() => handleDelete(name)}
                             className="text-gray-400 hover:text-red-500"
                         >
@@ -2166,7 +2228,7 @@ function SettingsView() {
         fetchApiKeyStatus();
         fetchStoragePath();
     }, []); // Run once on mount
-    
+
     const fetchStoragePath = async () => {
         try {
             if (window.electronAPI?.getUserDataPath) {
@@ -2181,7 +2243,7 @@ function SettingsView() {
             setStoragePath("");
         }
     };
-    
+
     const handleOpenStorage = async () => {
         setOpeningStorage(true);
         try {
@@ -2202,7 +2264,7 @@ function SettingsView() {
             setOpeningStorage(false);
         }
     };
-    
+
     const fetchApiKeyStatus = async () => {
         try {
             const res = await fetch(`http://localhost:${API_PORT}/config`);
@@ -2242,7 +2304,7 @@ function SettingsView() {
     const handleSaveFile = async () => {
         setIsSaving(true);
         const content = fileContent;
-        
+
         try {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/${selectedFile}`, {
                 method: "POST",
@@ -2319,14 +2381,14 @@ function SettingsView() {
             setShowAlert({ title: "Missing API Key", message: "Please enter an API key" });
             return;
         }
-        
+
         // Warn if overwriting existing key
         if (apiKeySet) {
             pendingApiKeyRef.current = apiKey.trim();
             setShowApiKeyOverwriteConfirm(true);
             return;
         }
-        
+
         await performSaveApiKey(apiKey.trim());
     };
 
@@ -2337,7 +2399,7 @@ function SettingsView() {
             const res = await fetch(`http://localhost:${API_PORT}/settings/file/config.yaml`);
             const data = await res.json();
             let content = data.content;
-            
+
             // Update API key in YAML content
             const lines = content.split('\n');
             let updated = false;
@@ -2348,7 +2410,7 @@ function SettingsView() {
                     break;
                 }
             }
-            
+
             // If api section doesn't exist, add it at the top
             if (!updated) {
                 const apiSection = `# API Configuration\napi:\n  openai_api_key: "${keyToSave}"\n\n`;
@@ -2356,16 +2418,16 @@ function SettingsView() {
             } else {
                 content = lines.join('\n');
             }
-            
+
             // Save updated config
             const saveRes = await fetch(`http://localhost:${API_PORT}/settings/file/config.yaml`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content })
             });
-            
+
             if (!saveRes.ok) throw new Error("Failed to save");
-            
+
             setShowAlert({ title: "Success", message: "API key saved successfully! The application will now use this key for OpenAI features." });
             setApiKey("");
             setShowApiKey(false);
@@ -2386,7 +2448,7 @@ function SettingsView() {
             performSaveApiKey(keyToSave);
         }
     };
-    
+
     const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
         console.log('handleRestore called, files:', e.target.files);
         if (!e.target.files?.length) {
@@ -2434,7 +2496,7 @@ function SettingsView() {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold">Settings & Data Management</h2>
-            
+
             {/* Storage Location Section */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -2460,13 +2522,13 @@ function SettingsView() {
                     </p>
                 </div>
             </div>
-            
+
             {/* API Key Section */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Settings className="text-blue-600" /> OpenAI API Key
                 </h3>
-                
+
                 {apiKeySet ? (
                     <>
                         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
@@ -2485,7 +2547,7 @@ function SettingsView() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <details className="mb-4">
                             <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 select-none">
                                 Change or update API key
@@ -2535,11 +2597,11 @@ function SettingsView() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <p className="text-gray-600 mb-4 text-sm">
                             Enter your OpenAI API key below. It will be stored securely in your local configuration file.
                         </p>
-                        
+
                         <div className="space-y-3">
                             <div className="flex gap-3">
                                 <input
@@ -2565,16 +2627,16 @@ function SettingsView() {
                                 </button>
                             </div>
                             <p className="text-xs text-gray-500">
-                                Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenAI Platform</a>. 
+                                Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenAI Platform</a>.
                                 Your key is stored securely in your local configuration file.
                             </p>
                         </div>
                     </>
                 )}
             </div>
-            
+
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
-                <button 
+                <button
                     onClick={() => setIsEditorOpen(!isEditorOpen)}
                     className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
                 >
@@ -2583,11 +2645,11 @@ function SettingsView() {
                     </h3>
                     {isEditorOpen ? <ChevronDown size={20} className="text-gray-400" /> : <ChevronRight size={20} className="text-gray-400" />}
                 </button>
-                
+
                 {isEditorOpen && (
                     <div className="p-6 pt-0 border-t border-gray-100">
                         <div className="flex gap-4 mb-4 mt-4">
-                            <select 
+                            <select
                                 value={selectedFile}
                                 onChange={(e) => setSelectedFile(e.target.value)}
                                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
@@ -2595,21 +2657,21 @@ function SettingsView() {
                                 <option value="config.yaml">config.yaml (App Settings)</option>
                                 <option value="prompts.yaml">prompts.yaml (AI Prompts)</option>
                             </select>
-                            <button 
+                            <button
                                 onClick={handleSaveFile}
                                 disabled={isSaving}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 min-w-[120px]"
                             >
                                 {isSaving ? "Saving..." : "Save Changes"}
                             </button>
-                            <button 
+                            <button
                                 onClick={handleRestoreLastGood}
                                 className="text-orange-600 hover:bg-orange-50 px-4 py-2 rounded-lg text-sm font-medium"
                                 title="Undo recent changes"
                             >
                                 Undo / Restore Last Saved
                             </button>
-                            <button 
+                            <button
                                 onClick={handleResetFile}
                                 className="text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium ml-auto"
                             >
@@ -2632,29 +2694,29 @@ function SettingsView() {
                     <Database className="text-blue-600" /> Data Backup
                 </h3>
                 <p className="text-gray-600 mb-6">
-                    Export your entire system state (documents, database, metadata) to a ZIP file. 
+                    Export your entire system state (documents, database, metadata) to a ZIP file.
                     You can use this file to migrate to another computer or restore your data later.
                 </p>
-                
+
                 <div className="flex gap-4">
-                    <button 
+                    <button
                         onClick={handleBackup}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2"
                     >
                         <Download size={18} /> Download Backup
                     </button>
-                    
-                    <button 
+
+                    <button
                         onClick={() => fileInputRef.current?.click()}
                         className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg font-medium flex items-center gap-2"
                     >
                         <Upload size={18} /> Restore from Backup
                     </button>
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept=".zip" 
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept=".zip"
                         onChange={handleRestore}
                     />
                 </div>
@@ -2665,7 +2727,7 @@ function SettingsView() {
                     <AlertCircle size={16} /> Important Note
                 </h3>
                 <p className="text-sm text-yellow-700">
-                    Restoring a backup will <strong>permanently delete</strong> all current documents and settings. 
+                    Restoring a backup will <strong>permanently delete</strong> all current documents and settings.
                     Please ensure you have backed up your current data before restoring.
                 </p>
             </div>

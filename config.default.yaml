@@ -2,6 +2,17 @@
 api:
   openai_api_key: ""  # Add your OpenAI API key here
 
+# RAG Configuration
+# These defaults are used unless overridden in the user's config.yaml or environment variables.
+rag:
+  # Chroma collection name used for indexing/retrieval
+  collection_name: "nda_documents"
+  # Retrieval filter: higher = more inclusive (recommended for OpenAI embeddings)
+  distance_threshold: 0.75
+  # How many documents the backend is allowed to "pin" from recent chat sources.
+  # This keeps multi-turn Q&A stable without hardcoding specific words.
+  max_pinned_files: 3
+
 document_types:
   nda:
     name: "Non-Disclosure Agreement"
@@ -285,7 +296,7 @@ dashboard:
 report:
   subject: "Weekly Contract Status Report - {date}"
   header: "Here is the summary of recent contract activity and upcoming expirations."
-  
+
   # Email Sign-off Configuration
   # Leave any field blank ("") to exclude it from the email signature.
   email_closing: "Best regards,"
@@ -299,13 +310,13 @@ report:
       type: "recent_uploads"
       days: 7
       limit: 10
-    
+
     - id: "expiring_docs"
       title: "Expiring Soon (< 90 Days)"
       type: "expiring"
       days: 90
       limit: 20
-    
+
     - id: "pending_docs"
       title: "Pending Actions"
       type: "status"
@@ -318,7 +329,7 @@ report:
 # 1. Show recently expired documents:
 #    - id: "just_expired"
 #      title: "Expired in Last 30 Days"
-#      type: "expiring" 
+#      type: "expiring"
 #      days: -30
 #
 # 2. Show all Active contracts:

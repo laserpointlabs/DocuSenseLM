@@ -106,6 +106,7 @@
     },
     "win": {
       "target": [
+        "nsis",
         "dir"
       ]
     },

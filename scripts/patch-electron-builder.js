@@ -28,33 +28,3 @@ if (content.includes(originalLine)) {
 } else {
   console.log('WARNING: Could not find line to patch - electron-builder may have been updated');
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

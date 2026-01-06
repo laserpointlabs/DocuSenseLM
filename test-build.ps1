@@ -34,29 +34,3 @@ if (Test-Path "dist\win-unpacked\DocuSenseLM.exe") {
 # Write all output
 $output | Out-File -FilePath "test-build-output.txt" -Encoding UTF8
 $output | Write-Host
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
