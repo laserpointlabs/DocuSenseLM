@@ -106,7 +106,10 @@ function App() {
       while (retries < 180) {
         if (cancelled) return;
         try {
-          const res = await fetch(`http://localhost:${API_PORT}/health`);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 1200);
+          const res = await fetch(`http://localhost:${API_PORT}/health`, { signal: controller.signal });
+          clearTimeout(timeout);
           if (res.ok) {
             console.log('App: Health check passed');
             initializeApp('health');
