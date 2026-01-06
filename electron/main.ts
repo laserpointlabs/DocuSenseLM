@@ -43,6 +43,30 @@ function canUseAutoUpdater(): boolean {
   }
 }
 
+function migrateLegacyUserDataIfNeeded(userDataPath: string) {
+  // Older builds may have used a different userData folder name (e.g. "DocuSenseLM").
+  // If the new path is empty, copy over config.yaml so users keep their API key.
+  try {
+    const roaming = process.env.APPDATA;
+    if (!roaming) return;
+
+    const legacyPath = path.join(roaming, 'DocuSenseLM');
+    const currentPath = userDataPath;
+
+    const legacyCfg = path.join(legacyPath, 'config.yaml');
+    const currentCfg = path.join(currentPath, 'config.yaml');
+
+    if (!fs.existsSync(legacyCfg)) return;
+    if (fs.existsSync(currentCfg)) return;
+
+    fs.mkdirSync(currentPath, { recursive: true });
+    fs.copyFileSync(legacyCfg, currentCfg);
+    console.log(`[migrate] Copied legacy config.yaml from ${legacyPath} -> ${currentPath}`);
+  } catch (e) {
+    console.warn(`[migrate] Skipped legacy userData migration: ${e}`);
+  }
+}
+
 function setupAutoUpdater() {
   if (!canUseAutoUpdater()) return;
 
@@ -293,6 +317,7 @@ function startPythonBackend() {
   // Linux: ~/.config/nda-tool-lite
   // Mac: ~/Library/Application Support/nda-tool-lite
   const userDataPath = app.getPath('userData');
+  migrateLegacyUserDataIfNeeded(userDataPath);
   console.log(`User Data Path: ${userDataPath}`);
   console.log(`isDev: ${isDev}`);
   console.log(`process.resourcesPath: ${process.resourcesPath}`);
