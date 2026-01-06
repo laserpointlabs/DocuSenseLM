@@ -114,6 +114,16 @@ function buildAppMenu() {
       ],
     },
     {
+      // Give users a way to open DevTools and reload in packaged builds where F12/Ctrl+Shift+I may be unavailable.
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { type: 'separator' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+    {
       label: 'Help',
       submenu: [
         {

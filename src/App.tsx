@@ -101,7 +101,9 @@ function App() {
     const initApp = async () => {
       console.log('App: Starting manual health checking');
       let retries = 0;
-      while (retries < 30) {
+      // Packaged builds can have a slow cold-start Python import path on Windows.
+      // Give the backend ample time to come up before we drop users into a half-initialized UI.
+      while (retries < 180) {
         if (cancelled) return;
         try {
           const res = await fetch(`http://localhost:${API_PORT}/health`);
@@ -117,6 +119,9 @@ function App() {
         retries++;
       }
       console.error('App: Failed to connect to backend after all retries');
+      // Ensure we at least render something other than "Loading configuration..."
+      // (Settings view can still show Storage Path + let users retry later.)
+      setConfig({ document_types: {}, dashboard: {} } as any);
       setIsLoading(false); // Show the app anyway, let user see the error
     };
 

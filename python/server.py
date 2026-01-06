@@ -59,25 +59,36 @@ logger.info(f"BASE_DIR resolved to: {BASE_DIR}")
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"__file__ path: {__file__}")
 
-# OCR imports (optional - will gracefully degrade if not available)
+# OCR (optional): lazy-import on first use to avoid slowing down app startup in packaged builds.
+# EasyOCR + PyMuPDF can add minutes to cold start on some Windows machines if imported eagerly.
 OCR_AVAILABLE = False
 OCR_READER = None
-try:
-    import easyocr
-    import fitz  # PyMuPDF - for PDF to image conversion without poppler
-    OCR_AVAILABLE = True
-    # Initialize EasyOCR reader (English only for now)
-    # Models are stored in tools/easyocr_models/
-    OCR_READER = None  # Will be initialized on first use
-    logger.info("OCR libraries (easyocr, PyMuPDF) loaded successfully")
-except ImportError as e:
-    OCR_AVAILABLE = False
-    OCR_READER = None
-    logger.warning(f"OCR libraries not available: {e}")
+_OCR_IMPORT_ERROR: Optional[str] = None
 
-# Log OCR availability status
-if not OCR_AVAILABLE:
-    logger.warning("Scanned PDFs will not be processed (OCR unavailable)")
+def ensure_ocr_loaded() -> bool:
+    """
+    Lazily import OCR dependencies only when needed.
+    Returns True when OCR is available for use, otherwise False.
+    """
+    global OCR_AVAILABLE, _OCR_IMPORT_ERROR
+    if OCR_AVAILABLE:
+        return True
+    if _OCR_IMPORT_ERROR is not None:
+        return False
+
+    try:
+        # Import only when required (can be slow).
+        global easyocr, fitz  # type: ignore[global-variable-not-assigned]
+        import easyocr  # type: ignore
+        import fitz  # type: ignore  # PyMuPDF
+        OCR_AVAILABLE = True
+        logger.info("OCR libraries loaded (lazy): easyocr, PyMuPDF")
+        return True
+    except Exception as e:
+        _OCR_IMPORT_ERROR = str(e)
+        OCR_AVAILABLE = False
+        logger.warning(f"OCR libraries not available (lazy): {e}")
+        return False
 CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 
 # Use USER_DATA_DIR from environment or fall back to platform-specific config dir
@@ -692,8 +703,8 @@ def extract_text_from_pdf(filepath):
     requires_ocr = is_scanned_pdf(filepath)
 
     if requires_ocr:
-        # Scanned PDF - use OCR
-        if OCR_AVAILABLE:
+        # Scanned PDF - use OCR (lazy import to avoid slowing app startup)
+        if ensure_ocr_loaded():
             try:
                 logger.info(f"Detected scanned PDF - using OCR for {filepath}")
 
