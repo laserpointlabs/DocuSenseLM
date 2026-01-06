@@ -31,8 +31,20 @@ const API_PORT = 14242;
 let updateCheckInProgress = false;
 let updateDownloaded = false;
 
+function canUseAutoUpdater(): boolean {
+  if (!app.isPackaged) return false;
+  // electron-updater expects app-update.yml in packaged apps; win-unpacked builds often don't have it.
+  // Avoid confusing errors and startup delays by disabling auto-updater when it's missing.
+  try {
+    const updateCfg = path.join(process.resourcesPath, 'app-update.yml');
+    return fs.existsSync(updateCfg);
+  } catch {
+    return false;
+  }
+}
+
 function setupAutoUpdater() {
-  if (!app.isPackaged) return;
+  if (!canUseAutoUpdater()) return;
 
   // Give users control: check on startup, but don't download until they confirm.
   autoUpdater.autoDownload = false;
@@ -128,9 +140,9 @@ function buildAppMenu() {
       submenu: [
         {
           label: 'Check for Updates…',
-          enabled: app.isPackaged,
+          enabled: canUseAutoUpdater(),
           click: async () => {
-            if (!app.isPackaged) return;
+            if (!canUseAutoUpdater()) return;
             if (updateCheckInProgress) {
               await dialog.showMessageBox({
                 type: 'info',
@@ -204,7 +216,7 @@ function createWindow() {
     mainWindow.loadFile(htmlPath);
     // Auto-updates are only meaningful for packaged apps installed from an installer (e.g. NSIS).
     // Check quietly on startup; user controls download/install via dialogs.
-    if (app.isPackaged) {
+    if (canUseAutoUpdater()) {
       setTimeout(() => {
         autoUpdater.checkForUpdates().catch(() => {});
       }, 2000);

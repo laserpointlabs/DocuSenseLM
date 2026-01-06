@@ -115,6 +115,12 @@ function App() {
         } catch {
           // Ignore error, retry
         }
+        // After ~30s, stop blocking the whole UI on backend startup.
+        // Keep polling in the background and auto-initialize as soon as the backend is ready.
+        if (retries === 15) {
+          setConfig({ document_types: {}, dashboard: {} } as any);
+          setIsLoading(false);
+        }
         await new Promise(resolve => setTimeout(resolve, 2000));
         retries++;
       }
