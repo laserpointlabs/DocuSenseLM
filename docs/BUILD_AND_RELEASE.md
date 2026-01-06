@@ -100,7 +100,7 @@ The application uses `electron-updater` to check for updates on startup (product
 ```json
 "publish": {
   "provider": "github",
-  "owner": "jdehart",
+  "owner": "laserpointlabs",
   "repo": "DocuSenseLM"
 }
 ```

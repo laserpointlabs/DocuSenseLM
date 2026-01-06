@@ -121,7 +121,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "jdehart",
+      "owner": "laserpointlabs",
       "repo": "DocuSenseLM"
     }
   }
