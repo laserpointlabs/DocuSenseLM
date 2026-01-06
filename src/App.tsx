@@ -2448,7 +2448,18 @@ function SettingsView() {
             fetchApiKeyStatus();
         } catch (err) {
             console.error("Failed to save API key:", err);
-            setShowAlert({ title: "Error", message: "Failed to save API key. Please try again." });
+            const msg = String((err as any)?.message || err || "");
+            const isBackendStarting =
+              msg.includes("Failed to fetch") ||
+              msg.includes("NetworkError") ||
+              msg.includes("ECONNREFUSED") ||
+              msg.includes("ERR_CONNECTION");
+            setShowAlert({
+              title: "Error",
+              message: isBackendStarting
+                ? "The API server is still starting. Please wait a moment and try again."
+                : "Failed to save API key. Please try again.",
+            });
         } finally {
             setSavingApiKey(false);
         }
