@@ -10,10 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: windows-latest
 
     steps:
       - name: Check out Git repository
@@ -37,12 +34,12 @@ jobs:
           # We skip the build:python part of the build script since we did it above
           npm run build:web
           npm run build:electron
-          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || 'win' }} --publish never
+          npx electron-builder --win --publish never
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DocuSenseLM-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows' }}-${{ github.ref_name }}
+          name: DocuSenseLM-windows-${{ github.ref_name }}
           path: release/*.*
           retention-days: 30
 
@@ -69,6 +66,5 @@ jobs:
             release-artifacts/**/*.exe
             release-artifacts/**/*.blockmap
             release-artifacts/**/*.yml
-            release-artifacts/**/*.AppImage
           fail_on_unmatched_files: false
 

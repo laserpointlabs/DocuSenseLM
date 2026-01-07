@@ -52,8 +52,15 @@ module.exports = {
       "nsis",
       "dir"
     ],
+    artifactName: "DocuSenseLM-Setup-${version}.${ext}",
     sign: false, // disable signing to avoid winCodeSign download
     signingHashAlgorithms: []
+  },
+  nsis: {
+    artifactName: "DocuSenseLM-Setup-${version}.${ext}",
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true
   },
   linux: {
     target: "AppImage",
