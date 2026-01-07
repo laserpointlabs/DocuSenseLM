@@ -69,8 +69,29 @@ let pythonProcess: ChildProcess | null = null;
 const API_PORT = 14242;
 
 // --- Auto-update UX (packaged builds only) ---
-let updateCheckInProgress = false;
+type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error';
+let updateState: UpdateState = 'idle';
 let updateDownloaded = false;
+let latestUpdateVersion: string | null = null;
+let downloadPercent: number | null = null;
+
+function setUpdateState(next: UpdateState, extra?: { version?: string | null; percent?: number | null; error?: string }) {
+  updateState = next;
+  if (typeof extra?.version !== 'undefined') latestUpdateVersion = extra.version ?? null;
+  if (typeof extra?.percent !== 'undefined') downloadPercent = extra.percent ?? null;
+  if (extra?.error) writeLog('ERROR', `Auto-updater error: ${extra.error}`);
+  writeLog('INFO', `Auto-updater state: ${updateState}${latestUpdateVersion ? ` (update=${latestUpdateVersion})` : ''}${downloadPercent != null ? ` (${downloadPercent.toFixed(1)}%)` : ''}`);
+}
+
+function formatProgressMessage() {
+  const v = latestUpdateVersion ? ` ${latestUpdateVersion}` : '';
+  if (updateState === 'checking') return `Checking for updates…`;
+  if (updateState === 'available') return `Update${v} available.`;
+  if (updateState === 'downloading') return `Downloading update${v}${downloadPercent != null ? ` (${downloadPercent.toFixed(1)}%)` : ''}…`;
+  if (updateState === 'downloaded') return `Update${v} downloaded and ready to install.`;
+  if (updateState === 'error') return `Update error. See logs for details.`;
+  return `No update in progress.`;
+}
 
 function canUseAutoUpdater(): boolean {
   if (!app.isPackaged) return false;
@@ -113,21 +134,30 @@ function setupAutoUpdater() {
 
   // Give users control: check on startup, but don't download until they confirm.
   autoUpdater.autoDownload = false;
+  // Best practice on Windows: after download, installing is done on restart (or app quit).
+  autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('error', (err) => {
-    updateCheckInProgress = false;
     const msg = (err && (err as any).message) ? (err as any).message : String(err);
-    console.error(`Auto-updater error: ${msg}`);
-    // Avoid noisy dialogs for transient connectivity issues; user can manually re-check.
+    setUpdateState('error', { error: msg });
+    // Clear progress UI
+    try { mainWindow?.setProgressBar(-1); } catch {}
+    // Show a real error so the user isn't guessing.
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Update failed',
+      message: `Failed to update: ${msg}`,
+      detail: 'See logs for details. You can retry from Help → Check for Updates…',
+    }).catch(() => {});
   });
 
   autoUpdater.on('checking-for-update', () => {
-    updateCheckInProgress = true;
+    setUpdateState('checking', { percent: null });
   });
 
-  autoUpdater.on('update-not-available', async () => {
-    updateCheckInProgress = false;
+  autoUpdater.on('update-not-available', async (info) => {
     updateDownloaded = false;
+    setUpdateState('idle', { version: info?.version ?? null, percent: null });
     await dialog.showMessageBox({
       type: 'info',
       title: 'No updates',
@@ -135,39 +165,51 @@ function setupAutoUpdater() {
     });
   });
 
-  autoUpdater.on('update-available', async () => {
-    updateCheckInProgress = false;
+  autoUpdater.on('update-available', async (info) => {
+    setUpdateState('available', { version: info?.version ?? null, percent: null });
     const result = await dialog.showMessageBox({
       type: 'info',
       title: 'Update available',
-      message: 'A new version is available. Do you want to download it now?',
+      message: `A new version${info?.version ? ` (${info.version})` : ''} is available. Download it now?`,
+      detail: 'You can keep using the app while it downloads. We will prompt you to restart when it’s ready to install.',
       buttons: ['Download', 'Later'],
       defaultId: 0,
       cancelId: 1,
     });
     if (result.response === 0) {
       try {
-        updateCheckInProgress = true;
+        setUpdateState('downloading', { version: info?.version ?? null, percent: 0 });
+        try { mainWindow?.setProgressBar(0); } catch {}
         await autoUpdater.downloadUpdate();
       } finally {
-        updateCheckInProgress = false;
+        // State will be updated by download-progress / update-downloaded / error.
       }
     }
   });
 
-  autoUpdater.on('update-downloaded', async () => {
+  autoUpdater.on('download-progress', (progress) => {
+    const pct = typeof progress?.percent === 'number' ? progress.percent : null;
+    setUpdateState('downloading', { percent: pct });
+    if (pct != null) {
+      try { mainWindow?.setProgressBar(Math.max(0, Math.min(1, pct / 100))); } catch {}
+    }
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
     updateDownloaded = true;
-    updateCheckInProgress = false;
+    setUpdateState('downloaded', { version: info?.version ?? null, percent: 100 });
+    try { mainWindow?.setProgressBar(-1); } catch {}
     const result = await dialog.showMessageBox({
       type: 'info',
       title: 'Update ready',
-      message: 'The update has been downloaded. Restart to install it now?',
+      message: `Update${info?.version ? ` (${info.version})` : ''} downloaded. Restart to install now?`,
       buttons: ['Restart and install', 'Later'],
       defaultId: 0,
       cancelId: 1,
     });
     if (result.response === 0) {
-      autoUpdater.quitAndInstall();
+      // (silent=false, forceRunAfter=true) so user sees the installer UX and the app comes back up.
+      autoUpdater.quitAndInstall(false, true);
     }
   });
 }
@@ -208,11 +250,14 @@ function buildAppMenu() {
           enabled: canUseAutoUpdater(),
           click: async () => {
             if (!canUseAutoUpdater()) return;
-            if (updateCheckInProgress) {
+            if (updateState === 'checking' || updateState === 'downloading' || updateState === 'available') {
               await dialog.showMessageBox({
                 type: 'info',
-                title: 'Checking…',
-                message: 'An update check is already in progress.',
+                title: 'Update status',
+                message: formatProgressMessage(),
+                detail: updateState === 'downloading'
+                  ? 'Download is in progress. You will be prompted to restart when it finishes.'
+                  : undefined,
               });
               return;
             }
@@ -225,14 +270,14 @@ function buildAppMenu() {
                 defaultId: 0,
                 cancelId: 1,
               });
-              if (result.response === 0) autoUpdater.quitAndInstall();
+              if (result.response === 0) autoUpdater.quitAndInstall(false, true);
               return;
             }
             try {
-              updateCheckInProgress = true;
+              setUpdateState('checking', { percent: null });
               await autoUpdater.checkForUpdates();
             } finally {
-              updateCheckInProgress = false;
+              // state is updated by events
             }
           },
         },
@@ -774,3 +819,4 @@ ipcMain.handle('download-backup', async () => {
     return { success: false, error: e?.message || String(e) };
   }
 });
+
