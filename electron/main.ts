@@ -156,13 +156,10 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-not-available', async (info) => {
+    // Best practice: don't interrupt users with a modal “you're up to date” dialog.
+    // We'll just log the result; the Help menu can show status when asked.
     updateDownloaded = false;
     setUpdateState('idle', { version: info?.version ?? null, percent: null });
-    await dialog.showMessageBox({
-      type: 'info',
-      title: 'No updates',
-      message: 'You are already running the latest version.',
-    });
   });
 
   autoUpdater.on('update-available', async (info) => {
@@ -551,7 +548,9 @@ function startPythonBackend() {
   if (pythonProcess.stdout) {
       pythonProcess.stdout.on('data', (data) => {
         const output = data.toString();
-        console.log(`[Python Stdout]: ${output}`);
+        // Persist backend logs for packaged builds (no DevTools) to aid debugging config/env issues.
+        const trimmed = output.length > 4000 ? output.slice(0, 4000) + '…(truncated)' : output;
+        writeLog('INFO', `[Python stdout] ${trimmed.trimEnd()}`);
       });
   }
 
@@ -564,11 +563,9 @@ function startPythonBackend() {
           /\bTraceback\b/.test(output) ||
           /\bERROR\b/.test(output) ||
           /\bException\b/.test(output);
-        if (looksLikeError) {
-          console.error(`[Python]: ${output}`);
-        } else {
-          console.log(`[Python]: ${output}`);
-        }
+        const trimmed = output.length > 4000 ? output.slice(0, 4000) + '…(truncated)' : output;
+        if (looksLikeError) writeLog('ERROR', `[Python stderr] ${trimmed.trimEnd()}`);
+        else writeLog('INFO', `[Python stderr] ${trimmed.trimEnd()}`);
         // Also send stderr to renderer for debugging
         if (mainWindow) {
             mainWindow.webContents.send('python-stderr', output);
@@ -703,6 +700,7 @@ app.on('before-quit', () => {
 });
 
 ipcMain.handle('get-api-port', () => API_PORT);
+ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 ipcMain.handle('open-user-data-folder', async () => {
   const p = app.getPath('userData');

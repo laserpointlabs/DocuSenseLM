@@ -70,6 +70,7 @@ function ensurePythonErrorListener() {
 // Expose electron API to renderer using proper contextBridge pattern
 contextBridge.exposeInMainWorld('electronAPI', {
   getApiPort: () => ipcRenderer.invoke('get-api-port'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
   openUserDataFolder: () => ipcRenderer.invoke('open-user-data-folder'),
   downloadBackup: () => ipcRenderer.invoke('download-backup'),

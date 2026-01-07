@@ -166,7 +166,10 @@ def load_app_config():
         except Exception as e:
             logger.error(f"Failed to load user config: {e}")
             user_cfg = {}
+    else:
+        logger.info(f"No user config.yaml found at {user_config_path} (will use defaults)")
 
+    logger.info(f"Config paths: default={default_config_path} (exists={os.path.exists(default_config_path)}), user={user_config_path} (exists={os.path.exists(user_config_path)})")
     return _deep_merge(defaults, user_cfg)
 
 config = load_app_config()
@@ -210,14 +213,17 @@ def get_api_key():
     # Priority 1: Environment variable
     env_key = os.environ.get("OPENAI_API_KEY")
     if env_key:
+        logger.info("OpenAI API key source: environment variable OPENAI_API_KEY (present)")
         return env_key
 
     # Priority 2: Config file
     if config and "api" in config and "openai_api_key" in config["api"]:
         config_key = config["api"]["openai_api_key"]
         if config_key and config_key.strip():
+            logger.info("OpenAI API key source: USER_DATA_DIR/config.yaml (present)")
             return config_key.strip()
 
+    logger.info("OpenAI API key source: none (missing)")
     return None
 
 # Function to initialize or reinitialize OpenAI client

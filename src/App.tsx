@@ -30,6 +30,7 @@ declare global {
       handleStartupStatus: (callback: (status: string) => void) => (() => void) | void;
       handlePythonReady: (callback: () => void) => (() => void) | void;
       handlePythonError: (callback: (error: string) => void) => (() => void) | void;
+      getAppVersion?: () => Promise<string>;
       getUserDataPath?: () => Promise<string>;
       openUserDataFolder?: () => Promise<{ success: boolean; path: string; error: string | null }>;
       downloadBackup?: () => Promise<{ success: boolean; filename?: string; error?: string }>;
@@ -38,7 +39,6 @@ declare global {
 }
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || "DocuSenseLM";
-const APP_VERSION = "1.0.16";
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
@@ -47,9 +47,24 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [backendReady, setBackendReady] = useState(false);
   const [docToOpen, setDocToOpen] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('unknown');
 
   useEffect(() => {
     document.title = APP_TITLE;
+  }, []);
+
+  // Show the real packaged version (do NOT hardcode).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const v = await window.electronAPI?.getAppVersion?.();
+        if (!cancelled && v) setAppVersion(String(v));
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -222,7 +237,7 @@ function App() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <FileText className="text-blue-400" /> {APP_TITLE}
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Version {APP_VERSION}</p>
+          <p className="text-xs text-slate-400 mt-1">Version {appVersion}</p>
         </div>
 
         <nav className="flex-1 space-y-2">
