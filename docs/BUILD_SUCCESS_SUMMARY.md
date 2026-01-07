@@ -87,7 +87,7 @@ Successfully configured and tested the complete build, install, and CI/CD pipeli
 - 4 NDAs visible with processing status
 
 ### 4. Chat & RAG
-- Query: "Who are the parties in the Fanuc NDA?"
+- Query: "Who are the parties in the example NDA?"
 - **Result**: ✓ RAG retrieved context from 5 documents
 - **Result**: ✓ OpenAI API calls succeeded (embeddings + chat)
 - **Result**: ✓ Response returned with relevant information

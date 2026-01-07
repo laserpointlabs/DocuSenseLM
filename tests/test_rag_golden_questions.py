@@ -28,75 +28,42 @@ TIMEOUT = 120  # seconds - increased for LLM response time
 # - description: Human-readable description of what we're testing
 
 GOLDEN_QUESTIONS = [
+    # Keep this suite safe for public repos:
+    # Use only synthetic fixtures (no real company/vendor names or proprietary docs).
     {
-        "id": "weeding_cost",
+        "id": "ocr_pricing_weeding",
         "question": "What do we pay for weeding?",
         "expected_patterns": [
-            r"\$55",  # Should mention $55
-            r"(per\s*(man)?\s*hour|hourly|T&M|time\s*and\s*material)",  # Should mention hourly/T&M
+            r"\$55",
+            r"(per\s*(man)?\s*hour|hourly|T&M|time\s*and\s*material)",
         ],
-        "expected_source": "Franny",  # Should cite Franny's agreement
+        "expected_source": "scanned_pricing_test.pdf",
     },
     {
-        "id": "seasonal_price",
+        "id": "ocr_pricing_seasonal",
         "question": "What is the seasonal contract price?",
         "expected_patterns": [
-            r"\$15,?000",  # Should mention $15,000
+            r"\$15,?000",
         ],
-        "expected_source": "Franny",
+        "expected_source": "scanned_pricing_test.pdf",
     },
     {
-        "id": "franny_snow_total",
-        "question": "What do we pay Franny's for snow removal?",
+        "id": "ocr_nda_parties",
+        "question": "Who are the parties?",
         "expected_patterns": [
-            r"\$49,?000",
-            r"\$9,?800",
+            r"Acme",
+            r"Beta",
         ],
-        "expected_source": "Frannys Snow Contract",
+        "expected_source": "scanned_nda_test.pdf",
     },
     {
-        "id": "franny_snow_payments",
-        "question": "How many payments are there for the Franny snow contract and how much is each payment?",
-        "expected_patterns": [
-            r"\bfive\b",
-            r"\$9,?800",
-        ],
-        "expected_source": "Frannys Snow Contract",
-    },
-    {
-        "id": "franny_snow_salt",
-        "question": "What is the cost per salt application in the Franny snow contract (after the 70-inch threshold)?",
-        "expected_patterns": [
-            r"\$1,?000",
-        ],
-        "expected_source": "Frannys Snow Contract",
-    },
-    {
-        "id": "fanuc_parties",
-        "question": "Who are the parties in the Fanuc America Corporation NDA?",
-        "expected_patterns": [
-            r"Fanuc",
-            r"Kidde",
-        ],
-        "expected_source": "Fanuc America Corporation",
-    },
-    {
-        "id": "kgs_parties",
-        "question": "Who are the parties in the KGS Fire and Security B.V. NDA?",
-        "expected_patterns": [
-            r"KGS",
-            r"Kidde",
-        ],
-        "expected_source": "KGS Fire",
-    },
-    {
-        "id": "worthington_expiration",
-        "question": "What is the expiration date of the WORTHINGTON sales agreement?",
+        "id": "ocr_nda_expiration",
+        "question": "What is the expiration date?",
         "expected_patterns": [
             r"July",
             r"2028",
         ],
-        "expected_source": "WORTHINGTON",
+        "expected_source": "scanned_nda_test.pdf",
     },
 ]
 
@@ -257,7 +224,12 @@ class TestHybridSearchRanking:
         Test that documents containing exact query keywords are ranked highly.
         This is the key benefit of hybrid search over pure semantic search.
         """
-        # "weeding" is a unique term only in Franny's document
+        # This test assumes the synthetic OCR fixture is uploaded.
+        docs = requests.get(f"{API_URL}/documents", timeout=10).json() or {}
+        present = any("scanned_pricing_test.pdf".lower() == k.lower() for k in docs.keys())
+        if not present:
+            pytest.skip("OCR fixture 'scanned_pricing_test.pdf' not uploaded to backend")
+
         question = "weeding costs"
 
         response = requests.post(
@@ -274,9 +246,9 @@ class TestHybridSearchRanking:
         print(f"\nQuestion: {question}")
         print(f"Sources: {sources}")
 
-        # Franny should be in sources since it's the only doc with "weeding"
-        franny_cited = any("franny" in s.lower() for s in sources)
-        assert franny_cited, f"Franny's doc should be cited for 'weeding' query. Sources: {sources}"
+        # The scanned pricing fixture should be cited (it contains "WEEDING" and "$55")
+        fixture_cited = any("scanned_pricing_test" in s.lower() for s in sources)
+        assert fixture_cited, f"Expected scanned_pricing_test to be cited. Sources: {sources}"
 
 
 class TestConversationHistory:
@@ -286,14 +258,18 @@ class TestConversationHistory:
         """
         Test that the AI can resolve pronouns like 'this' and 'it' when given conversation history.
 
-        This tests the core fix for the issue where:
-        - User asks about Franny's mid-summer treatment
-        - User follows up with "is this a good idea?"
-        - Without history: AI answers about random topics (like NDAs)
-        - With history: AI understands "this" refers to the lawn treatment
+        This tests the core fix for follow-up questions where:
+        - User asks a specific question
+        - User follows up with a pronoun ("this") that should refer to the prior answer
         """
-        # First, establish context with a question about Franny's services
-        context_question = "what does franny do in mid summer"
+        # Requires the synthetic OCR fixture to be uploaded.
+        docs = requests.get(f"{API_URL}/documents", timeout=10).json() or {}
+        present = any("scanned_pricing_test.pdf".lower() == k.lower() for k in docs.keys())
+        if not present:
+            pytest.skip("OCR fixture 'scanned_pricing_test.pdf' not uploaded to backend")
+
+        # First, establish context with a question that should cite the scanned pricing fixture
+        context_question = "What do we pay for weeding?"
         context_response = requests.post(
             f"{API_URL}/chat",
             json={"question": context_question},
@@ -308,7 +284,7 @@ class TestConversationHistory:
         print(f"A: {context_answer[:200]}...")
 
         # Now ask a follow-up with pronouns, including history
-        followup_question = "is this a good idea?"
+        followup_question = "Is this an hourly rate?"
         history = [
             {"role": "user", "content": context_question},
             {"role": "assistant", "content": context_answer}
@@ -333,17 +309,13 @@ class TestConversationHistory:
         print(f"A: {followup_answer[:300]}...")
         print(f"Sources: {followup_sources}")
 
-        # The answer should reference lawn care context OR Franny's document should be in sources
-        # This validates that query expansion is working to retrieve relevant context
-        lawn_terms = ["lawn", "fertiliz", "grass", "weed", "treatment", "summer", "grub", "landscape", "franny", "maintenance"]
+        # The follow-up should either cite the same fixture or mention hourly/T&M context.
+        pricing_terms = ["hour", "hourly", "t&m", "time and material", "per man"]
+        has_pricing_context = any(term in followup_answer for term in pricing_terms)
+        fixture_in_sources = any("scanned_pricing_test" in s.lower() for s in followup_sources)
 
-        has_lawn_context = any(term in followup_answer for term in lawn_terms)
-        franny_in_sources = any("franny" in s.lower() for s in followup_sources)
-
-        # Either the answer mentions lawn care context, OR Franny's doc is in sources
-        # (query expansion is working even if LLM hedges in response)
-        assert has_lawn_context or franny_in_sources, \
-            f"Follow-up should reference lawn care or cite Franny's doc. Answer: {followup_answer[:200]}, Sources: {followup_sources}"
+        assert has_pricing_context or fixture_in_sources, \
+            f"Follow-up should reference pricing context or cite scanned_pricing_test. Answer: {followup_answer[:200]}, Sources: {followup_sources}"
 
     def test_follow_up_without_history_fails(self, ensure_server_running):
         """
@@ -381,8 +353,14 @@ class TestConversationHistory:
         """
         history = []
 
+        # Requires the synthetic OCR fixture to be uploaded.
+        docs = requests.get(f"{API_URL}/documents", timeout=10).json() or {}
+        present = any("scanned_pricing_test.pdf".lower() == k.lower() for k in docs.keys())
+        if not present:
+            pytest.skip("OCR fixture 'scanned_pricing_test.pdf' not uploaded to backend")
+
         # Turn 1: Initial question
-        q1 = "What is the seasonal contract price for Franny?"
+        q1 = "What is the seasonal contract price?"
         r1 = requests.post(f"{API_URL}/chat", json={"question": q1}, timeout=TIMEOUT)
         assert r1.status_code == 200
         a1 = r1.json().get("answer", "")
@@ -395,7 +373,7 @@ class TestConversationHistory:
         print(f"A: {a1[:150]}...")
 
         # Turn 2: Follow-up with history
-        q2 = "what services are included in that price?"
+        q2 = "Is that a fixed seasonal price or an hourly rate?"
         r2 = requests.post(
             f"{API_URL}/chat",
             json={"question": q2, "history": history},
@@ -412,7 +390,7 @@ class TestConversationHistory:
         print(f"A: {a2[:150]}...")
 
         # Turn 3: Another follow-up
-        q3 = "are there any additional costs beyond that?"
+        q3 = "Are there any additional costs beyond that?"
         r3 = requests.post(
             f"{API_URL}/chat",
             json={"question": q3, "history": history},
@@ -425,11 +403,10 @@ class TestConversationHistory:
         print(f"Q: {q3}")
         print(f"A: {a3[:150]}...")
 
-        # The third answer should reference Franny/lawn care (from context)
-        # and possibly mention T&M or weeding costs
+        # The third answer should maintain pricing context and possibly mention $55 or dumping fees.
         answer_lower = a3.lower()
         has_context = any(term in answer_lower for term in
-            ["franny", "weeding", "t&m", "time and material", "$55", "additional", "lawn", "cost"])
+            ["weeding", "t&m", "time and material", "$55", "dumping", "hour", "cost", "additional"])
 
         assert has_context, \
             f"Multi-turn answer should maintain context. Got: {a3[:200]}"

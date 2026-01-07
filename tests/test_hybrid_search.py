@@ -106,12 +106,12 @@ class TestKeywordSearch:
             {
                 'id': 'chunk1',
                 'doc': 'WEEDING: Weed out beds, curbs, walkways. T&M @ $55.00 per man hour.',
-                'metadata': {'filename': 'franny_maintenance.pdf'}
+                'metadata': {'filename': 'example_maintenance.pdf'}
             },
             {
                 'id': 'chunk2', 
                 'doc': 'Seasonal lawn care includes fertilization and broadleaf weed control.',
-                'metadata': {'filename': 'franny_maintenance.pdf'}
+                'metadata': {'filename': 'example_maintenance.pdf'}
             },
             {
                 'id': 'chunk3',

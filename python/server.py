@@ -1125,10 +1125,11 @@ def get_rag_status() -> Dict[str, Any]:
 
     # Detect processed docs that claim to be searchable but have 0 indexed chunks.
     missing_index: List[Dict[str, Any]] = []
-    franny_filename = None
+    example_fixture_filename = None
     for k in (md.keys() if isinstance(md, dict) else []):
-        if isinstance(k, str) and "franny" in k.lower() and "maintenance" in k.lower():
-            franny_filename = k
+        # Prefer a known synthetic fixture if present (safe for public repos)
+        if isinstance(k, str) and "scanned_pricing_test" in k.lower():
+            example_fixture_filename = k
             break
 
     # Limit per-file checks to avoid long response times.
@@ -1144,7 +1145,7 @@ def get_rag_status() -> Dict[str, Any]:
         if cnt == 0:
             missing_index.append({"filename": fname, "doc_type": d.get("doc_type"), "status": d.get("status")})
 
-    franny_chunks = _safe_collection_filename_count(collection, franny_filename) if (collection is not None and franny_filename) else 0
+    example_fixture_chunks = _safe_collection_filename_count(collection, example_fixture_filename) if (collection is not None and example_fixture_filename) else 0
 
     ready = bool(openai_client) and bool(collection) and total_chunks > 0
     return {
@@ -1161,8 +1162,8 @@ def get_rag_status() -> Dict[str, Any]:
         "metadata_documents": len(md_items),
         "processed_searchable_documents": len(processed_searchable),
         "missing_index_documents": missing_index,
-        "franny_filename": franny_filename,
-        "franny_chunks": franny_chunks,
+        "example_fixture_filename": example_fixture_filename,
+        "example_fixture_chunks": example_fixture_chunks,
     }
 
 
@@ -2091,7 +2092,7 @@ async def chat(request: ChatRequest):
             if len(forced_context_files) >= max_pinned:
                 break
 
-        # Also expand to "related" docs by filename tokens (e.g., vendor family: Franny's maintenance + Franny's snow).
+        # Also expand to "related" docs by filename tokens (e.g., same vendor family across multiple agreements).
         # This is generic entity-style expansion, not word-specific heuristics.
         def _extract_filename_tokens(fn: str) -> List[str]:
             parts = fn.replace(".pdf", "").replace(".docx", "").replace("_", " ").split()
@@ -2137,11 +2138,11 @@ async def chat(request: ChatRequest):
     query_words_norm = [w for w in query_words_norm if len(w) >= 3]
     for filename in metadata.keys():
         # Check if significant parts of the filename are in the query
-        # e.g. "BRAWO" in "KIDDE_BRAWO_Supply..."
+        # e.g. "VENDOR" in "VENDOR_BRAWO_Supply..."
         # Split filename by common separators
         parts = filename.replace('.pdf', '').replace('.docx', '').replace('_', ' ').split()
         for part in parts:
-            # Normalize the filename token for better matching (handles punctuation like "Franny's")
+            # Normalize the filename token for better matching (handles punctuation like "Vendor's")
             part_norm = _normalize_token(part)
             if len(part_norm) < 4:
                 continue
@@ -2151,7 +2152,7 @@ async def chat(request: ChatRequest):
                 forced_context_files.append(filename)
                 break
 
-            # Fuzzy path: tolerate small typos (e.g. frannies/frans vs frannys)
+            # Fuzzy path: tolerate small typos (e.g. vendrs/vendors vs vendor)
             # Pick a conservative max edit distance based on token length.
             if len(part_norm) <= 5:
                 max_dist = 2
