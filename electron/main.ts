@@ -74,6 +74,7 @@ let updateState: UpdateState = 'idle';
 let updateDownloaded = false;
 let latestUpdateVersion: string | null = null;
 let downloadPercent: number | null = null;
+let quittingForUpdate = false;
 
 function setUpdateState(next: UpdateState, extra?: { version?: string | null; percent?: number | null; error?: string }) {
   updateState = next;
@@ -91,6 +92,54 @@ function formatProgressMessage() {
   if (updateState === 'downloaded') return `Update${v} downloaded and ready to install.`;
   if (updateState === 'error') return `Update error. See logs for details.`;
   return `No update in progress.`;
+}
+
+function killPythonProcess(reason: string) {
+  if (!pythonProcess) return;
+  try {
+    writeLog('INFO', `Stopping Python backend (${reason})... PID=${pythonProcess.pid ?? 'unknown'}`);
+    try { pythonProcess.kill('SIGTERM'); } catch { /* ignore */ }
+  } catch {
+    // ignore
+  }
+  // Hard-kill after a short grace period so update installers can replace files.
+  setTimeout(() => {
+    if (!pythonProcess) return;
+    try {
+      writeLog('WARN', `Force-killing Python backend (${reason})... PID=${pythonProcess.pid ?? 'unknown'}`);
+      pythonProcess.kill('SIGKILL');
+    } catch {
+      // ignore
+    }
+  }, 1500);
+}
+
+function quitAndInstallUpdateNow() {
+  quittingForUpdate = true;
+  writeLog('INFO', 'Update install requested: quitting app to install update...');
+  // Close windows aggressively (best practice for Windows installers).
+  try {
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { w.removeAllListeners('close'); } catch {}
+      try { w.destroy(); } catch {}
+    }
+  } catch {
+    // ignore
+  }
+  killPythonProcess('update-install');
+  // Give process a moment to release handles, then install.
+  setTimeout(() => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (e: any) {
+      writeLog('ERROR', `quitAndInstall failed: ${e?.message || String(e)}`);
+      try { app.quit(); } catch {}
+    }
+    // If anything prevents normal quit, force exit to avoid installer loops.
+    setTimeout(() => {
+      try { process.exit(0); } catch {}
+    }, 4000);
+  }, 600);
 }
 
 function canUseAutoUpdater(): boolean {
@@ -136,6 +185,12 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   // Best practice on Windows: after download, installing is done on restart (or app quit).
   autoUpdater.autoInstallOnAppQuit = true;
+  // electron-updater emits this, but its TS typings may not include it in all versions.
+  (autoUpdater as any).on('before-quit-for-update', () => {
+    quittingForUpdate = true;
+    writeLog('INFO', 'Auto-updater: before-quit-for-update');
+    killPythonProcess('before-quit-for-update');
+  });
 
   autoUpdater.on('error', (err) => {
     const msg = (err && (err as any).message) ? (err as any).message : String(err);
@@ -205,8 +260,10 @@ function setupAutoUpdater() {
       cancelId: 1,
     });
     if (result.response === 0) {
-      // (silent=false, forceRunAfter=true) so user sees the installer UX and the app comes back up.
-      autoUpdater.quitAndInstall(false, true);
+      writeLog('INFO', 'User accepted: Restart and install');
+      quitAndInstallUpdateNow();
+    } else {
+      writeLog('INFO', 'User deferred update install (Later)');
     }
   });
 }
@@ -694,9 +751,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  if (pythonProcess) {
-    pythonProcess.kill();
+  if (quittingForUpdate) {
+    writeLog('INFO', 'before-quit: quittingForUpdate=true');
   }
+  killPythonProcess('before-quit');
 });
 
 ipcMain.handle('get-api-port', () => API_PORT);
