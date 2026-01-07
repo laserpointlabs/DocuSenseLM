@@ -75,6 +75,7 @@ let updateDownloaded = false;
 let latestUpdateVersion: string | null = null;
 let downloadPercent: number | null = null;
 let quittingForUpdate = false;
+let manualUpdateCheckInProgress = false;
 
 function setUpdateState(next: UpdateState, extra?: { version?: string | null; percent?: number | null; error?: string }) {
   updateState = next;
@@ -195,6 +196,7 @@ function setupAutoUpdater() {
   autoUpdater.on('error', (err) => {
     const msg = (err && (err as any).message) ? (err as any).message : String(err);
     setUpdateState('error', { error: msg });
+    manualUpdateCheckInProgress = false;
     // Clear progress UI
     try { mainWindow?.setProgressBar(-1); } catch {}
     // Show a real error so the user isn't guessing.
@@ -212,12 +214,22 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-not-available', async (info) => {
     // Best practice: don't interrupt users with a modal “you're up to date” dialog.
-    // We'll just log the result; the Help menu can show status when asked.
+    // We'll just log the result for background checks. For explicit user-initiated checks,
+    // do show a clear "You're up to date" confirmation.
     updateDownloaded = false;
     setUpdateState('idle', { version: info?.version ?? null, percent: null });
+    if (manualUpdateCheckInProgress) {
+      manualUpdateCheckInProgress = false;
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'No updates available',
+        message: `You’re up to date (v${app.getVersion()}).`,
+      }).catch(() => {});
+    }
   });
 
   autoUpdater.on('update-available', async (info) => {
+    manualUpdateCheckInProgress = false;
     setUpdateState('available', { version: info?.version ?? null, percent: null });
     const result = await dialog.showMessageBox({
       type: 'info',
@@ -248,6 +260,7 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', async (info) => {
+    manualUpdateCheckInProgress = false;
     updateDownloaded = true;
     setUpdateState('downloaded', { version: info?.version ?? null, percent: 100 });
     try { mainWindow?.setProgressBar(-1); } catch {}
@@ -328,6 +341,7 @@ function buildAppMenu() {
               return;
             }
             try {
+              manualUpdateCheckInProgress = true;
               setUpdateState('checking', { percent: null });
               await autoUpdater.checkForUpdates();
             } finally {
