@@ -1,4 +1,4 @@
-/home/jdehart/Working/DocuSenseLM/
+<repo-root>/
   - build/
     - entitlements.mac.plist
     - icon.icns

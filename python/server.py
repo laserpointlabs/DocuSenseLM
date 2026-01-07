@@ -16,7 +16,7 @@ import asyncio
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,64 +26,92 @@ from pypdf import PdfReader
 from openai import OpenAI
 from dotenv import load_dotenv
 from platformdirs import user_config_dir
-import chromadb
-from chromadb.utils import embedding_functions
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 import hashlib
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nda-tool")
 
+# --- Heavy dependency loading / initialization ---
+# In packaged Windows builds, importing chromadb (and initializing persistent clients/collections)
+# can take tens of seconds on some machines (AV scanning, many site-packages, SQLite init, etc.).
+# If we do that at module import time, Uvicorn won't bind its port, and Electron will appear "stuck"
+# because /health can't connect. We therefore lazy-import + initialize RAG in a background thread.
+_chroma_import_lock = threading.Lock()
+_chroma_init_lock = threading.Lock()
+_chromadb_mod = None
+_embedding_functions_mod = None
+
+def _ensure_chromadb_modules() -> Tuple[Any, Any]:
+    global _chromadb_mod, _embedding_functions_mod
+    if _chromadb_mod is not None and _embedding_functions_mod is not None:
+        return _chromadb_mod, _embedding_functions_mod
+    with _chroma_import_lock:
+        if _chromadb_mod is None or _embedding_functions_mod is None:
+            import chromadb as _c  # heavy; keep out of cold-start path
+            from chromadb.utils import embedding_functions as _ef  # heavy; keep out of cold-start path
+            _chromadb_mod = _c
+            _embedding_functions_mod = _ef
+    return _chromadb_mod, _embedding_functions_mod
+
+rag_init_state: str = "not_started"  # not_started|initializing|ready|disabled|error
+rag_init_error: Optional[str] = None
+
 # --- RAG defaults / configuration helpers ---
 DEFAULT_COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "nda_documents")
 DEFAULT_DISTANCE_THRESHOLD = float(os.environ.get("RAG_DISTANCE_THRESHOLD", "0.75"))
 
-# Load configuration first to get BASE_DIR
-# Get the correct base directory (project root)
-# Electron may set working directory to python/ folder, so we need to go up one level
-if getattr(sys, '_MEIPASS', False):
+# Resolve BASE_DIR robustly (works for dev, win-unpacked, and installed builds).
+# We anchor to server.py's location rather than cwd so config/prompts are found even if cwd changes.
+if getattr(sys, "_MEIPASS", False):
     # Running in PyInstaller bundle
-    BASE_DIR = os.path.dirname(sys._MEIPASS)
+    _meipass = getattr(sys, "_MEIPASS", None)  # PyInstaller sets this at runtime
+    BASE_DIR = os.path.dirname(_meipass) if _meipass else os.getcwd()
 else:
-    # Running in development - find project root from __file__
-    current_dir = os.getcwd()
-    if os.path.basename(current_dir) == 'python':
-        # We're in the python subdirectory, go up one level
-        BASE_DIR = os.path.dirname(current_dir)
-    else:
-        # We're in the project root
-        BASE_DIR = current_dir
+    # Running from source copied into Electron resources/python
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 logger.info(f"BASE_DIR resolved to: {BASE_DIR}")
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"__file__ path: {__file__}")
 
-# OCR imports (optional - will gracefully degrade if not available)
+# OCR (optional): lazy-import on first use to avoid slowing down app startup in packaged builds.
+# EasyOCR + PyMuPDF can add minutes to cold start on some Windows machines if imported eagerly.
 OCR_AVAILABLE = False
 OCR_READER = None
-try:
-    import easyocr
-    import fitz  # PyMuPDF - for PDF to image conversion without poppler
-    OCR_AVAILABLE = True
-    # Initialize EasyOCR reader (English only for now)
-    # Models are stored in tools/easyocr_models/
-    OCR_READER = None  # Will be initialized on first use
-    logger.info("OCR libraries (easyocr, PyMuPDF) loaded successfully")
-except ImportError as e:
-    OCR_AVAILABLE = False
-    OCR_READER = None
-    logger.warning(f"OCR libraries not available: {e}")
+_OCR_IMPORT_ERROR: Optional[str] = None
 
-# Log OCR availability status
-if not OCR_AVAILABLE:
-    logger.warning("Scanned PDFs will not be processed (OCR unavailable)")
+def ensure_ocr_loaded() -> bool:
+    """
+    Lazily import OCR dependencies only when needed.
+    Returns True when OCR is available for use, otherwise False.
+    """
+    global OCR_AVAILABLE, _OCR_IMPORT_ERROR
+    if OCR_AVAILABLE:
+        return True
+    if _OCR_IMPORT_ERROR is not None:
+        return False
+
+    try:
+        # Import only when required (can be slow).
+        global easyocr, fitz  # type: ignore[global-variable-not-assigned]
+        import easyocr  # type: ignore
+        import fitz  # type: ignore  # PyMuPDF
+        OCR_AVAILABLE = True
+        logger.info("OCR libraries loaded (lazy): easyocr, PyMuPDF")
+        return True
+    except Exception as e:
+        _OCR_IMPORT_ERROR = str(e)
+        OCR_AVAILABLE = False
+        logger.warning(f"OCR libraries not available (lazy): {e}")
+        return False
 CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 
 # Use USER_DATA_DIR from environment or fall back to platform-specific config dir
 # e.g. ~/.config/docusenselm on Linux
 default_user_data = user_config_dir("docusenselm", appauthor=False)
 USER_DATA_DIR = os.environ.get("USER_DATA_DIR", default_user_data)
+logger.info(f"USER_DATA_DIR resolved to: {USER_DATA_DIR}")
 
 DOCUMENTS_DIR = os.path.join(USER_DATA_DIR, "documents")
 TEMPLATES_DIR = os.path.join(USER_DATA_DIR, "templates")
@@ -95,8 +123,10 @@ os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(DB_DIR, exist_ok=True)
 
-# Load .env
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+# Load .env (optional). Prefer userData .env for installed builds; fall back to BASE_DIR .env for dev.
+# Do not override existing env vars.
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=False)
+load_dotenv(os.path.join(USER_DATA_DIR, ".env"), override=False)
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 APP_NAME = os.environ.get("APP_NAME", "DocuSenseLM")
 
@@ -158,7 +188,10 @@ def load_app_config():
         except Exception as e:
             logger.error(f"Failed to load user config: {e}")
             user_cfg = {}
+    else:
+        logger.info(f"No user config.yaml found at {user_config_path} (will use defaults)")
 
+    logger.info(f"Config paths: default={default_config_path} (exists={os.path.exists(default_config_path)}), user={user_config_path} (exists={os.path.exists(user_config_path)})")
     return _deep_merge(defaults, user_cfg)
 
 config = load_app_config()
@@ -202,19 +235,22 @@ def get_api_key():
     # Priority 1: Environment variable
     env_key = os.environ.get("OPENAI_API_KEY")
     if env_key:
+        logger.info("OpenAI API key source: environment variable OPENAI_API_KEY (present)")
         return env_key
 
     # Priority 2: Config file
     if config and "api" in config and "openai_api_key" in config["api"]:
         config_key = config["api"]["openai_api_key"]
         if config_key and config_key.strip():
+            logger.info("OpenAI API key source: USER_DATA_DIR/config.yaml (present)")
             return config_key.strip()
 
+    logger.info("OpenAI API key source: none (missing)")
     return None
 
 # Function to initialize or reinitialize OpenAI client
 def initialize_openai_client():
-    global openai_client, openai_ef, collection
+    global openai_client, openai_ef, collection, chroma_client
 
     api_key = get_api_key()
 
@@ -229,6 +265,13 @@ def initialize_openai_client():
         # Initialize OpenAI client with timeout to prevent hanging
         openai_client = OpenAI(api_key=api_key, timeout=60.0)
         logger.info("OpenAI client initialized successfully with 60s timeout")
+
+        # Ensure Chroma is available (lazy import/init)
+        chromadb, embedding_functions = _ensure_chromadb_modules()
+        if chroma_client is None:
+            with _chroma_init_lock:
+                if chroma_client is None:
+                    chroma_client = chromadb.PersistentClient(path=DB_DIR)
 
         # Initialize ChromaDB with OpenAI embeddings
         openai_ef = embedding_functions.OpenAIEmbeddingFunction(
@@ -303,14 +346,11 @@ def initialize_openai_client():
         collection = None
         return False
 
-# Initialize ChromaDB (without embeddings initially)
-chroma_client = chromadb.PersistentClient(path=DB_DIR)
+# Chroma/OpenAI clients are initialized lazily (see initialize_openai_client + startup_event).
+chroma_client = None
 openai_client = None
 openai_ef = None
 collection = None
-
-# Try to initialize OpenAI
-initialize_openai_client()
 
 # Initialize FastAPI
 app = FastAPI(title=f"{APP_NAME} API")
@@ -692,8 +732,8 @@ def extract_text_from_pdf(filepath):
     requires_ocr = is_scanned_pdf(filepath)
 
     if requires_ocr:
-        # Scanned PDF - use OCR
-        if OCR_AVAILABLE:
+        # Scanned PDF - use OCR (lazy import to avoid slowing app startup)
+        if ensure_ocr_loaded():
             try:
                 logger.info(f"Detected scanned PDF - using OCR for {filepath}")
 
@@ -796,20 +836,22 @@ def extract_text_from_pdf(filepath):
             logger.error(f"Error extracting text from {filepath}: {e}")
             return ""
 
-def index_document(filename: str, text: str):
+def index_document(filename: str, text: str) -> bool:
     """
     Index document text into ChromaDB vector store.
     Ensures all text is properly chunked and indexed.
     """
     if not text or not text.strip():
         logger.warning(f"Attempted to index empty text for {filename}")
-        return
+        return False
 
     if collection is None:
         logger.error(f"Cannot index {filename}: ChromaDB collection not initialized")
-        return
+        return False
 
     try:
+        # Heavy import: keep out of cold-start path.
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
         # Split text into chunks
         # Larger chunks preserve more context for semantic search
         text_splitter = RecursiveCharacterTextSplitter(
@@ -821,7 +863,7 @@ def index_document(filename: str, text: str):
 
         if not chunks:
             logger.warning(f"No chunks created from text for {filename}")
-            return
+            return False
 
         logger.info(f"Created {len(chunks)} chunks from {len(text)} characters for {filename}")
 
@@ -855,6 +897,8 @@ def index_document(filename: str, text: str):
 
         if verify_count != len(chunks):
             logger.warning(f"Chunk count mismatch for {filename}: expected {len(chunks)}, got {verify_count}")
+
+        return True
 
     except Exception as e:
         logger.error(f"Error indexing document {filename}: {e}")
@@ -937,8 +981,7 @@ async def _process_document_async(filename: str, filepath: str, doc_type: str):
         logger.info(f"Step 2: Indexing {len(text_stripped)} characters of text for {filename}")
         indexing_successful = False
         try:
-            index_document(filename, text_stripped)
-            indexing_successful = True
+            indexing_successful = bool(index_document(filename, text_stripped))
             logger.info(f"Step 2 complete: Successfully indexed {filename}")
         except Exception as e:
             logger.error(f"Indexing failed for {filename}: {e}")
@@ -1051,14 +1094,14 @@ class UpdateMetadataRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    # Keep this endpoint lightweight; detailed diagnostics are available at /rag/status
-    rag_ready = bool(openai_client) and bool(collection)
-    try:
-        if rag_ready and collection is not None:
-            rag_ready = collection.count() > 0
-    except Exception:
-        rag_ready = False
-    return {"status": "ok", "version": "1.0.1", "rag": "enabled" if rag_ready else "degraded"}
+    # Keep this endpoint lightweight: it must return fast so Electron can decide the backend is up.
+    # Detailed diagnostics are available at /rag/status.
+    return {
+        "status": "ok",
+        "version": "1.0.1",
+        "rag": rag_init_state,
+        "rag_error": rag_init_error,
+    }
 
 
 def _safe_collection_count(col) -> int:
@@ -1079,6 +1122,8 @@ def _safe_collection_filename_count(col, filename: str) -> int:
 
 def _list_collections_with_counts() -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
+    if chroma_client is None:
+        return out
     try:
         cols = chroma_client.list_collections()
     except Exception:
@@ -1114,10 +1159,11 @@ def get_rag_status() -> Dict[str, Any]:
 
     # Detect processed docs that claim to be searchable but have 0 indexed chunks.
     missing_index: List[Dict[str, Any]] = []
-    franny_filename = None
+    example_fixture_filename = None
     for k in (md.keys() if isinstance(md, dict) else []):
-        if isinstance(k, str) and "franny" in k.lower() and "maintenance" in k.lower():
-            franny_filename = k
+        # Prefer a known synthetic fixture if present (safe for public repos)
+        if isinstance(k, str) and "scanned_pricing_test" in k.lower():
+            example_fixture_filename = k
             break
 
     # Limit per-file checks to avoid long response times.
@@ -1133,7 +1179,7 @@ def get_rag_status() -> Dict[str, Any]:
         if cnt == 0:
             missing_index.append({"filename": fname, "doc_type": d.get("doc_type"), "status": d.get("status")})
 
-    franny_chunks = _safe_collection_filename_count(collection, franny_filename) if (collection is not None and franny_filename) else 0
+    example_fixture_chunks = _safe_collection_filename_count(collection, example_fixture_filename) if (collection is not None and example_fixture_filename) else 0
 
     ready = bool(openai_client) and bool(collection) and total_chunks > 0
     return {
@@ -1150,8 +1196,8 @@ def get_rag_status() -> Dict[str, Any]:
         "metadata_documents": len(md_items),
         "processed_searchable_documents": len(processed_searchable),
         "missing_index_documents": missing_index,
-        "franny_filename": franny_filename,
-        "franny_chunks": franny_chunks,
+        "example_fixture_filename": example_fixture_filename,
+        "example_fixture_chunks": example_fixture_chunks,
     }
 
 
@@ -2080,7 +2126,7 @@ async def chat(request: ChatRequest):
             if len(forced_context_files) >= max_pinned:
                 break
 
-        # Also expand to "related" docs by filename tokens (e.g., vendor family: Franny's maintenance + Franny's snow).
+        # Also expand to "related" docs by filename tokens (e.g., same vendor family across multiple agreements).
         # This is generic entity-style expansion, not word-specific heuristics.
         def _extract_filename_tokens(fn: str) -> List[str]:
             parts = fn.replace(".pdf", "").replace(".docx", "").replace("_", " ").split()
@@ -2126,11 +2172,11 @@ async def chat(request: ChatRequest):
     query_words_norm = [w for w in query_words_norm if len(w) >= 3]
     for filename in metadata.keys():
         # Check if significant parts of the filename are in the query
-        # e.g. "BRAWO" in "KIDDE_BRAWO_Supply..."
+        # e.g. "VENDOR" in "VENDOR_BRAWO_Supply..."
         # Split filename by common separators
         parts = filename.replace('.pdf', '').replace('.docx', '').replace('_', ' ').split()
         for part in parts:
-            # Normalize the filename token for better matching (handles punctuation like "Franny's")
+            # Normalize the filename token for better matching (handles punctuation like "Vendor's")
             part_norm = _normalize_token(part)
             if len(part_norm) < 4:
                 continue
@@ -2140,7 +2186,7 @@ async def chat(request: ChatRequest):
                 forced_context_files.append(filename)
                 break
 
-            # Fuzzy path: tolerate small typos (e.g. frannies/frans vs frannys)
+            # Fuzzy path: tolerate small typos (e.g. vendrs/vendors vs vendor)
             # Pick a conservative max edit distance based on token length.
             if len(part_norm) <= 5:
                 max_dist = 2
@@ -2382,8 +2428,27 @@ async def chat(request: ChatRequest):
 @app.on_event("startup")
 async def startup_event():
     """Run cleanup on startup to remove any legacy zip files from repo root"""
+    global rag_init_state, rag_init_error
     cleanup_root_zip_artifacts()
     logger.info("Cleaned up any legacy zip files from repo root")
+    # Kick off RAG initialization in a background thread so Uvicorn can start responding immediately.
+    # This prevents the Electron UI from appearing "stuck" while heavy imports (chromadb) run.
+    if rag_init_state == "not_started":
+        rag_init_state = "initializing"
+        rag_init_error = None
+
+        async def _init_rag_async():
+            global rag_init_state, rag_init_error
+            try:
+                ok = await asyncio.to_thread(initialize_openai_client)
+                # Missing API key isn't an error; it simply disables RAG.
+                rag_init_state = "ready" if ok else "disabled"
+            except Exception as e:
+                rag_init_state = "error"
+                rag_init_error = str(e)
+                logger.error(f"RAG initialization failed: {e}")
+
+        asyncio.create_task(_init_rag_async())
 
 if __name__ == "__main__":
     print("Starting FastAPI server...")

@@ -4,7 +4,7 @@
 
 ### The Problem
 
-When users asked "What do we pay for weeding?", the system consistently failed to return the correct answer ($55.00 per man hour) from the Franny's Maintenance Agreement, despite the document being processed and indexed.
+When users asked "What do we pay for weeding?", the system consistently failed to return the correct answer ($55.00 per man hour) from an example maintenance/pricing agreement, despite the document being processed and indexed.
 
 **Expected Answer:** $55.00 per man, per man hour (plus dumping fees)  
 **Actual Answer:** "No specific information on weeding costs" or incorrect references to $15,000 seasonal contract
@@ -37,7 +37,7 @@ After fixing the indexing bug, the weeding information was correctly stored in C
 
 **The Math:**
 - Query: "What do we pay for weeding?"
-- Franny chunk (containing "$55/hour weeding"): distance = **0.5924**
+- Example chunk (containing "$55/hour weeding"): distance = **0.5924**
 - Original threshold: **0.5** (exclude if distance >= 0.5)
 - Result: Chunk EXCLUDED ❌
 
@@ -55,27 +55,20 @@ DISTANCE_THRESHOLD = 0.75  # Allows relevant semantic matches
 
 This is the key insight: **Semantic embeddings don't work like keyword search.**
 
-The Franny document chunk containing weeding information looked like this:
+The example document chunk containing weeding information looked like this:
 ```
 --- Page 1 ---
-DocuSign Envelope ID: 4D3B88FD-9C62-44F5-A7SB-E6DC33A83E90
-Franny's LANDSCAPE CO., INC.
-P.O. Box 4847, Framingham, MA 01704
-...
 WEEDING
 Weed out beds, curbs, walkways, etc.
 T&M (Time and Material) @ $55.00 per man, per man hour, plus dumping fees.
-...
-Late Summer/Early Fall Application
-Balanced fertilization plus broadleaf weed control
-...
+SEASONAL CONTRACT PRICE: $15,000.00
 ```
 
 **The chunk was 273 words total, but only ~20 words were about weeding costs.**
 
 When OpenAI's `text-embedding-3-small` model creates an embedding:
 - It represents the **entire chunk's meaning** as a 1536-dimensional vector
-- The embedding captures "landscaping maintenance agreement" as the primary concept
+- The embedding captures "maintenance agreement" as the primary concept
 - "Weeding costs" is only ~7% of the semantic content
 - Result: Distance of 0.59 instead of 0.1
 

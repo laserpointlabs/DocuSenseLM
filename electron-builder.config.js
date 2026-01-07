@@ -3,6 +3,11 @@ require('dotenv').config();
 module.exports = {
   appId: "com.docusenselm.app",
   productName: "DocuSenseLM",
+  // Ensure Windows shows a sane name in Task Manager "Processes" list.
+  // electron-builder uses package metadata for PE version strings; we force description here too.
+  extraMetadata: {
+    description: "DocuSenseLM",
+  },
   directories: {
     output: "release"
   },
@@ -52,8 +57,15 @@ module.exports = {
       "nsis",
       "dir"
     ],
+    artifactName: "DocuSenseLM-Setup-${version}.${ext}",
     sign: false, // disable signing to avoid winCodeSign download
     signingHashAlgorithms: []
+  },
+  nsis: {
+    artifactName: "DocuSenseLM-Setup-${version}.${ext}",
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true
   },
   linux: {
     target: "AppImage",

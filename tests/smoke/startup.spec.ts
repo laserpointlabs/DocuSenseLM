@@ -43,7 +43,8 @@ test.describe('Smoke: startup', () => {
     await new Promise((r) => setTimeout(r, 2000));
 
     // Poll backend health from Node (not renderer) until ok or timeout
-    const deadline = Date.now() + 90_000;
+    const startedAt = Date.now();
+    const deadline = startedAt + 180_000; // allow slow cold starts in CI/Windows
     let healthOk = false;
     while (Date.now() < deadline) {
       try {
@@ -62,6 +63,11 @@ test.describe('Smoke: startup', () => {
     }
 
     expect(healthOk).toBeTruthy();
+
+    const msToHealth = Date.now() - startedAt;
+    console.log(`[metric] smoke_startup_backend_health_ms=${msToHealth}`);
+    // Guardrail: should not exceed 3 minutes (if it does, we consider startup "stuck" for MVP)
+    expect(msToHealth).toBeLessThan(180_000);
 
     await app.close();
   });

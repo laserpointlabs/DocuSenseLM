@@ -30,6 +30,7 @@ declare global {
       handleStartupStatus: (callback: (status: string) => void) => (() => void) | void;
       handlePythonReady: (callback: () => void) => (() => void) | void;
       handlePythonError: (callback: (error: string) => void) => (() => void) | void;
+      getAppVersion?: () => Promise<string>;
       getUserDataPath?: () => Promise<string>;
       openUserDataFolder?: () => Promise<{ success: boolean; path: string; error: string | null }>;
       downloadBackup?: () => Promise<{ success: boolean; filename?: string; error?: string }>;
@@ -38,7 +39,6 @@ declare global {
 }
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || "DocuSenseLM";
-const APP_VERSION = "1.0.16";
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'documents' | 'chat' | 'templates' | 'settings'>('dashboard');
@@ -47,9 +47,24 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [backendReady, setBackendReady] = useState(false);
   const [docToOpen, setDocToOpen] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('unknown');
 
   useEffect(() => {
     document.title = APP_TITLE;
+  }, []);
+
+  // Show the real packaged version (do NOT hardcode).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const v = await window.electronAPI?.getAppVersion?.();
+        if (!cancelled && v) setAppVersion(String(v));
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -101,10 +116,15 @@ function App() {
     const initApp = async () => {
       console.log('App: Starting manual health checking');
       let retries = 0;
-      while (retries < 30) {
+      // Packaged builds can have a slow cold-start Python import path on Windows.
+      // Give the backend ample time to come up before we drop users into a half-initialized UI.
+      while (retries < 180) {
         if (cancelled) return;
         try {
-          const res = await fetch(`http://localhost:${API_PORT}/health`);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 1200);
+          const res = await fetch(`http://localhost:${API_PORT}/health`, { signal: controller.signal });
+          clearTimeout(timeout);
           if (res.ok) {
             console.log('App: Health check passed');
             initializeApp('health');
@@ -113,10 +133,19 @@ function App() {
         } catch {
           // Ignore error, retry
         }
+        // After ~30s, stop blocking the whole UI on backend startup.
+        // Keep polling in the background and auto-initialize as soon as the backend is ready.
+        if (retries === 15) {
+          setConfig({ document_types: {}, dashboard: {} } as any);
+          setIsLoading(false);
+        }
         await new Promise(resolve => setTimeout(resolve, 2000));
         retries++;
       }
       console.error('App: Failed to connect to backend after all retries');
+      // Ensure we at least render something other than "Loading configuration..."
+      // (Settings view can still show Storage Path + let users retry later.)
+      setConfig({ document_types: {}, dashboard: {} } as any);
       setIsLoading(false); // Show the app anyway, let user see the error
     };
 
@@ -208,7 +237,7 @@ function App() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <FileText className="text-blue-400" /> {APP_TITLE}
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Version {APP_VERSION}</p>
+          <p className="text-xs text-slate-400 mt-1">Version {appVersion}</p>
         </div>
 
         <nav className="flex-1 space-y-2">
@@ -2434,7 +2463,18 @@ function SettingsView() {
             fetchApiKeyStatus();
         } catch (err) {
             console.error("Failed to save API key:", err);
-            setShowAlert({ title: "Error", message: "Failed to save API key. Please try again." });
+            const msg = String((err as any)?.message || err || "");
+            const isBackendStarting =
+              msg.includes("Failed to fetch") ||
+              msg.includes("NetworkError") ||
+              msg.includes("ECONNREFUSED") ||
+              msg.includes("ERR_CONNECTION");
+            setShowAlert({
+              title: "Error",
+              message: isBackendStarting
+                ? "The API server is still starting. Please wait a moment and try again."
+                : "Failed to save API key. Please try again.",
+            });
         } finally {
             setSavingApiKey(false);
         }

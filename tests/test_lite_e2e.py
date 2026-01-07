@@ -3,11 +3,31 @@ import time
 import requests
 import pytest
 import shutil
+import subprocess
+import sys
 
 # Configuration
 API_BASE_URL = "http://localhost:14242"
 TEST_FILE_PATH = "data/green_nda.pdf"
 TEST_FILENAME = "green_nda.pdf"
+
+
+def _ensure_test_pdfs_exist():
+    """
+    Ensure the generated test PDFs exist.
+    These are produced by tests/fixtures/generate_test_pdfs.py (ReportLab).
+    """
+    if os.path.exists(TEST_FILE_PATH):
+        return
+
+    gen_script = os.path.join("tests", "fixtures", "generate_test_pdfs.py")
+    if not os.path.exists(gen_script):
+        raise RuntimeError(f"Missing PDF generator script: {gen_script}")
+
+    os.makedirs(os.path.dirname(TEST_FILE_PATH), exist_ok=True)
+    subprocess.run([sys.executable, gen_script], check=True)
+    assert os.path.exists(TEST_FILE_PATH), f"Expected generated PDF at {TEST_FILE_PATH}"
+
 
 @pytest.fixture(scope="module")
 def api_base_url():
@@ -32,9 +52,21 @@ def test_config(api_base_url):
     data = response.json()
     assert "document_types" in data
 
+
+def test_upload_rejects_invalid_extension(api_base_url, tmp_path):
+    # Backend should reject anything other than PDF/DOCX
+    bad = tmp_path / "not_allowed.txt"
+    bad.write_text("nope", encoding="utf-8")
+    with open(bad, "rb") as f:
+        files = {"file": ("not_allowed.txt", f, "text/plain")}
+        res = requests.post(f"{api_base_url}/upload", files=files, params={"doc_type": "nda"})
+    assert res.status_code == 400
+    body = res.json()
+    assert "Only PDF and DOCX files are allowed" in (body.get("detail") or "")
+
 def test_upload_document(api_base_url):
     # Ensure file exists
-    assert os.path.exists(TEST_FILE_PATH)
+    _ensure_test_pdfs_exist()
     
     with open(TEST_FILE_PATH, "rb") as f:
         files = {"file": (TEST_FILENAME, f, "application/pdf")}
@@ -71,6 +103,8 @@ def test_wait_for_processing(api_base_url):
     pytest.fail(f"Document {TEST_FILENAME} failed to process within timeout")
 
 def test_chat(api_base_url):
+    if not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set; skipping chat test")
     # Test simple chat
     payload = {"question": "What is the termination clause?"}
     response = requests.post(f"{api_base_url}/chat", json=payload)
@@ -81,6 +115,8 @@ def test_chat(api_base_url):
     assert len(data["answer"]) > 10
 
 def test_report(api_base_url):
+    if not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set; skipping report test")
     response = requests.post(f"{api_base_url}/report")
     assert response.status_code == 200
     data = response.json()

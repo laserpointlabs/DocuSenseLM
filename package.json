@@ -1,7 +1,7 @@
 {
   "name": "docusenselm",
-  "version": "1.0.16",
-  "description": "Simple desktop app for managing and interrogating NDAs/Agreements",
+  "version": "1.0.27",
+  "description": "DocuSenseLM",
   "author": "DocuSenseLM",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -108,9 +108,11 @@
       "target": [
         "nsis",
         "dir"
-      ]
+      ],
+      "artifactName": "DocuSenseLM-Setup-${version}.${ext}"
     },
     "nsis": {
+      "artifactName": "DocuSenseLM-Setup-${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true

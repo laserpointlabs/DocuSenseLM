@@ -10,10 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: windows-latest
 
     steps:
       - name: Check out Git repository
@@ -28,33 +25,111 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Setup embedded Python (python/python_embed)
+        shell: pwsh
+        run: ./scripts/setup-python-embed.ps1
+
+      - name: Setup Python (for tests)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies (pytest + requests + reportlab)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest requests reportlab
+
       - name: Build and Release Electron App
         env:
           # Prefer a PAT if configured (more reliable for Releases in some org/repo setups),
           # otherwise fall back to the workflow token.
           GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
         run: |
-          # We skip the build:python part of the build script since we did it above
+          # python/python_embed is prepared by the previous step and will be packaged via extraResources.
           npm run build:web
           npm run build:electron
-          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || 'win' }} --publish never
+          npx electron-builder --win --publish never
+
+      - name: Generate test PDFs (data/*.pdf)
+        run: python tests/fixtures/generate_test_pdfs.py
+
+      - name: Start backend (embedded Python)
+        shell: pwsh
+        run: |
+          $env:USER_DATA_DIR = Join-Path $env:RUNNER_TEMP "docusenselm-ci-userdata"
+          New-Item -ItemType Directory -Force -Path $env:USER_DATA_DIR | Out-Null
+          $env:PORT = "14242"
+          $stdout = Join-Path $env:RUNNER_TEMP "backend-stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "backend-stderr.log"
+          $p = Start-Process -FilePath ".\\python\\python_embed\\python.exe" -ArgumentList @("python\\server.py") -WorkingDirectory (Get-Location) -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          "BACKEND_PID=$($p.Id)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # wait for health
+          $ok = $false
+          for ($i=0; $i -lt 90; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $r = Invoke-RestMethod -Uri "http://127.0.0.1:14242/health" -TimeoutSec 2
+              if ($r.status -eq "ok") { $ok = $true; break }
+            } catch {}
+          }
+          if (-not $ok) {
+            Write-Host "---- backend stdout ----"
+            if (Test-Path $stdout) { Get-Content $stdout -Tail 200 }
+            Write-Host "---- backend stderr ----"
+            if (Test-Path $stderr) { Get-Content $stderr -Tail 200 }
+            throw "Backend failed to become healthy in time"
+          }
+
+      - name: Run functional API E2E tests (no OpenAI required)
+        run: python -m pytest tests/test_lite_e2e.py -v
+
+      - name: Run Electron smoke test (startup)
+        run: npx playwright test tests/smoke/startup.spec.ts
+
+      - name: Stop backend
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:BACKEND_PID) {
+            try { Stop-Process -Id ([int]$env:BACKEND_PID) -Force -ErrorAction SilentlyContinue } catch {}
+          }
+
+      - name: Assert embedded Python is packaged
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "release\\win-unpacked\\resources\\python\\python_embed\\python.exe")) {
+            Write-Error "Packaged embedded python missing: release\\win-unpacked\\resources\\python\\python_embed\\python.exe"
+          }
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocuSenseLM-windows-${{ github.ref_name }}
+          path: release/*.*
+          retention-days: 30
+
+  release:
+    name: Create GitHub Release (single finalizer)
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DocuSenseLM-*-*
+          path: release-artifacts
+          merge-multiple: true
 
       - name: Create GitHub Release and upload installers
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
         with:
           files: |
-            release/*.exe
-            release/*.blockmap
-            release/*.yml
-            release/*.AppImage
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: DocuSenseLM-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows' }}-${{ github.ref_name }}
-          path: release/*.*
-          retention-days: 30
+            release-artifacts/**/*.exe
+            release-artifacts/**/*.blockmap
+            release-artifacts/**/*.yml
+          fail_on_unmatched_files: false
 

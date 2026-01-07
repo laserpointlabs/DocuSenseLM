@@ -6,7 +6,7 @@ Goal: produce a clean Windows build, install it, test it, and ship versioned art
 - Windows Developer Mode ON (or run build shell as Administrator) to avoid winCodeSign symlink errors.
 - Node/npm installed.
 - Environment variable `OPENAI_API_KEY` set to the key only (no `OPENAI_API_KEY=` prefix).
-- User config at `C:\Users\engin\AppData\Roaming\DocuSenseLM\config.yaml` has `api.openai_api_key: ""`.
+- User config at `C:\Users\<username>\AppData\Roaming\DocuSenseLM\config.yaml` has `api.openai_api_key: ""`.
 
 ## Clean start before each build
 - Kill any DocuSenseLM/electron processes.

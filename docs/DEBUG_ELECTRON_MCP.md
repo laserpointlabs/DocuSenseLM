@@ -36,7 +36,7 @@ Add/ensure an entry in `.cursor/mcp.json`:
 ### Start the app with remote debugging (simplest: `run-debug.ps1`)
 Use the helper script to start both React and Electron with a fixed DevTools port. It will auto-generate a screenshot key for the session if one isn’t set.
 ```powershell
-cd C:\Users\JohnDeHart\working\insightLM-LT
+cd <your-repo-path>
 .\run-debug.ps1                  # defaults: port 9222, auto temp key if none
 # or explicitly:
 .\run-debug.ps1 -Port 9223 -ScreenshotKey "<your_hex_key>"
@@ -44,7 +44,7 @@ cd C:\Users\JohnDeHart\working\insightLM-LT
 
 If you prefer manual commands:
 ```powershell
-cd C:\Users\JohnDeHart\working\insightLM-LT
+cd <your-repo-path>
 npm run dev:react
 npm run dev:electron -- --remote-debugging-port=9222 --enable-logging
 ```

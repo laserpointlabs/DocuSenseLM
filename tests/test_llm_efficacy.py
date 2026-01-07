@@ -5,11 +5,36 @@ import os
 import json
 import re
 from datetime import datetime
+import subprocess
+import sys
 
 # Configuration
 API_URL = "http://localhost:14242"
 TEST_FILE = "data/green_nda.pdf"
 FILENAME = "green_nda.pdf"
+
+
+def _ensure_test_pdfs_exist():
+    """
+    Ensure the generated test PDFs exist.
+    These are produced by tests/fixtures/generate_test_pdfs.py (ReportLab).
+    """
+    if os.path.exists(TEST_FILE):
+        return
+
+    gen_script = os.path.join("tests", "fixtures", "generate_test_pdfs.py")
+    if not os.path.exists(gen_script):
+        raise RuntimeError(f"Missing PDF generator script: {gen_script}")
+
+    os.makedirs(os.path.dirname(TEST_FILE), exist_ok=True)
+    subprocess.run([sys.executable, gen_script], check=True)
+    assert os.path.exists(TEST_FILE), f"Expected generated PDF at {TEST_FILE}"
+
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set; skipping LLM efficacy tests",
+)
 
 # Ground Truth Data for green_nda.pdf
 EXPECTED_FACTS = {
@@ -21,6 +46,7 @@ EXPECTED_FACTS = {
 @pytest.fixture(scope="module")
 def setup_document():
     """Uploads the document and waits for processing to complete."""
+    _ensure_test_pdfs_exist()
     # Cleanup specific file to ensure fresh upload state
     requests.delete(f"{API_URL}/documents/{FILENAME}")
     

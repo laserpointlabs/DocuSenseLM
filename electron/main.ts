@@ -7,6 +7,47 @@ import http from 'http';
 
 const isDev = !app.isPackaged;
 
+// ---- Startup metrics + file logging (packaged debugging) ----
+const PROCESS_START_MS = Date.now();
+let logFilePath: string | null = null;
+
+function formatIso(ms: number) {
+  return new Date(ms).toISOString();
+}
+
+function ensureLogFile() {
+  try {
+    if (logFilePath) return;
+    const userData = app.getPath('userData');
+    const dir = path.join(userData, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    logFilePath = path.join(dir, 'main.log');
+  } catch {
+    // ignore
+  }
+}
+
+function writeLog(level: 'INFO' | 'WARN' | 'ERROR' | 'METRIC', message: string) {
+  const line = `${formatIso(Date.now())} [${level}] ${message}\n`;
+  // Always mirror to console (shows up in terminal in dev/win-unpacked).
+  if (level === 'ERROR') console.error(message);
+  else if (level === 'WARN') console.warn(message);
+  else console.log(message);
+
+  // Also append to file for packaged builds.
+  try {
+    ensureLogFile();
+    if (logFilePath) fs.appendFileSync(logFilePath, line, { encoding: 'utf8' });
+  } catch {
+    // ignore
+  }
+}
+
+function metric(name: string, extra?: Record<string, any>) {
+  const base = { ms_since_process_start: Date.now() - PROCESS_START_MS, ...extra };
+  writeLog('METRIC', `${name} ${JSON.stringify(base)}`);
+}
+
 // Helper function to check if running from dist directory
 // In dev mode, __dirname is dist-electron, but we want to treat that as dev
 // Only treat as dist build if it's in a release/win-unpacked directory or packaged
@@ -28,69 +69,214 @@ let pythonProcess: ChildProcess | null = null;
 const API_PORT = 14242;
 
 // --- Auto-update UX (packaged builds only) ---
-let updateCheckInProgress = false;
+type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error';
+let updateState: UpdateState = 'idle';
 let updateDownloaded = false;
+let latestUpdateVersion: string | null = null;
+let downloadPercent: number | null = null;
+let quittingForUpdate = false;
+let manualUpdateCheckInProgress = false;
+
+function setUpdateState(next: UpdateState, extra?: { version?: string | null; percent?: number | null; error?: string }) {
+  updateState = next;
+  if (typeof extra?.version !== 'undefined') latestUpdateVersion = extra.version ?? null;
+  if (typeof extra?.percent !== 'undefined') downloadPercent = extra.percent ?? null;
+  if (extra?.error) writeLog('ERROR', `Auto-updater error: ${extra.error}`);
+  writeLog('INFO', `Auto-updater state: ${updateState}${latestUpdateVersion ? ` (update=${latestUpdateVersion})` : ''}${downloadPercent != null ? ` (${downloadPercent.toFixed(1)}%)` : ''}`);
+}
+
+function formatProgressMessage() {
+  const v = latestUpdateVersion ? ` ${latestUpdateVersion}` : '';
+  if (updateState === 'checking') return `Checking for updates…`;
+  if (updateState === 'available') return `Update${v} available.`;
+  if (updateState === 'downloading') return `Downloading update${v}${downloadPercent != null ? ` (${downloadPercent.toFixed(1)}%)` : ''}…`;
+  if (updateState === 'downloaded') return `Update${v} downloaded and ready to install.`;
+  if (updateState === 'error') return `Update error. See logs for details.`;
+  return `No update in progress.`;
+}
+
+function killPythonProcess(reason: string) {
+  if (!pythonProcess) return;
+  try {
+    writeLog('INFO', `Stopping Python backend (${reason})... PID=${pythonProcess.pid ?? 'unknown'}`);
+    try { pythonProcess.kill('SIGTERM'); } catch { /* ignore */ }
+  } catch {
+    // ignore
+  }
+  // Hard-kill after a short grace period so update installers can replace files.
+  setTimeout(() => {
+    if (!pythonProcess) return;
+    try {
+      writeLog('WARN', `Force-killing Python backend (${reason})... PID=${pythonProcess.pid ?? 'unknown'}`);
+      pythonProcess.kill('SIGKILL');
+    } catch {
+      // ignore
+    }
+  }, 1500);
+}
+
+function quitAndInstallUpdateNow() {
+  quittingForUpdate = true;
+  writeLog('INFO', 'Update install requested: quitting app to install update...');
+  // Close windows aggressively (best practice for Windows installers).
+  try {
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { w.removeAllListeners('close'); } catch {}
+      try { w.destroy(); } catch {}
+    }
+  } catch {
+    // ignore
+  }
+  killPythonProcess('update-install');
+  // Give process a moment to release handles, then install.
+  setTimeout(() => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (e: any) {
+      writeLog('ERROR', `quitAndInstall failed: ${e?.message || String(e)}`);
+      try { app.quit(); } catch {}
+    }
+    // If anything prevents normal quit, force exit to avoid installer loops.
+    setTimeout(() => {
+      try { process.exit(0); } catch {}
+    }, 4000);
+  }, 600);
+}
+
+function canUseAutoUpdater(): boolean {
+  if (!app.isPackaged) return false;
+  // electron-updater expects app-update.yml in packaged apps; win-unpacked builds often don't have it.
+  // Avoid confusing errors and startup delays by disabling auto-updater when it's missing.
+  try {
+    const updateCfg = path.join(process.resourcesPath, 'app-update.yml');
+    return fs.existsSync(updateCfg);
+  } catch {
+    return false;
+  }
+}
+
+function migrateLegacyUserDataIfNeeded(userDataPath: string) {
+  // Older builds may have used a different userData folder name (e.g. "DocuSenseLM").
+  // If the new path is empty, copy over config.yaml so users keep their API key.
+  try {
+    const roaming = process.env.APPDATA;
+    if (!roaming) return;
+
+    const legacyPath = path.join(roaming, 'DocuSenseLM');
+    const currentPath = userDataPath;
+
+    const legacyCfg = path.join(legacyPath, 'config.yaml');
+    const currentCfg = path.join(currentPath, 'config.yaml');
+
+    if (!fs.existsSync(legacyCfg)) return;
+    if (fs.existsSync(currentCfg)) return;
+
+    fs.mkdirSync(currentPath, { recursive: true });
+    fs.copyFileSync(legacyCfg, currentCfg);
+    console.log(`[migrate] Copied legacy config.yaml from ${legacyPath} -> ${currentPath}`);
+  } catch (e) {
+    console.warn(`[migrate] Skipped legacy userData migration: ${e}`);
+  }
+}
 
 function setupAutoUpdater() {
-  if (!app.isPackaged) return;
+  if (!canUseAutoUpdater()) return;
 
   // Give users control: check on startup, but don't download until they confirm.
   autoUpdater.autoDownload = false;
+  // Best practice on Windows: after download, installing is done on restart (or app quit).
+  autoUpdater.autoInstallOnAppQuit = true;
+  // electron-updater emits this, but its TS typings may not include it in all versions.
+  (autoUpdater as any).on('before-quit-for-update', () => {
+    quittingForUpdate = true;
+    writeLog('INFO', 'Auto-updater: before-quit-for-update');
+    killPythonProcess('before-quit-for-update');
+  });
 
   autoUpdater.on('error', (err) => {
-    updateCheckInProgress = false;
     const msg = (err && (err as any).message) ? (err as any).message : String(err);
-    console.error(`Auto-updater error: ${msg}`);
-    // Avoid noisy dialogs for transient connectivity issues; user can manually re-check.
+    setUpdateState('error', { error: msg });
+    manualUpdateCheckInProgress = false;
+    // Clear progress UI
+    try { mainWindow?.setProgressBar(-1); } catch {}
+    // Show a real error so the user isn't guessing.
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Update failed',
+      message: `Failed to update: ${msg}`,
+      detail: 'See logs for details. You can retry from Help → Check for Updates…',
+    }).catch(() => {});
   });
 
   autoUpdater.on('checking-for-update', () => {
-    updateCheckInProgress = true;
+    setUpdateState('checking', { percent: null });
   });
 
-  autoUpdater.on('update-not-available', async () => {
-    updateCheckInProgress = false;
+  autoUpdater.on('update-not-available', async (info) => {
+    // Best practice: don't interrupt users with a modal “you're up to date” dialog.
+    // We'll just log the result for background checks. For explicit user-initiated checks,
+    // do show a clear "You're up to date" confirmation.
     updateDownloaded = false;
-    await dialog.showMessageBox({
-      type: 'info',
-      title: 'No updates',
-      message: 'You are already running the latest version.',
-    });
+    setUpdateState('idle', { version: info?.version ?? null, percent: null });
+    if (manualUpdateCheckInProgress) {
+      manualUpdateCheckInProgress = false;
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'No updates available',
+        message: `You’re up to date (v${app.getVersion()}).`,
+      }).catch(() => {});
+    }
   });
 
-  autoUpdater.on('update-available', async () => {
-    updateCheckInProgress = false;
+  autoUpdater.on('update-available', async (info) => {
+    manualUpdateCheckInProgress = false;
+    setUpdateState('available', { version: info?.version ?? null, percent: null });
     const result = await dialog.showMessageBox({
       type: 'info',
       title: 'Update available',
-      message: 'A new version is available. Do you want to download it now?',
+      message: `A new version${info?.version ? ` (${info.version})` : ''} is available. Download it now?`,
+      detail: 'You can keep using the app while it downloads. We will prompt you to restart when it’s ready to install.',
       buttons: ['Download', 'Later'],
       defaultId: 0,
       cancelId: 1,
     });
     if (result.response === 0) {
       try {
-        updateCheckInProgress = true;
+        setUpdateState('downloading', { version: info?.version ?? null, percent: 0 });
+        try { mainWindow?.setProgressBar(0); } catch {}
         await autoUpdater.downloadUpdate();
       } finally {
-        updateCheckInProgress = false;
+        // State will be updated by download-progress / update-downloaded / error.
       }
     }
   });
 
-  autoUpdater.on('update-downloaded', async () => {
+  autoUpdater.on('download-progress', (progress) => {
+    const pct = typeof progress?.percent === 'number' ? progress.percent : null;
+    setUpdateState('downloading', { percent: pct });
+    if (pct != null) {
+      try { mainWindow?.setProgressBar(Math.max(0, Math.min(1, pct / 100))); } catch {}
+    }
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    manualUpdateCheckInProgress = false;
     updateDownloaded = true;
-    updateCheckInProgress = false;
+    setUpdateState('downloaded', { version: info?.version ?? null, percent: 100 });
+    try { mainWindow?.setProgressBar(-1); } catch {}
     const result = await dialog.showMessageBox({
       type: 'info',
       title: 'Update ready',
-      message: 'The update has been downloaded. Restart to install it now?',
+      message: `Update${info?.version ? ` (${info.version})` : ''} downloaded. Restart to install now?`,
       buttons: ['Restart and install', 'Later'],
       defaultId: 0,
       cancelId: 1,
     });
     if (result.response === 0) {
-      autoUpdater.quitAndInstall();
+      writeLog('INFO', 'User accepted: Restart and install');
+      quitAndInstallUpdateNow();
+    } else {
+      writeLog('INFO', 'User deferred update install (Later)');
     }
   });
 }
@@ -114,18 +300,31 @@ function buildAppMenu() {
       ],
     },
     {
+      // Give users a way to open DevTools and reload in packaged builds where F12/Ctrl+Shift+I may be unavailable.
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { type: 'separator' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+    {
       label: 'Help',
       submenu: [
         {
           label: 'Check for Updates…',
-          enabled: app.isPackaged,
+          enabled: canUseAutoUpdater(),
           click: async () => {
-            if (!app.isPackaged) return;
-            if (updateCheckInProgress) {
+            if (!canUseAutoUpdater()) return;
+            if (updateState === 'checking' || updateState === 'downloading' || updateState === 'available') {
               await dialog.showMessageBox({
                 type: 'info',
-                title: 'Checking…',
-                message: 'An update check is already in progress.',
+                title: 'Update status',
+                message: formatProgressMessage(),
+                detail: updateState === 'downloading'
+                  ? 'Download is in progress. You will be prompted to restart when it finishes.'
+                  : undefined,
               });
               return;
             }
@@ -138,14 +337,15 @@ function buildAppMenu() {
                 defaultId: 0,
                 cancelId: 1,
               });
-              if (result.response === 0) autoUpdater.quitAndInstall();
+              if (result.response === 0) autoUpdater.quitAndInstall(false, true);
               return;
             }
             try {
-              updateCheckInProgress = true;
+              manualUpdateCheckInProgress = true;
+              setUpdateState('checking', { percent: null });
               await autoUpdater.checkForUpdates();
             } finally {
-              updateCheckInProgress = false;
+              // state is updated by events
             }
           },
         },
@@ -194,7 +394,7 @@ function createWindow() {
     mainWindow.loadFile(htmlPath);
     // Auto-updates are only meaningful for packaged apps installed from an installer (e.g. NSIS).
     // Check quietly on startup; user controls download/install via dialogs.
-    if (app.isPackaged) {
+    if (canUseAutoUpdater()) {
       setTimeout(() => {
         autoUpdater.checkForUpdates().catch(() => {});
       }, 2000);
@@ -202,7 +402,8 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
-    console.log('Window ready-to-show event fired');
+    writeLog('INFO', 'Window ready-to-show event fired');
+    metric('renderer_ready_to_show');
     if (mainWindow) {
       mainWindow.show();
     }
@@ -241,7 +442,8 @@ function createWindow() {
 
   // Send startup messages only after renderer finished loading (IPC ready)
   mainWindow.webContents.once('did-finish-load', () => {
-    console.log('Window did-finish-load event fired - sending startup messages');
+    writeLog('INFO', 'Window did-finish-load event fired - sending startup messages');
+    metric('renderer_did_finish_load');
     if (!mainWindow) return;
     const send = (msg: string, delay: number) => {
       setTimeout(() => {
@@ -271,13 +473,17 @@ function startPythonBackend() {
   // Linux: ~/.config/nda-tool-lite
   // Mac: ~/Library/Application Support/nda-tool-lite
   const userDataPath = app.getPath('userData');
-  console.log(`User Data Path: ${userDataPath}`);
-  console.log(`isDev: ${isDev}`);
-  console.log(`process.resourcesPath: ${process.resourcesPath}`);
-  console.log(`__dirname: ${__dirname}`);
-  console.log(`isDistBuild(): ${isDistBuild()}`);
+  migrateLegacyUserDataIfNeeded(userDataPath);
+  writeLog('INFO', `User Data Path: ${userDataPath}`);
+  writeLog('INFO', `App Version: ${app.getVersion()}`);
+  writeLog('INFO', `isDev: ${isDev}`);
+  writeLog('INFO', `process.resourcesPath: ${process.resourcesPath}`);
+  writeLog('INFO', `__dirname: ${__dirname}`);
+  writeLog('INFO', `isDistBuild(): ${isDistBuild()}`);
+  writeLog('INFO', `Env OPENAI_API_KEY present: ${Boolean(process.env.OPENAI_API_KEY)}`);
+  metric('python_spawn_begin');
 
-  console.log(`Starting Python backend on port ${API_PORT}...`);
+  writeLog('INFO', `Starting Python backend on port ${API_PORT}...`);
 
   const env = {
       ...process.env,
@@ -294,9 +500,9 @@ function startPythonBackend() {
   let scriptPath: string;
 
   const distBuild = isDistBuild();
-  console.log(`DEBUG: isDev=${isDev}, distBuild=${distBuild}, condition=${isDev && !distBuild}`);
-  console.log(`DEBUG: Current working directory: ${process.cwd()}`);
-  console.log(`DEBUG: Resources path: ${process.resourcesPath}`);
+  writeLog('INFO', `DEBUG: isDev=${isDev}, distBuild=${distBuild}, condition=${isDev && !distBuild}`);
+  writeLog('INFO', `DEBUG: Current working directory: ${process.cwd()}`);
+  writeLog('INFO', `DEBUG: Resources path: ${process.resourcesPath}`);
   if (isDev && !distBuild) {
       // Development mode - use project Python
       pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
@@ -305,11 +511,11 @@ function startPythonBackend() {
           : path.join(__dirname, '../python/venv/bin/python');
 
       if (fs.existsSync(venvPath)) {
-          console.log(`Using venv python: ${venvPath}`);
+          writeLog('INFO', `Using venv python: ${venvPath}`);
           pythonExecutable = venvPath;
       }
       scriptPath = path.join(__dirname, '../python/server.py');
-      console.log(`Dev mode - Script: ${scriptPath}`);
+      writeLog('INFO', `Dev mode - Script: ${scriptPath}`);
   } else {
       // Production or dist build mode - use packaged Python source
       // In packaged apps, extraResources are always in process.resourcesPath
@@ -322,9 +528,9 @@ function startPythonBackend() {
           : path.join(pythonBasePath, 'python_embed', 'bin', 'python3');
 
       if (fs.existsSync(embedPython)) {
-          console.log(`Production mode - Using Python embeddable distribution`);
-          console.log(`Embed Python: ${embedPython}`);
-          console.log(`Script: ${scriptPath}`);
+          writeLog('INFO', `Production mode - Using Python embeddable distribution`);
+          writeLog('INFO', `Embed Python: ${embedPython}`);
+          writeLog('INFO', `Script: ${scriptPath}`);
           pythonExecutable = embedPython;
       } else {
           // Fall back to venv-based approach (local builds)
@@ -332,45 +538,46 @@ function startPythonBackend() {
               ? path.join(pythonBasePath, 'venv', 'Scripts', 'python.exe')
               : path.join(pythonBasePath, 'venv', 'bin', 'python');
 
-          console.log(`Production/Dist mode - Python base: ${pythonBasePath}`);
-          console.log(`Production/Dist mode - Python venv: ${venvPath}`);
-          console.log(`Production/Dist mode - Script: ${scriptPath}`);
-          console.log(`Python venv exists: ${fs.existsSync(venvPath)}`);
-          console.log(`Script exists: ${fs.existsSync(scriptPath)}`);
+          writeLog('INFO', `Production/Dist mode - Python base: ${pythonBasePath}`);
+          writeLog('INFO', `Production/Dist mode - Python venv: ${venvPath}`);
+          writeLog('INFO', `Production/Dist mode - Script: ${scriptPath}`);
+          writeLog('INFO', `Python venv exists: ${fs.existsSync(venvPath)}`);
+          writeLog('INFO', `Script exists: ${fs.existsSync(scriptPath)}`);
 
           if (!fs.existsSync(scriptPath)) {
-              console.error(`ERROR: Python script not found at ${scriptPath}`);
+              const errorMsg = `Python script not found at ${scriptPath}`;
+              writeLog('ERROR', `ERROR: ${errorMsg}`);
               if (mainWindow) {
-                  mainWindow.webContents.send('python-error', `Python script not found at ${scriptPath}`);
+                  mainWindow.webContents.send('python-error', errorMsg);
               }
               return;
           }
 
           // Try venv first, fall back to system Python if venv doesn't exist
           if (fs.existsSync(venvPath)) {
-              console.log(`Using Python venv: ${venvPath}`);
+              writeLog('INFO', `Using Python venv: ${venvPath}`);
               pythonExecutable = venvPath;
           } else {
-              console.log(`Python venv not found, using system Python`);
+              writeLog('INFO', `Python venv not found, using system Python`);
               pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
           }
       }
   }
 
   // Verify paths before spawning
-  console.log(`About to spawn Python:`);
-  console.log(`  Executable: ${pythonExecutable}`);
-  console.log(`  Script: ${scriptPath || '(standalone exe, no script)'}`);
-  console.log(`  Executable exists: ${fs.existsSync(pythonExecutable)}`);
+  writeLog('INFO', `About to spawn Python:`);
+  writeLog('INFO', `  Executable: ${pythonExecutable}`);
+  writeLog('INFO', `  Script: ${scriptPath || '(standalone exe, no script)'}`);
+  writeLog('INFO', `  Executable exists: ${fs.existsSync(pythonExecutable)}`);
   if (scriptPath) {
-      console.log(`  Script exists: ${fs.existsSync(scriptPath)}`);
+      writeLog('INFO', `  Script exists: ${fs.existsSync(scriptPath)}`);
   }
-  console.log(`  Working directory: ${process.cwd()}`);
-  console.log(`  Resources path: ${process.resourcesPath}`);
+  writeLog('INFO', `  Working directory: ${process.cwd()}`);
+  writeLog('INFO', `  Resources path: ${process.resourcesPath}`);
 
   if (!fs.existsSync(pythonExecutable)) {
       const errorMsg = `Python executable not found at ${pythonExecutable}`;
-      console.error(`ERROR: ${errorMsg}`);
+      writeLog('ERROR', `ERROR: ${errorMsg}`);
       if (mainWindow) {
           mainWindow.webContents.send('python-error', errorMsg);
       }
@@ -379,7 +586,7 @@ function startPythonBackend() {
 
   if (scriptPath && !fs.existsSync(scriptPath)) {
       const errorMsg = `Python script not found at ${scriptPath}`;
-      console.error(`ERROR: ${errorMsg}`);
+      writeLog('ERROR', `ERROR: ${errorMsg}`);
       if (mainWindow) {
           mainWindow.webContents.send('python-error', errorMsg);
       }
@@ -387,7 +594,7 @@ function startPythonBackend() {
   }
 
   // Spawn the Python process
-  console.log(`Spawning Python process...`);
+  writeLog('INFO', 'Spawning Python process...');
 
   const args = scriptPath ? [scriptPath] : [];
   const workingDir = scriptPath ? path.dirname(scriptPath) : path.dirname(pythonExecutable);
@@ -401,10 +608,9 @@ function startPythonBackend() {
 
   pythonProcess.on('error', (error) => {
       const errorMsg = `Failed to start Python process: ${error.message}`;
-      console.error(`ERROR: ${errorMsg}`);
-      console.error(`Error details:`, error);
-      console.error(`Python executable: ${pythonExecutable}`);
-      console.error(`Script path: ${scriptPath}`);
+    writeLog('ERROR', `ERROR: ${errorMsg}`);
+    writeLog('ERROR', `Python executable: ${pythonExecutable}`);
+    writeLog('ERROR', `Script path: ${scriptPath}`);
       if (mainWindow) {
           mainWindow.webContents.send('python-error', errorMsg);
       }
@@ -413,7 +619,9 @@ function startPythonBackend() {
   if (pythonProcess.stdout) {
       pythonProcess.stdout.on('data', (data) => {
         const output = data.toString();
-        console.log(`[Python Stdout]: ${output}`);
+        // Persist backend logs for packaged builds (no DevTools) to aid debugging config/env issues.
+        const trimmed = output.length > 4000 ? output.slice(0, 4000) + '…(truncated)' : output;
+        writeLog('INFO', `[Python stdout] ${trimmed.trimEnd()}`);
       });
   }
 
@@ -426,11 +634,9 @@ function startPythonBackend() {
           /\bTraceback\b/.test(output) ||
           /\bERROR\b/.test(output) ||
           /\bException\b/.test(output);
-        if (looksLikeError) {
-          console.error(`[Python]: ${output}`);
-        } else {
-          console.log(`[Python]: ${output}`);
-        }
+        const trimmed = output.length > 4000 ? output.slice(0, 4000) + '…(truncated)' : output;
+        if (looksLikeError) writeLog('ERROR', `[Python stderr] ${trimmed.trimEnd()}`);
+        else writeLog('INFO', `[Python stderr] ${trimmed.trimEnd()}`);
         // Also send stderr to renderer for debugging
         if (mainWindow) {
             mainWindow.webContents.send('python-stderr', output);
@@ -439,10 +645,10 @@ function startPythonBackend() {
   }
 
   pythonProcess.on('close', (code, signal) => {
-    console.log(`Python process exited with code ${code}, signal ${signal}`);
+    writeLog('INFO', `Python process exited with code ${code}, signal ${signal}`);
     if (code !== 0 && code !== null) {
         const errorMsg = `Python backend crashed with exit code ${code}`;
-        console.error(`ERROR: ${errorMsg}`);
+        writeLog('ERROR', `ERROR: ${errorMsg}`);
         if (mainWindow) {
             mainWindow.webContents.send('python-error', errorMsg);
         }
@@ -450,11 +656,11 @@ function startPythonBackend() {
   });
 
   pythonProcess.on('exit', (code, signal) => {
-    console.log(`Python process exit event - code: ${code}, signal: ${signal}`);
+    writeLog('INFO', `Python process exit event - code: ${code}, signal: ${signal}`);
   });
 
   // Log process info
-  console.log(`Python process spawned with PID: ${pythonProcess.pid}`);
+  writeLog('INFO', `Python process spawned with PID: ${pythonProcess.pid}`);
 
   // Poll health endpoint to verify backend started with exponential backoff
   let healthCheckAttempts = 0;
@@ -465,7 +671,7 @@ function startPythonBackend() {
   let healthCheckTimeout: NodeJS.Timeout | null = null;
 
   // Send initial status update - but wait for window to be ready
-  console.log('Python backend starting, will send status updates when window is ready...');
+  writeLog('INFO', 'Python backend starting, will send status updates when window is ready...');
 
   const performHealthCheck = () => {
     if (healthCheckStopped) return;
@@ -473,12 +679,13 @@ function startPythonBackend() {
     // Avoid scary-looking "error spam" during normal startup.
     // Log only occasionally; the renderer has its own loading UI.
     if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
-      console.log(`Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${Math.round(currentDelay)}ms)`);
+      writeLog('INFO', `Health check attempt ${healthCheckAttempts}/${maxHealthChecks} (delay: ${Math.round(currentDelay)}ms)`);
     }
 
     const req = http.get(`http://127.0.0.1:${API_PORT}/health`, (res) => {
       if (res.statusCode === 200) {
-        console.log(`✓ Python backend health check passed after ${healthCheckAttempts} attempts`);
+        writeLog('INFO', `✓ Python backend health check passed after ${healthCheckAttempts} attempts`);
+        metric('backend_health_ok', { attempts: healthCheckAttempts });
 
         // Send final status and ready message
         if (mainWindow) {
@@ -499,12 +706,12 @@ function startPythonBackend() {
     req.on('error', (error) => {
       // Normal while the backend is still booting (e.g. ECONNREFUSED).
       if (healthCheckAttempts === 1 || healthCheckAttempts % 5 === 0) {
-        console.log(`Backend not ready yet (attempt ${healthCheckAttempts}/${maxHealthChecks}): ${error.message}`);
+        writeLog('INFO', `Backend not ready yet (attempt ${healthCheckAttempts}/${maxHealthChecks}): ${error.message}`);
       }
 
       if (healthCheckAttempts >= maxHealthChecks) {
-        console.error(`✗ Python backend health check failed after ${maxHealthChecks} attempts`);
-        console.error(`Last error: ${error.message}`);
+        writeLog('ERROR', `✗ Python backend health check failed after ${maxHealthChecks} attempts`);
+        writeLog('ERROR', `Last error: ${error.message}`);
         if (mainWindow) {
           mainWindow.webContents.send('startup-status', 'Backend startup failed');
           mainWindow.webContents.send('python-error', `Backend failed to start after ${maxHealthChecks} attempts: ${error.message}`);
@@ -558,12 +765,14 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  if (pythonProcess) {
-    pythonProcess.kill();
+  if (quittingForUpdate) {
+    writeLog('INFO', 'before-quit: quittingForUpdate=true');
   }
+  killPythonProcess('before-quit');
 });
 
 ipcMain.handle('get-api-port', () => API_PORT);
+ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 ipcMain.handle('open-user-data-folder', async () => {
   const p = app.getPath('userData');
@@ -680,3 +889,4 @@ ipcMain.handle('download-backup', async () => {
     return { success: false, error: e?.message || String(e) };
   }
 });
+
