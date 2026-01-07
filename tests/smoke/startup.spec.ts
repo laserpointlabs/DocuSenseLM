@@ -3,6 +3,10 @@ import path from 'path';
 import fs from 'fs';
 
 test.describe('Smoke: startup', () => {
+  // Cold-starts on Windows (especially after a fresh install / first run) can be slow.
+  // Give this smoke test enough budget so it doesn't flake on slower machines.
+  test.describe.configure({ timeout: 240_000 });
+
   test('backend becomes healthy (with OpenAI mocked)', async () => {
     const appPath = path.join(__dirname, '..', '..', 'release', 'win-unpacked', 'DocuSenseLM.exe');
     expect(fs.existsSync(appPath)).toBeTruthy();
