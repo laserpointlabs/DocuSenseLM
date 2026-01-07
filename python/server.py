@@ -16,7 +16,7 @@ import asyncio
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,14 +26,36 @@ from pypdf import PdfReader
 from openai import OpenAI
 from dotenv import load_dotenv
 from platformdirs import user_config_dir
-import chromadb
-from chromadb.utils import embedding_functions
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 import hashlib
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nda-tool")
+
+# --- Heavy dependency loading / initialization ---
+# In packaged Windows builds, importing chromadb (and initializing persistent clients/collections)
+# can take tens of seconds on some machines (AV scanning, many site-packages, SQLite init, etc.).
+# If we do that at module import time, Uvicorn won't bind its port, and Electron will appear "stuck"
+# because /health can't connect. We therefore lazy-import + initialize RAG in a background thread.
+_chroma_import_lock = threading.Lock()
+_chroma_init_lock = threading.Lock()
+_chromadb_mod = None
+_embedding_functions_mod = None
+
+def _ensure_chromadb_modules() -> Tuple[Any, Any]:
+    global _chromadb_mod, _embedding_functions_mod
+    if _chromadb_mod is not None and _embedding_functions_mod is not None:
+        return _chromadb_mod, _embedding_functions_mod
+    with _chroma_import_lock:
+        if _chromadb_mod is None or _embedding_functions_mod is None:
+            import chromadb as _c  # heavy; keep out of cold-start path
+            from chromadb.utils import embedding_functions as _ef  # heavy; keep out of cold-start path
+            _chromadb_mod = _c
+            _embedding_functions_mod = _ef
+    return _chromadb_mod, _embedding_functions_mod
+
+rag_init_state: str = "not_started"  # not_started|initializing|ready|disabled|error
+rag_init_error: Optional[str] = None
 
 # --- RAG defaults / configuration helpers ---
 DEFAULT_COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "nda_documents")
@@ -228,7 +250,7 @@ def get_api_key():
 
 # Function to initialize or reinitialize OpenAI client
 def initialize_openai_client():
-    global openai_client, openai_ef, collection
+    global openai_client, openai_ef, collection, chroma_client
 
     api_key = get_api_key()
 
@@ -243,6 +265,13 @@ def initialize_openai_client():
         # Initialize OpenAI client with timeout to prevent hanging
         openai_client = OpenAI(api_key=api_key, timeout=60.0)
         logger.info("OpenAI client initialized successfully with 60s timeout")
+
+        # Ensure Chroma is available (lazy import/init)
+        chromadb, embedding_functions = _ensure_chromadb_modules()
+        if chroma_client is None:
+            with _chroma_init_lock:
+                if chroma_client is None:
+                    chroma_client = chromadb.PersistentClient(path=DB_DIR)
 
         # Initialize ChromaDB with OpenAI embeddings
         openai_ef = embedding_functions.OpenAIEmbeddingFunction(
@@ -317,14 +346,11 @@ def initialize_openai_client():
         collection = None
         return False
 
-# Initialize ChromaDB (without embeddings initially)
-chroma_client = chromadb.PersistentClient(path=DB_DIR)
+# Chroma/OpenAI clients are initialized lazily (see initialize_openai_client + startup_event).
+chroma_client = None
 openai_client = None
 openai_ef = None
 collection = None
-
-# Try to initialize OpenAI
-initialize_openai_client()
 
 # Initialize FastAPI
 app = FastAPI(title=f"{APP_NAME} API")
@@ -824,6 +850,8 @@ def index_document(filename: str, text: str):
         return
 
     try:
+        # Heavy import: keep out of cold-start path.
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
         # Split text into chunks
         # Larger chunks preserve more context for semantic search
         text_splitter = RecursiveCharacterTextSplitter(
@@ -1065,14 +1093,14 @@ class UpdateMetadataRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    # Keep this endpoint lightweight; detailed diagnostics are available at /rag/status
-    rag_ready = bool(openai_client) and bool(collection)
-    try:
-        if rag_ready and collection is not None:
-            rag_ready = collection.count() > 0
-    except Exception:
-        rag_ready = False
-    return {"status": "ok", "version": "1.0.1", "rag": "enabled" if rag_ready else "degraded"}
+    # Keep this endpoint lightweight: it must return fast so Electron can decide the backend is up.
+    # Detailed diagnostics are available at /rag/status.
+    return {
+        "status": "ok",
+        "version": "1.0.1",
+        "rag": rag_init_state,
+        "rag_error": rag_init_error,
+    }
 
 
 def _safe_collection_count(col) -> int:
@@ -1093,6 +1121,8 @@ def _safe_collection_filename_count(col, filename: str) -> int:
 
 def _list_collections_with_counts() -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
+    if chroma_client is None:
+        return out
     try:
         cols = chroma_client.list_collections()
     except Exception:
@@ -2397,8 +2427,27 @@ async def chat(request: ChatRequest):
 @app.on_event("startup")
 async def startup_event():
     """Run cleanup on startup to remove any legacy zip files from repo root"""
+    global rag_init_state, rag_init_error
     cleanup_root_zip_artifacts()
     logger.info("Cleaned up any legacy zip files from repo root")
+    # Kick off RAG initialization in a background thread so Uvicorn can start responding immediately.
+    # This prevents the Electron UI from appearing "stuck" while heavy imports (chromadb) run.
+    if rag_init_state == "not_started":
+        rag_init_state = "initializing"
+        rag_init_error = None
+
+        async def _init_rag_async():
+            global rag_init_state, rag_init_error
+            try:
+                ok = await asyncio.to_thread(initialize_openai_client)
+                # Missing API key isn't an error; it simply disables RAG.
+                rag_init_state = "ready" if ok else "disabled"
+            except Exception as e:
+                rag_init_state = "error"
+                rag_init_error = str(e)
+                logger.error(f"RAG initialization failed: {e}")
+
+        asyncio.create_task(_init_rag_async())
 
 if __name__ == "__main__":
     print("Starting FastAPI server...")
