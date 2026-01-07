@@ -39,21 +39,15 @@ logger = logging.getLogger("nda-tool")
 DEFAULT_COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "nda_documents")
 DEFAULT_DISTANCE_THRESHOLD = float(os.environ.get("RAG_DISTANCE_THRESHOLD", "0.75"))
 
-# Load configuration first to get BASE_DIR
-# Get the correct base directory (project root)
-# Electron may set working directory to python/ folder, so we need to go up one level
-if getattr(sys, '_MEIPASS', False):
+# Resolve BASE_DIR robustly (works for dev, win-unpacked, and installed builds).
+# We anchor to server.py's location rather than cwd so config/prompts are found even if cwd changes.
+if getattr(sys, "_MEIPASS", False):
     # Running in PyInstaller bundle
-    BASE_DIR = os.path.dirname(sys._MEIPASS)
+    _meipass = getattr(sys, "_MEIPASS", None)  # PyInstaller sets this at runtime
+    BASE_DIR = os.path.dirname(_meipass) if _meipass else os.getcwd()
 else:
-    # Running in development - find project root from __file__
-    current_dir = os.getcwd()
-    if os.path.basename(current_dir) == 'python':
-        # We're in the python subdirectory, go up one level
-        BASE_DIR = os.path.dirname(current_dir)
-    else:
-        # We're in the project root
-        BASE_DIR = current_dir
+    # Running from source copied into Electron resources/python
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 logger.info(f"BASE_DIR resolved to: {BASE_DIR}")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -95,6 +89,7 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 # e.g. ~/.config/docusenselm on Linux
 default_user_data = user_config_dir("docusenselm", appauthor=False)
 USER_DATA_DIR = os.environ.get("USER_DATA_DIR", default_user_data)
+logger.info(f"USER_DATA_DIR resolved to: {USER_DATA_DIR}")
 
 DOCUMENTS_DIR = os.path.join(USER_DATA_DIR, "documents")
 TEMPLATES_DIR = os.path.join(USER_DATA_DIR, "templates")
@@ -106,8 +101,10 @@ os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(DB_DIR, exist_ok=True)
 
-# Load .env
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+# Load .env (optional). Prefer userData .env for installed builds; fall back to BASE_DIR .env for dev.
+# Do not override existing env vars.
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=False)
+load_dotenv(os.path.join(USER_DATA_DIR, ".env"), override=False)
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 APP_NAME = os.environ.get("APP_NAME", "DocuSenseLM")
 

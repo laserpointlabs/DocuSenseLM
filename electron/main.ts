@@ -362,10 +362,12 @@ function startPythonBackend() {
   const userDataPath = app.getPath('userData');
   migrateLegacyUserDataIfNeeded(userDataPath);
   writeLog('INFO', `User Data Path: ${userDataPath}`);
+  writeLog('INFO', `App Version: ${app.getVersion()}`);
   writeLog('INFO', `isDev: ${isDev}`);
   writeLog('INFO', `process.resourcesPath: ${process.resourcesPath}`);
   writeLog('INFO', `__dirname: ${__dirname}`);
   writeLog('INFO', `isDistBuild(): ${isDistBuild()}`);
+  writeLog('INFO', `Env OPENAI_API_KEY present: ${Boolean(process.env.OPENAI_API_KEY)}`);
   metric('python_spawn_begin');
 
   writeLog('INFO', `Starting Python backend on port ${API_PORT}...`);
@@ -385,9 +387,9 @@ function startPythonBackend() {
   let scriptPath: string;
 
   const distBuild = isDistBuild();
-  console.log(`DEBUG: isDev=${isDev}, distBuild=${distBuild}, condition=${isDev && !distBuild}`);
-  console.log(`DEBUG: Current working directory: ${process.cwd()}`);
-  console.log(`DEBUG: Resources path: ${process.resourcesPath}`);
+  writeLog('INFO', `DEBUG: isDev=${isDev}, distBuild=${distBuild}, condition=${isDev && !distBuild}`);
+  writeLog('INFO', `DEBUG: Current working directory: ${process.cwd()}`);
+  writeLog('INFO', `DEBUG: Resources path: ${process.resourcesPath}`);
   if (isDev && !distBuild) {
       // Development mode - use project Python
       pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
@@ -396,11 +398,11 @@ function startPythonBackend() {
           : path.join(__dirname, '../python/venv/bin/python');
 
       if (fs.existsSync(venvPath)) {
-          console.log(`Using venv python: ${venvPath}`);
+          writeLog('INFO', `Using venv python: ${venvPath}`);
           pythonExecutable = venvPath;
       }
       scriptPath = path.join(__dirname, '../python/server.py');
-      console.log(`Dev mode - Script: ${scriptPath}`);
+      writeLog('INFO', `Dev mode - Script: ${scriptPath}`);
   } else {
       // Production or dist build mode - use packaged Python source
       // In packaged apps, extraResources are always in process.resourcesPath
@@ -413,9 +415,9 @@ function startPythonBackend() {
           : path.join(pythonBasePath, 'python_embed', 'bin', 'python3');
 
       if (fs.existsSync(embedPython)) {
-          console.log(`Production mode - Using Python embeddable distribution`);
-          console.log(`Embed Python: ${embedPython}`);
-          console.log(`Script: ${scriptPath}`);
+          writeLog('INFO', `Production mode - Using Python embeddable distribution`);
+          writeLog('INFO', `Embed Python: ${embedPython}`);
+          writeLog('INFO', `Script: ${scriptPath}`);
           pythonExecutable = embedPython;
       } else {
           // Fall back to venv-based approach (local builds)
@@ -423,45 +425,46 @@ function startPythonBackend() {
               ? path.join(pythonBasePath, 'venv', 'Scripts', 'python.exe')
               : path.join(pythonBasePath, 'venv', 'bin', 'python');
 
-          console.log(`Production/Dist mode - Python base: ${pythonBasePath}`);
-          console.log(`Production/Dist mode - Python venv: ${venvPath}`);
-          console.log(`Production/Dist mode - Script: ${scriptPath}`);
-          console.log(`Python venv exists: ${fs.existsSync(venvPath)}`);
-          console.log(`Script exists: ${fs.existsSync(scriptPath)}`);
+          writeLog('INFO', `Production/Dist mode - Python base: ${pythonBasePath}`);
+          writeLog('INFO', `Production/Dist mode - Python venv: ${venvPath}`);
+          writeLog('INFO', `Production/Dist mode - Script: ${scriptPath}`);
+          writeLog('INFO', `Python venv exists: ${fs.existsSync(venvPath)}`);
+          writeLog('INFO', `Script exists: ${fs.existsSync(scriptPath)}`);
 
           if (!fs.existsSync(scriptPath)) {
-              console.error(`ERROR: Python script not found at ${scriptPath}`);
+              const errorMsg = `Python script not found at ${scriptPath}`;
+              writeLog('ERROR', `ERROR: ${errorMsg}`);
               if (mainWindow) {
-                  mainWindow.webContents.send('python-error', `Python script not found at ${scriptPath}`);
+                  mainWindow.webContents.send('python-error', errorMsg);
               }
               return;
           }
 
           // Try venv first, fall back to system Python if venv doesn't exist
           if (fs.existsSync(venvPath)) {
-              console.log(`Using Python venv: ${venvPath}`);
+              writeLog('INFO', `Using Python venv: ${venvPath}`);
               pythonExecutable = venvPath;
           } else {
-              console.log(`Python venv not found, using system Python`);
+              writeLog('INFO', `Python venv not found, using system Python`);
               pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
           }
       }
   }
 
   // Verify paths before spawning
-  console.log(`About to spawn Python:`);
-  console.log(`  Executable: ${pythonExecutable}`);
-  console.log(`  Script: ${scriptPath || '(standalone exe, no script)'}`);
-  console.log(`  Executable exists: ${fs.existsSync(pythonExecutable)}`);
+  writeLog('INFO', `About to spawn Python:`);
+  writeLog('INFO', `  Executable: ${pythonExecutable}`);
+  writeLog('INFO', `  Script: ${scriptPath || '(standalone exe, no script)'}`);
+  writeLog('INFO', `  Executable exists: ${fs.existsSync(pythonExecutable)}`);
   if (scriptPath) {
-      console.log(`  Script exists: ${fs.existsSync(scriptPath)}`);
+      writeLog('INFO', `  Script exists: ${fs.existsSync(scriptPath)}`);
   }
-  console.log(`  Working directory: ${process.cwd()}`);
-  console.log(`  Resources path: ${process.resourcesPath}`);
+  writeLog('INFO', `  Working directory: ${process.cwd()}`);
+  writeLog('INFO', `  Resources path: ${process.resourcesPath}`);
 
   if (!fs.existsSync(pythonExecutable)) {
       const errorMsg = `Python executable not found at ${pythonExecutable}`;
-      console.error(`ERROR: ${errorMsg}`);
+      writeLog('ERROR', `ERROR: ${errorMsg}`);
       if (mainWindow) {
           mainWindow.webContents.send('python-error', errorMsg);
       }
@@ -470,7 +473,7 @@ function startPythonBackend() {
 
   if (scriptPath && !fs.existsSync(scriptPath)) {
       const errorMsg = `Python script not found at ${scriptPath}`;
-      console.error(`ERROR: ${errorMsg}`);
+      writeLog('ERROR', `ERROR: ${errorMsg}`);
       if (mainWindow) {
           mainWindow.webContents.send('python-error', errorMsg);
       }
