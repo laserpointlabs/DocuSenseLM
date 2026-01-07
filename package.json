@@ -1,7 +1,7 @@
 {
   "name": "docusenselm",
-  "version": "1.0.25",
-  "description": "Simple desktop app for managing and interrogating NDAs/Agreements",
+  "version": "1.0.26",
+  "description": "DocuSenseLM",
   "author": "DocuSenseLM",
   "main": "dist-electron/main.js",
   "scripts": {
